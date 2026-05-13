@@ -8,9 +8,10 @@
 	import { initSafety } from '$lib/stores/safety.svelte';
 	import { connection } from '$lib/stores/connection.svelte';
 	import { wireAuditReactivity } from '$lib/stores/audit.svelte';
-	import { restoreAuditFromStorage, audit } from '$lib/ha/audit';
+	import { restoreAuditFromStorage, audit, getAuditLog } from '$lib/ha/audit';
 	import { detectAuthMode, getAuthCredentials } from '$lib/ha/auth';
-	import { connect } from '$lib/ha/client';
+	import { connect, getConnection } from '$lib/ha/client';
+	import { callService } from '$lib/ha/actions';
 	import WriteAllowedBanner from '$lib/components/WriteAllowedBanner.svelte';
 
 	let { children } = $props();
@@ -59,6 +60,24 @@
 			console.error('[broadsheet] initial connect failed', err);
 		}
 		booted = true;
+
+		// Dev-only test handle. Exposes the SAME module bindings the
+		// layout is using, so DevTools / E2E tests can hit the live
+		// connection rather than a fresh dynamic-import instance. Vite
+		// dev mode + dynamic imports can return separate module instances
+		// in some cases — this avoids the dual-instance trap.
+		// Stripped from production builds via tree-shaking on
+		// `import.meta.env.DEV`.
+		if (import.meta.env.DEV && typeof window !== 'undefined') {
+			(window as Window & { __broadsheet_dev__?: object }).__broadsheet_dev__ = {
+				callService,
+				getConnection,
+				getAuditLog,
+				connection,
+				audit
+			};
+			audit({ kind: 'auth-event', note: 'window.__broadsheet_dev__ exposed (dev only)' });
+		}
 	});
 </script>
 

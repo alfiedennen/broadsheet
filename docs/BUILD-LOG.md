@@ -463,8 +463,107 @@ Confirmed working: hard-refresh after the patch, page renders,
 connection shows `connected` with HA version, audit log displays
 boot-sequence entries cleanly.
 
-### M1 considered closed
+### M1 verification — behavioural tests via Chrome MCP
 
-Connection + safety surfaces verified working. Safety-rail
-behavioural tests (block / arm / call / hard-ban) gated on
-DevTools console verification — to run before M2 starts.
+Driven via the Chrome MCP extension. Results captured live from
+the running SPA + the live HA WS connection.
+
+**1. Connection live.** `dd[data-status="connected"]` rendered.
+   Audit shows boot-sequence entries: auth-event → connecting →
+   connected (HA 2026.5.1). PASS.
+
+**2. Readonly blocks dummy `light.turn_on`.**
+   `callService('light', 'turn_on', { entity_id: 'light.test_dummy_does_not_exist' })`
+   → `{ success: false, reason: 'readonly' }`.
+   Audit: `blocked-readonly: light.turn_on`. PASS.
+
+**3. Hard-ban fires before readonly check.**
+   `callService('lock', 'unlock', { entity_id: 'lock.front_door' })`
+   in readonly mode → `{ success: false, reason: 'hard-banned' }`
+   (NOT `'readonly'`). Audit: `blocked-hard-banned: lock.unlock`.
+   Confirms the ordering in actions.ts: hard-ban is checked first,
+   no flag can override. PASS.
+
+**4. `?allow-writes=true` arms writes + lamp actually toggles.**
+   - Banner rendered: "⚠ Writes allowed in this session — refresh
+     to reset Reset"
+   - `dd[data-status="writes"]` showed "WRITES ARMED"
+   - Read `light.office_table_lamp` state: `"on"`
+   - `light.toggle` → `{ success: true }` → state became `"off"`
+     (verified via `get_states`)
+   - `light.toggle` again → `{ success: true }` → state back to `"on"`
+   - `returnedToOriginal: true` ✅
+   - Audit: two `call-service: light.toggle` entries.
+   PASS — the actual desk lamp briefly toggled off and back on.
+
+**5. Hard-ban under armed flag.** With `?allow-writes=true` still
+   in URL, `callService('lock', 'unlock', { entity_id: 'lock.front_door' })`
+   → `{ success: false, reason: 'hard-banned' }`. Audit:
+   `blocked-hard-banned: lock.unlock`. The flag does NOT override.
+   Front door was never sent the unlock command — wrapper blocked
+   before reaching HA. PASS.
+
+**6. Heartbeat wiring** (light test, full restart deferred).
+   - `connection.ping()` round-trips in **3ms** — healthy WS link
+   - `connection.eventListeners` present — our `addEventListener`
+     wiring landed in the library's registry
+   - Status store reports `'connected'`
+   - Heartbeat timer machinery (30s ping / 10s pong-timeout /
+     force-close) is in client.ts but not destructively triggered
+     in M1 — full disconnect-and-recover test is part of Env 3
+     soak per BUILD-PLAN M6 (which uses real HA restarts in
+     production canary). PASS at the wiring level; full validation
+     deferred.
+
+### M1.fix2 — Vite dev-mode dual-module-instance trap
+
+**Surfaced during MCP-driven verification.** Our test JS did
+`await import('/src/lib/ha/client.ts')` from the page console.
+That returned a **different module instance** than the one
++layout.svelte's onMount imported and called `connect()` on. The
+fresh instance had `_connection: null` even though the layout's
+instance was fully connected. Test failed with "no WS connection"
+despite the page UI showing `connected`.
+
+Root cause: Vite's dev server CAN return distinct module instances
+for the same path under certain conditions (HMR session, dynamic
+imports across script contexts, etc.). Top-level static imports
+within a single page bundle are deduped reliably; dynamic imports
+issued from arbitrary script contexts (like DevTools console) are
+not.
+
+Fix: layout.svelte exposes the same module-bound functions on
+`window.__broadsheet_dev__` in dev mode (gated by
+`import.meta.env.DEV`, tree-shaken from production builds):
+
+```ts
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__broadsheet_dev__ = {
+    callService,
+    getConnection,
+    getAuditLog,
+    connection,
+    audit
+  };
+}
+```
+
+DevTools / E2E tests use the handle:
+```js
+window.__broadsheet_dev__.callService('light', 'toggle', { entity_id: '...' });
+```
+
+This binds to the SAME module instance the layout uses. No more
+dual-instance trap.
+
+Lesson: any future test surface (M3 page tests, M4 settings tests)
+should reach into the app via `window.__broadsheet_dev__`, not via
+`import()` of the source module. Document at the top of the test
+runner when M2/M3 tests start landing.
+
+### M1 considered closed and verified
+
+All five behavioural exit criteria met. Heartbeat wiring confirmed,
+full destructive recovery test deferred to Env 3 per design.
+
+Ready to start M2 (discovery layer).
