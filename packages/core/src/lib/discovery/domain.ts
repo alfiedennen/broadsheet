@@ -35,6 +35,7 @@ import {
 	rankPresenceSensors,
 	detectPersonDeviceClass
 } from './heuristics';
+import type { Curation } from '$lib/curation/types';
 
 /* ─────────────── Layer 2 types ─────────────── */
 
@@ -123,6 +124,8 @@ export function projectDomain(input: {
 	labels: RawLabel[];
 	persons: RawPerson[];
 	states: Record<string, State>;
+	/** Layer 3 — optional. When undefined, projection runs without overrides. */
+	curation?: Curation;
 }): {
 	floors: DomainFloor[];
 	areas: DomainArea[];
@@ -131,13 +134,20 @@ export function projectDomain(input: {
 } {
 	const UNSORTED_ID = '__unsorted__';
 	const deviceById = new Map(input.devices.map((d) => [d.id, d]));
+	const cur = input.curation;
 
-	// Build a per-entity name + area resolution + visibility map
+	// Build a per-entity name + area resolution + visibility map.
+	// Curation: respect entity rename, hidden, unhide overrides; respect
+	// pagePins (entities forced to a specific page rather than living in
+	// their natural area bucket).
 	const composed = input.entities.map((e) => {
 		const device = e.device_id ? (deviceById.get(e.device_id) ?? null) : null;
-		const name = composeEntityName(e, device, input.states[e.entity_id]);
+		// Entity rename: curation override wins over composed name
+		const baseName = composeEntityName(e, device, input.states[e.entity_id]);
+		const entityOverride = cur?.entities[e.entity_id];
+		const name = entityOverride?.rename || baseName;
 		const areaId = resolveAreaId(e, device);
-		const visibility = visibilityFor(e);
+		const visibility = visibilityFor(e, entityOverride);
 		return { entity: e, device, name, areaId, visibility };
 	});
 
@@ -170,12 +180,21 @@ export function projectDomain(input: {
 		visibleByArea.get(key)!.push(rec);
 	}
 
-	// Build DomainArea objects — one per HA area, plus the synthetic
-	// Unsorted bucket if anything landed there
-	const realAreas: DomainArea[] = input.areas.map((a) => {
-		const recs = visibleByArea.get(a.area_id) ?? [];
-		return buildArea(a, recs, toDomain, input.states, deviceById);
-	});
+	// Build DomainArea objects — one per HA area (skipping curation-hidden
+	// areas), plus the synthetic Unsorted bucket if anything landed there.
+	// Apply curation rename + icon override at this point.
+	const realAreas: DomainArea[] = input.areas
+		.filter((a) => !cur?.areas[a.area_id]?.hidden)
+		.map((a) => {
+			const recs = visibleByArea.get(a.area_id) ?? [];
+			const override = cur?.areas[a.area_id];
+			const decorated: RawArea = {
+				...a,
+				name: override?.rename || a.name,
+				icon: override?.iconOverride !== undefined ? override.iconOverride : a.icon
+			};
+			return buildArea(decorated, recs, toDomain, input.states, deviceById);
+		});
 
 	const unsortedRecs = visibleByArea.get(UNSORTED_ID) ?? [];
 	if (unsortedRecs.length > 0) {
@@ -301,14 +320,30 @@ export function resolveAreaId(entity: RawEntity, device: RawDevice | null): stri
 /**
  * Visibility for an entity:
  *  - 'skipped': disabled OR config/diagnostic — never shown anywhere
- *  - 'hidden': hidden_by !== null — surfaceable via M4 curation un-hide
+ *  - 'hidden': hidden_by !== null OR user curation hide
  *  - 'show': default
+ *
+ * Curation `unhide: true` overrides HA's hidden_by.
+ * Curation `hidden: true` user-hides a normally-visible entity.
  */
-function visibilityFor(entity: RawEntity): 'show' | 'hidden' | 'skipped' {
+function visibilityFor(
+	entity: RawEntity,
+	override?: { hidden?: boolean; unhide?: boolean }
+): 'show' | 'hidden' | 'skipped' {
 	if (entity.disabled_by !== null) return 'skipped';
 	if (entity.entity_category === 'config') return 'skipped';
 	if (entity.entity_category === 'diagnostic') return 'skipped';
-	if (entity.hidden_by !== null) return 'hidden';
+
+	// User-hide always wins over default-show
+	if (override?.hidden) return 'hidden';
+
+	if (entity.hidden_by !== null) {
+		// HA's integration/user wants this hidden — but curation can
+		// explicitly un-hide
+		if (override?.unhide) return 'show';
+		return 'hidden';
+	}
+
 	return 'show';
 }
 

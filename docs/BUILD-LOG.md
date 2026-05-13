@@ -954,3 +954,203 @@ All seven pages render against the real HA install with composed
 prose state, working actions (subject to safety rails), and the
 editorial register. Polish followups logged. M4 (curation +
 Settings UI) is ready to start.
+
+---
+
+## 2026-05-13 — M4 — Curation (Layer 3) + Settings UI
+
+### Decisions
+
+**Curation as a separate `lib/curation/` module.** Schema (`types.ts`),
+persistence backend (`persistence.ts`), reactive store
+(`store.svelte.ts`), and alerts engine (`alerts.svelte.ts`) live as
+their own concern, separate from `lib/discovery/`. Discovery doesn't
+know curation exists; curation reaches into discovery via the
+optional `curation` argument to `projectDomain`. One-way dependency,
+clean separation.
+
+**Two persistence backends, runtime-picked.**
+- `LocalStorageBackend` for dev / standalone (key `broadsheet:curation`)
+- `SidecarBackend` for the M5 add-on path (`/api/broadsheet/curation`)
+
+`pickBackend()` chooses based on `window.__BROADSHEET_ENV__` presence
+(set by the add-on's run.sh). Same store API, same schema, same
+migration pipeline — just different bytes-on-disk strategy.
+
+**Optimistic write + revert pattern.** Every mutator function follows
+the same shape:
+1. Snapshot the current state via `$state.snapshot()`
+2. Apply the updater to a copy
+3. Write optimistically to `curationStore.current` — UI re-renders
+4. Persist async via the backend
+5. On failure: restore the snapshot, audit, surface error toast
+
+The `tick` counter increments on every successful save so $derived
+projections that need to know "something changed" can depend on it.
+
+**Layer 3 applies inside `projectDomain`.** Rather than a separate
+post-projection pass, the projection function now takes an optional
+`curation` argument and applies overrides as it builds:
+- Area rename / icon override / hide → before bucketing
+- Entity rename / hide / unhide → in the visibility check
+- Voice + person overrides → consumed at render time by composers
+
+Single pass, no double-projection cost, no risk of intermediate
+state being shown.
+
+**Voice templates use simple `{var}` substitution.** Manifest
+composer changed from hardcoded sentences to template lookups via
+voice-string IDs (`manifest.empty`, `manifest.oneHome`,
+`manifest.bothHomeDifferent`, etc.). Each template has documented
+variables (`{name}`, `{room}`, `{a}`, `{aRoom}`, etc.). Settings UI
+shows the variables inline as chips.
+
+**5 visible Settings screens vs 7 in the spec.**
+- Landing (alerts + section cards) ✅
+- House (areas + entities — most-impactful) ✅
+- People (presence sensor picker) ✅
+- Voice (manifest overrides) ✅
+- Deferred to M4.x: Paintings (no plugin to bind to), Plugins (no
+  plugins to manage), Integrations (TMDB stub only), About (support
+  bundle is heavy). Spec parity at M4.x; functional parity at M5
+  when add-on packaging brings the sidecar.
+
+**Toast component is layout-level.** One `<Toast>` instance in
++layout.svelte, driven by `lib/stores/toast.svelte.ts`. Pages call
+`showToast(text, kind)` and the toast appears bottom-centre. 1.4s
+auto-dismiss for success, 3s for error.
+
+### Gotchas burned in
+
+**1. `structuredClone` fails on Svelte 5 `$state` proxies.**
+First version of the curation `update()` function used
+`structuredClone(curationStore.current)` to deep-copy before
+mutation. DataCloneError at runtime: "could not be cloned." Cause:
+`$state(...)` wraps the object in a Proxy, and structuredClone
+refuses Proxies.
+
+Fix: use `$state.snapshot(curationStore.current)` — Svelte 5's
+canonical "give me a plain object snapshot of this reactive state."
+Returns a deep clone with proxies stripped.
+
+Lesson: **whenever you need to clone reactive state, reach for
+`$state.snapshot()`, never structuredClone or JSON-roundtrip.**
+The latter loses Date / Map / Set fidelity; snapshot preserves it.
+
+**2. `<input>` inside `<button>` is invalid HTML.**
+First version of /settings/house had the area-rename input INSIDE
+the .expand button (which toggled the area's expanded state).
+svelte-check correctly flagged the a11y issue — clicks on the
+input were bubbling to the parent button and collapsing the area
+mid-rename. HTML spec also disallows interactive descendants of
+button.
+
+Fix: restructure so renaming-mode renders a different layout
+entirely. Rename mode = .title-block.rename-mode (just the input);
+non-renaming = the .expand button as before. Two render paths,
+clean event flow.
+
+Lesson: **interactive controls don't nest. The "everything inside
+one big tap target" pattern works when the inside is text, NOT
+when the inside is itself interactive.**
+
+**3. `as never` cast was wrong for spread operations.**
+persistence.ts had `{ ...def.integrations, ...(input.integrations as never) }`
+to satisfy TS strict mode. TS infers spread of `never` as `never`,
+which then doesn't satisfy `Record<string, PluginConfig>`. Fix:
+cast the SOURCE to `object`, then cast the RESULT to the destination
+type: `({ ...def.integrations, ...(input.integrations as object) } as Curation['integrations'])`.
+
+Lesson: spread casts go on the result, not the source.
+
+### Verified end-to-end via Chrome MCP
+
+Live test against your production HA:
+
+| Action | Result |
+|---|---|
+| Rename `alfies_office` → "Alfie's office" | ✅ landing + lights pages reflect immediately |
+| Rename `library` → "Library" | ✅ |
+| Rename `light.office_table_lamp` → "Desk lamp" | ✅ shown inside "Alfie's office" |
+| Voice override `manifest.bothHomeDifferent` → custom semicolon template | ✅ landing reads "Alfie is in the office; Elena in the bedroom." |
+| Hide `front` area | ✅ disappeared from 10 areas → 9 |
+| Un-hide `front` area | ✅ restored to 10 areas |
+| Persistence to localStorage | ✅ inspected via `JSON.parse(localStorage.getItem('broadsheet:curation'))` |
+
+All four save operations returned `true`. localStorage holds:
+```json
+{
+  "areas": { "alfies_office": { "rename": "Alfie's office" }, "library": { "rename": "Library" } },
+  "entities": { "light.office_table_lamp": { "rename": "Desk lamp" } },
+  "voice": { "manifest.bothHomeDifferent": "{a} is in the {aRoom}; {b} in the {bRoom}." }
+}
+```
+
+### Files added in M4
+
+```
+packages/core/src/lib/
+├── curation/
+│   ├── types.ts                  schema + defaults
+│   ├── persistence.ts            localStorage + sidecar backends + migrate
+│   ├── store.svelte.ts           reactive store + mutator API
+│   └── alerts.svelte.ts          alerts engine
+├── components/
+│   └── Toast.svelte              bottom-centre ephemeral notifications
+└── stores/
+    └── toast.svelte.ts           toast queue
+```
+
+```
+packages/core/src/routes/settings/
+├── +layout.svelte                sub-nav strip
+├── +page.svelte                  landing (alerts + section cards)
+├── house/+page.svelte            areas + entities (renames, hides)
+├── people/+page.svelte           presence sensor picker (radio list)
+└── voice/+page.svelte            templated string overrides
+```
+
+Plus `+layout.svelte` updates: bootCuration() in parallel with
+bootDiscovery(), Toast component mounted, dev handle exposes curation
++ curationApi.
+
+Plus `domain.ts` updates: optional `curation` arg, applied to area
+rename / icon / hide + entity rename / hide / unhide before
+bucketing.
+
+Plus `manifest.ts` updates: `personOverrides` + `voice` arguments,
+`fill()` template substitution for `{var}` placeholders.
+
+### Followups carried into M4.x (deferred, not blockers)
+
+1. **/settings/paintings** — needs the @broadsheet/emanations plugin
+   to bind to. Lands when the plugin extraction happens.
+2. **/settings/plugins** — needs at least one plugin in the registry.
+   Lands with the same extraction work.
+3. **/settings/integrations** — TMDB key + region picker. Light
+   work, deferred to keep this session focused.
+4. **/settings/about** — support bundle (zip with discovery state +
+   redacted curation + connection log). Worth doing before public
+   release for bug-report quality.
+5. **Pin-to-page UI** — the curation API supports `pagePins`; the
+   Settings UI doesn't surface pinning yet. Add to /settings/house
+   per-entity row.
+6. **Unhide entities** — UI for "show entities HA hid" is missing.
+   Add an "include hidden" toggle to /settings/house.
+7. **Reset / Export / Import** — store API supports them; UI doesn't
+   surface yet. Lands with /settings/about.
+
+### Bundle / build at end of M4
+
+- svelte-check: 0 errors / 0 warnings, 310 files
+- Build: clean
+
+### M4 considered closed at the spec level
+
+The full Layer 3 pipeline works end-to-end:
+- Schema → persistence → reactive store → projection → page rendering
+- Optimistic write with revert + toast
+- Real renames change the editorial prose state on the landing + lights pages
+
+**Settings is now the validator.** When the user tests it and reacts,
+we'll know which polish items deserve priority before M5 packaging.

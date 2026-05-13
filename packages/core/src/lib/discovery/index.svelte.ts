@@ -11,6 +11,7 @@
 import { discoveryStore } from './store.svelte';
 import { projectDomain, type DomainArea, type DomainEntity, type DomainFloor, type DomainPerson } from './domain';
 import { PAGES, NAV_ORDER, unbucketed, type PageSlug } from './page-map';
+import { curationStore } from '$lib/curation/store.svelte';
 
 export type { DomainArea, DomainEntity, DomainFloor, DomainPerson, PageSlug };
 export { bootDiscovery, teardownDiscovery } from './registries';
@@ -31,17 +32,23 @@ export { PAGES, NAV_ORDER };
 class DiscoveryAPI {
 	/* ───────── derived domain projection ───────── */
 
-	#projection = $derived.by(() =>
-		projectDomain({
+	#projection = $derived.by(() => {
+		// Read tick to establish reactive dep on curation mutations.
+		// Curation object is replaced on every save; tick ensures we
+		// recompute even if Svelte's deep-equality short-circuits.
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		curationStore.tick;
+		return projectDomain({
 			floors: discoveryStore.floors,
 			areas: discoveryStore.areas,
 			devices: discoveryStore.devices,
 			entities: discoveryStore.entities,
 			labels: discoveryStore.labels,
 			persons: discoveryStore.persons,
-			states: discoveryStore.states
-		})
-	);
+			states: discoveryStore.states,
+			curation: curationStore.loaded ? curationStore.current : undefined
+		});
+	});
 
 	floors = $derived(this.#projection.floors);
 	areas = $derived(this.#projection.areas);

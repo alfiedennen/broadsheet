@@ -1,0 +1,58 @@
+M4: curation (Layer 3) + Settings UI
+
+The full Layer 3 pipeline lands and works end-to-end against the
+real HA install. Schema, persistence, reactive store, alerts engine,
+and 5 Settings screens.
+
+Curation module (lib/curation/):
+  types.ts        broadsheet.json v1 schema + defaults
+  persistence.ts  LocalStorage (dev/standalone) + Sidecar (M5 addon)
+                  backends, runtime-picked via window.__BROADSHEET_ENV__
+  store.svelte.ts reactive store with optimistic write + revert
+                  pattern + tick counter for $derived dependencies
+  alerts.svelte   7 alert classes computed from discovery + curation
+                  + connection state
+
+Layer 3 application: projectDomain takes an optional curation arg
+and applies overrides as it builds (area rename / icon / hide,
+entity rename / hide / unhide). Single pass, no double projection.
+
+Manifest composer: voice template substitution via {var} fills.
+Person presence sensor overrides flow through to the landing.
+
+5 Settings screens:
+  /settings           landing — alerts + section cards
+  /settings/house     areas + entities, rename/hide
+  /settings/people    presence sensor picker (ranked + warnings)
+  /settings/voice     manifest string overrides
+  Deferred to M4.x: paintings, plugins, integrations, about
+
+Toast component (layout-mounted) for "Saved" / "Couldn't save"
+feedback. showToast(text, kind) from any page.
+
+Verified live via Chrome MCP against production HA:
+  Renamed alfies_office to "Alfie's office" — landing + lights pages
+    reflected immediately
+  Renamed library to "Library" — capitalisation fixed everywhere
+  Renamed light.office_table_lamp to "Desk lamp" — shown in area
+  Voice override changed manifest to custom semicolon template:
+    "Alfie is in the office; Elena in the bedroom."
+  Hide front area: 10 areas to 9
+  Un-hide: 10 areas restored
+  All persisted to localStorage correctly
+
+Three real bugs caught and fixed live:
+  structuredClone fails on Svelte 5 $state proxies — switched to
+    $state.snapshot() which is the canonical clone primitive
+  input nested inside button is invalid HTML and broke rename UX
+    (clicks bubbled to expand toggle) — restructured rename mode
+    as a separate render path
+  as never spread cast inferred wrong type — cast source as object,
+    cast result as the destination type instead
+
+7 followups logged in BUILD-LOG: pin-to-page UI, unhide-entities
+toggle, reset/export/import surface, paintings + plugins +
+integrations + about screens (all deferred to M4.x or M5).
+
+Bundle: 0 errors / 0 warnings, 310 files. Settings is now the
+validator for the design.

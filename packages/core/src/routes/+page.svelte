@@ -14,16 +14,33 @@
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { composeManifest, resolvePresence } from '$lib/manifest';
 	import { connection } from '$lib/stores/connection.svelte';
+	import { curationStore } from '$lib/curation/store.svelte';
 	import ProceduralPainting from '$lib/components/ProceduralPainting.svelte';
 
-	// Manifest sentence — recomputes whenever discovery or states tick
+	// Build the per-person override map from curation
+	const personOverrides = $derived(
+		Object.fromEntries(
+			curationStore.current.people.map((p) => [p.personId, p.presenceSensorId])
+		)
+	);
+
+	// Manifest sentence — recomputes whenever discovery, states, or curation tick
 	const manifest = $derived(
-		composeManifest({ persons: discovery.persons, states: discoveryStore.states })
+		composeManifest({
+			persons: discovery.persons,
+			states: discoveryStore.states,
+			personOverrides,
+			voice: curationStore.current.voice
+		})
 	);
 
 	// Presence per person — for the people row
 	const presence = $derived(
-		resolvePresence({ persons: discovery.persons, states: discoveryStore.states })
+		resolvePresence({
+			persons: discovery.persons,
+			states: discoveryStore.states,
+			personOverrides
+		})
 	);
 
 	// Painting seed — first home person's room, or "empty" / "loading"

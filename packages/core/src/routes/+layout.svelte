@@ -13,8 +13,10 @@
 	import { connect, getConnection } from '$lib/ha/client';
 	import { callService } from '$lib/ha/actions';
 	import { discovery, bootDiscovery } from '$lib/discovery';
+	import { bootCuration, curationStore } from '$lib/curation/store.svelte';
 	import WriteAllowedBanner from '$lib/components/WriteAllowedBanner.svelte';
 	import KebabNav from '$lib/components/KebabNav.svelte';
+	import Toast from '$lib/components/Toast.svelte';
 
 	let { children } = $props();
 
@@ -64,14 +66,15 @@
 			return;
 		}
 
-		// Connect succeeded — run discovery boot. Failures here aren't
-		// fatal (UI can still render with empty domain model); we just
-		// surface them via discovery.lastError.
+		// Connect succeeded — boot curation + discovery in parallel.
+		// Curation can be loaded before HA is even queried (it's local
+		// state); discovery needs HA. We await both before declaring
+		// booted so first paint has both layers ready.
 		try {
-			await bootDiscovery();
+			await Promise.all([bootCuration(), bootDiscovery()]);
 		} catch (err) {
 			// eslint-disable-next-line no-console
-			console.error('[broadsheet] discovery boot failed', err);
+			console.error('[broadsheet] discovery / curation boot failed', err);
 		}
 
 		booted = true;
@@ -84,13 +87,16 @@
 		// Stripped from production builds via tree-shaking on
 		// `import.meta.env.DEV`.
 		if (import.meta.env.DEV && typeof window !== 'undefined') {
+			const curationMod = await import('$lib/curation/store.svelte');
 			(window as Window & { __broadsheet_dev__?: object }).__broadsheet_dev__ = {
 				callService,
 				getConnection,
 				getAuditLog,
 				connection,
 				audit,
-				discovery
+				discovery,
+				curation: curationStore,
+				curationApi: curationMod
 			};
 			audit({ kind: 'auth-event', note: 'window.__broadsheet_dev__ exposed (dev only)' });
 		}
@@ -107,6 +113,8 @@
 {#if booted && page.url.pathname !== '/setup/'}
 	<KebabNav />
 {/if}
+
+<Toast />
 
 <div class="app">
 	{#if booted}
