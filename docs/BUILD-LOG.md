@@ -226,3 +226,194 @@ that are valid but didn't run this session):
 
 **M0 considered closed.** M1 (safety rails + WS client) ready to
 begin in next session.
+
+---
+
+## 2026-05-13 — M1 — Safety rails + WebSocket client
+
+### Decisions
+
+**Adopted `home-assistant-js-websocket` directly, no wrapper for
+auth.** The library exposes `createConnection`,
+`createLongLivedTokenAuth`, lifecycle events (`ready`,
+`disconnected`, `reconnect-error`), and `connection.ping()`. Our
+client.ts wraps the connection with the heartbeat + reactive store
+bridge, but doesn't re-implement auth or the WS protocol.
+
+**Heartbeat is OUR layer.** 30s ping / 10s pong-timeout / force-close
+on timeout. This is what we burned a session on in harold-home — the
+library's reconnect handles network drops, but TCP zombies (HA
+processes alive but socket unresponsive) need application-level
+liveness. Force-closing on pong-timeout triggers the library's normal
+`disconnected` flow, which triggers reconnect.
+
+**Hard-ban list = `lock.*` only.** Set in `actions.ts`. Locks are
+the one entity class where a bug is meaningfully expensive (security
+incident, lockout). Adding a domain to the hard-ban list requires a
+code change — deliberate friction. Documented intention is that
+real lock-interaction testing happens in Env 3, with a human
+present, never overnight.
+
+**Three-state safety:**
+- `safety.readonly` (env): system-wide policy, default `true` in dev
+- `safety.writesAllowed` (URL): per-session opt-in via
+  `?allow-writes=true`, NOT persisted across reloads
+- `HARD_BANNED_DOMAINS` (code): always wins, no flag overrides
+
+The `canWrite()` helper in `safety.svelte.ts` reads the first two;
+the `HARD_BANNED_DOMAINS` check in `actions.ts` is checked FIRST so
+nothing can bypass it.
+
+**Audit log: framework-free + reactive bridge.**
+`audit.ts` is plain TypeScript — no Svelte runes. It owns a 1000-entry
+ring buffer + last-100 mirror to localStorage + console output.
+`audit.svelte.ts` is the Svelte adapter — exposes a `tick` `$state`
+counter that increments on every audit write, so components can
+`$derived(() => { auditStore.tick; return getAuditLog().slice(-8); })`
+to get reactive views.
+
+Why split: `audit.ts` is testable + reusable by future non-Svelte
+contexts (the M5 sidecar will mirror entries to disk). The Svelte
+bridge is a thin adapter that doesn't pollute the source-of-truth
+module.
+
+**WriteAllowedBanner is sticky-top, red, refuses to be ignored.**
+Visible always when `?allow-writes=true` is in the URL, with a "Reset"
+link to clear it. The whole point: you cannot forget that writes are
+armed.
+
+**Auth detection has 3 modes** (`auth.ts`):
+- `addon` — detected via `window.__BROADSHEET_ENV__` presence (the
+  add-on's `run.sh` will inject this in M5). Connection logic for
+  this mode is stubbed — calling connect with `mode: 'addon'` throws
+  with a helpful "M5" message rather than silently failing.
+- `llat` — LLAT in localStorage. Fully implemented in M1.
+- `none` — no creds. Layout redirects to `/setup`.
+
+### Gotchas burned in
+
+**Svelte 5 `$derived` doesn't track plain function calls.**
+First version of `+page.svelte` was:
+```ts
+const recent = $derived(getAuditLog().slice(-8).reverse());
+```
+This compiles fine but never re-runs. `$derived` only tracks
+references to `$state` variables (or other `$derived`). Calling a
+plain function reads stale data.
+
+Fix: introduce `auditStore.tick` ($state counter) bumped via the
+audit module's existing `onAuditWrite()` subscriber. Component reads
+the tick to establish reactivity:
+```ts
+const recent = $derived.by(() => {
+  auditStore.tick;  // dep
+  return getAuditLog().slice(-8).reverse();
+});
+```
+General lesson: any reactive view of non-rune data needs a dedicated
+reactive sentinel. Documented for future contributors writing similar
+bridges.
+
+**`trailingSlash: 'always'` makes path comparisons literal.**
+SvelteKit types `page.url.pathname` based on `trailingSlash`. With
+`'always'` set, paths only ever end in `/` — comparing to `/setup`
+(no slash) is provably false at the type level. svelte-check
+correctly flagged this. Fix: use `/setup/` everywhere. (Reasonable;
+keeps URLs canonical too.)
+
+**`@types/node` not pulled by SvelteKit.**
+SvelteKit's generated tsconfig references the `node` types
+collection, but doesn't ship `@types/node` itself. Added as
+explicit devDep — a single line in package.json, but otherwise
+svelte-check warns on every run.
+
+### Files added in M1
+
+```
+packages/core/src/lib/
+├── ha/
+│   ├── types.ts            HA registry types + ConnectionStatus + AuditEntry
+│   ├── audit.ts            framework-free audit log (ring + console + localStorage)
+│   ├── auth.ts             auth-mode detection + LLAT save/clear/validate
+│   ├── client.ts           home-assistant-js-websocket wrapper + heartbeat
+│   └── actions.ts          callService with safety rails + hard-ban
+├── stores/
+│   ├── connection.svelte.ts  $state for status, lastError, reconnectAttempts, haVersion
+│   ├── safety.svelte.ts      $state for readonly + writesAllowed + canWrite()
+│   └── audit.svelte.ts       $state tick reactive bridge for the audit log
+└── components/
+    └── WriteAllowedBanner.svelte
+```
+
+```
+packages/core/src/routes/
+├── +layout.svelte    re-written: boot sequence, banner, status pill, setup redirect
+├── +page.svelte      connection + safety + audit-log status display
+└── setup/+page.svelte  HA URL + LLAT paste form
+```
+
+```
+packages/core/.env       gitignored, awaits LLAT paste
+packages/core/package.json + @types/node devDep
+```
+
+### Build artifacts at end of M1
+
+- Total client JS: ~104 KB (gzipped: ~38 KB) — up ~30 KB from M0
+  baseline due to `home-assistant-js-websocket` (~25 KB raw / ~9 KB
+  gzipped) + the new module surface
+- Build time: 4.2s
+- svelte-check: 0 errors, 0 warnings, 267 files
+
+### Exit criteria for M1 (per BUILD-PLAN)
+
+Code-side (verifiable now without LLAT):
+- [x] `home-assistant-js-websocket` integrated, library does the WS heavy lifting
+- [x] Heartbeat layer wraps it (30s/10s/force-close)
+- [x] `actions.ts` enforces readonly + dry-run + audit-log + hard-ban
+- [x] `lock.*` writes blocked even with unlock flag (HARD_BANNED_DOMAINS check is first)
+- [x] `BROADSHEET_READONLY=true` env-var default
+- [x] `?allow-writes=true` URL flag opt-in (per-session, not persisted)
+- [x] WriteAllowedBanner sticky-top when armed
+- [x] `/setup` form for HA URL + LLAT paste
+- [x] svelte-check 0 errors / 0 warnings
+- [x] `pnpm -r build` clean
+
+Verification gated on Alfie pasting LLAT into
+`packages/core/.env` and running `pnpm dev`:
+- [ ] Connect to production HA, see entity states reach the SPA
+      (M2 will exercise this further; M1 reaches `connected` status)
+- [ ] Try to call `light.turn_on` from dev console → blocked +
+      audit logged (visible in landing's audit panel)
+- [ ] Add `?allow-writes=true` → banner appears, call succeeds,
+      light toggles, audit logged
+- [ ] Try `lock.unlock` even with `?allow-writes=true` → blocked
+- [ ] Force HA restart via Proxmox → broadsheet detects disconnect
+      within ~40s (heartbeat) and reconnects within ~10s of HA back
+
+### How to verify (next time you're at the keyboard)
+
+1. Paste your LLAT into `D:\Visual Studio Code Projects\broadsheet\packages\core\.env`
+   on the `HA_TOKEN_DEV=` line.
+2. `cd D:\Visual Studio Code Projects\broadsheet ; pnpm dev`
+3. Browse `http://localhost:5173`. First visit shows `/setup/`
+   pre-filled with the env URL — paste the same LLAT into the form,
+   click Connect. (The env var is documentation; the form is
+   the real auth path until the addon takes over in M5.)
+4. Landing page should show "connection: connected" with the HA
+   version, "safety: reads only", and audit entries for the boot
+   sequence + connection-status events.
+5. Open DevTools console, type:
+   ```js
+   import('/src/lib/ha/actions.ts').then(m => m.callService('light', 'turn_on', { entity_id: 'light.office_pendant' })).then(console.log)
+   ```
+   Expect: `{ success: false, reason: 'readonly' }`, audit entry shows
+   `blocked-readonly`.
+6. Append `?allow-writes=true` to the URL → red banner appears.
+   Repeat the console call: light should turn on (assuming it's a
+   real entity), audit shows `call-service`.
+7. Try `lock.unlock` with the flag still on → blocked, audit shows
+   `blocked-hard-banned`. The flag does NOT override.
+
+If any of these fail, the bug is in M1 code — file as a finding
+in BUILD-LOG before starting M2.
