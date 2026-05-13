@@ -1,0 +1,14 @@
+{
+  "name": "@broadsheet/emanations",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Multi-person presence painting plugin for broadsheet",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "echo 'emanations: stub at M0 — implementation lands post-v0.1' && exit 0"
+  },
+  "peerDependencies": {
+    "@broadsheet/core": "workspace:*"
+  }
+}

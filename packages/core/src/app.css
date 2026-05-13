@@ -1,0 +1,40 @@
+/*
+ * broadsheet — design tokens (placeholder)
+ *
+ * The full editorial register (warm off-black, amber accent, four-font
+ * system: Newsreader / Instrument Serif / IBM Plex Sans / JetBrains Mono)
+ * lands in M3 when page templates begin. M0 ships a minimal token set
+ * to verify the build pipeline.
+ */
+
+:root {
+	--bg: #1a1814;
+	--fg: #f4ede1;
+	--muted: #8a7f6f;
+	--accent: #c08a4a;
+	--rule: #2a261e;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: 'Newsreader', Georgia, serif;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}

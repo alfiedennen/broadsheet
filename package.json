@@ -1,0 +1,21 @@
+{
+  "name": "broadsheet-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Editorial frontend for Home Assistant — pnpm workspace root",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @broadsheet/core dev",
+    "build": "pnpm -r build",
+    "preview": "pnpm --filter @broadsheet/core preview",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "check": "pnpm -r check"
+  },
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@11.1.1",
+  "license": "MIT"
+}

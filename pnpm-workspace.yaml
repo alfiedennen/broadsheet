@@ -1,0 +1,11 @@
+packages:
+  - 'packages/*'
+  # 'apps/addon' is the HA add-on packaging — has its own Dockerfile,
+  # not a JS package. Excluded from the workspace.
+
+# pnpm 11+ blocks postinstall scripts unless explicitly approved here.
+# esbuild needs its install script to fetch the prebuilt binary for the
+# host platform (this is normal + safe — it's the upstream esbuild's own
+# script, not a third party). Vite depends on esbuild.
+allowBuilds:
+  esbuild: true
