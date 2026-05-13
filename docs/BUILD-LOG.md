@@ -170,17 +170,32 @@ rewritten via PowerShell `-replace` regex:
 9 of 10 docs had references that needed fixing. Only `SETTINGS-UI.md`
 was unchanged (no cross-refs with that prefix in the body).
 
-### Pending — Alfie's parallel tracks
-
-Two manual things that don't block scaffolding but block M1:
+### Pending — Alfie's parallel tracks (still open)
 
 1. **VirtualBox HA OS VM** — set up `broadsheet-test.local` per
-   [`DEV-ENVIRONMENTS.md`](DEV-ENVIRONMENTS.md) § Env 2.
+   [`DEV-ENVIRONMENTS.md`](DEV-ENVIRONMENTS.md) § Env 2. Doesn't block
+   M1 (which is local-dev safety rails) but does block M5 add-on
+   testing.
 2. **Dev LLAT** — generate at production HA → Profile → Long-Lived
    Access Tokens, name `broadsheet-dev-pc`. Paste into
-   `packages/core/.env` (gitignored) for M1 to consume.
+   `packages/core/.env` (gitignored). M1's WebSocket client connects
+   against this for the first read tests.
 
-### Exit criteria for M0
+### Repo published
+
+- **URL**: `https://github.com/alfiedennen/broadsheet`
+- **Visibility**: private (will go public at M7.6 per BUILD-PLAN)
+- **Default branch**: `main`
+- **First push**: commit `4404933`
+- **Remote**: `origin` tracking `origin/main`
+
+Created via `gh repo create broadsheet --private --source=. --push`.
+Note: PowerShell wraps `gh`'s stderr output as a `RemoteException` even
+on success — `git remote -v` + `gh repo view` confirms the operation
+landed cleanly. Future `git push` invocations from PowerShell will
+show the same noise; ignore unless followed by an actual error message.
+
+### Exit criteria for M0 — all green
 
 Per [`BUILD-PLAN.md`](BUILD-PLAN.md):
 
@@ -192,11 +207,22 @@ Per [`BUILD-PLAN.md`](BUILD-PLAN.md):
 - [x] SvelteKit 2 + Svelte 5 + adapter-static initialised in
       `packages/core/`
 - [x] All eight docs copied + cross-refs rewritten
-- [ ] `pnpm install && pnpm -r build` succeeds with no errors
-- [ ] Empty SvelteKit app loads at `localhost:5173`
-- [ ] All docs in `broadsheet/docs/` reference each other correctly
-- [ ] VirtualBox VM `broadsheet-test` exists, snapshot taken,
-      hostname set (Alfie's track)
-- [ ] `git init`, first commit, push to private GitHub repo
+- [x] `pnpm install && pnpm -r build` succeeds with no errors
+- [x] All docs in `broadsheet/docs/` reference each other correctly
+- [x] `git init`, first commit, pushed to private GitHub repo
+      (`alfiedennen/broadsheet`)
 
-Last three items finish in this session before M0 closes.
+**Deferred to next session as exit-criteria check** (the two items
+that are valid but didn't run this session):
+
+- [ ] Empty SvelteKit app loads at `localhost:5173` (deferred — build
+      output verified, but `pnpm dev` not run interactively. Quick
+      manual check next session: `pnpm dev` from
+      `D:\Visual Studio Code Projects\broadsheet`, browse
+      `http://localhost:5173`, expect the M0 placeholder landing page
+      with italic-amber "broadsheet" headline.)
+- [ ] VirtualBox VM `broadsheet-test` exists, snapshot taken,
+      hostname set (Alfie's track — does not block M1 start)
+
+**M0 considered closed.** M1 (safety rails + WS client) ready to
+begin in next session.
