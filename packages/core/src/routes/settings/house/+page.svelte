@@ -25,6 +25,7 @@
 	} from '$lib/curation/store.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
+	import { updateEntityArea } from '$lib/ha/registry';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
@@ -45,6 +46,26 @@
 	let showHiddenInAreaId = $state<string | null>(null);
 	let renameBuffer = $state<Record<string, string>>({});
 	let entityRenameBuffer = $state<Record<string, string>>({});
+	/** Entity IDs whose Move-to-area picker is currently visible. */
+	let movePickerOpen = $state<Set<string>>(new Set());
+
+	/**
+	 * Real (non-synthetic, non-hidden) areas users can move entities to.
+	 * Sorted by name for the dropdown.
+	 */
+	const movableAreas = $derived.by(() => {
+		// Reactive: re-read when curation changes (in case the user just hid an area)
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		curationStore.tick;
+		return discoveryStore.areas
+			.filter((a) => !curationStore.current.areas[a.area_id]?.hidden)
+			.map((a) => ({
+				id: a.area_id,
+				// Use curation rename if set, else raw HA name
+				name: curationStore.current.areas[a.area_id]?.rename || a.name
+			}))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	});
 
 	function toggleExpand(id: string) {
 		expandedAreaId = expandedAreaId === id ? null : id;
@@ -107,6 +128,35 @@
 	async function clearUnhide(entity: DomainEntity) {
 		const ok = await unhideEntity(entity.id, false);
 		showToast(ok ? `${entity.name} back to default` : 'Save failed', ok ? 'success' : 'error');
+	}
+
+	function toggleMovePicker(entityId: string) {
+		const next = new Set(movePickerOpen);
+		if (next.has(entityId)) next.delete(entityId);
+		else next.add(entityId);
+		movePickerOpen = next;
+	}
+
+	async function moveEntity(entity: DomainEntity, targetAreaId: string | null) {
+		// Don't fire if it's already in the target area (no-op + would close picker)
+		if (entity.areaId === targetAreaId) {
+			toggleMovePicker(entity.id);
+			return;
+		}
+		const targetName =
+			targetAreaId === null
+				? '(no area)'
+				: (movableAreas.find((a) => a.id === targetAreaId)?.name ?? targetAreaId);
+		const result = await updateEntityArea(entity.id, targetAreaId);
+		if (result.success) {
+			showToast(`Moved ${entity.name} → ${targetName}`, 'success');
+			// Close the picker
+			const next = new Set(movePickerOpen);
+			next.delete(entity.id);
+			movePickerOpen = next;
+		} else {
+			showToast(`Move failed: ${result.error ?? result.reason}`, 'error');
+		}
 	}
 
 	/* ─────────────── helpers ─────────────── */
@@ -309,67 +359,119 @@
 		{@const eHidden = isEntityHidden(entity)}
 		{@const eUnhide = isUnhideForced(entity)}
 		{@const reason = hideReasonChip(entity)}
-		<div class="entity-row" class:hidden={eHidden}>
-			<div class="entity-info">
-				<div class="entity-line-1">
-					<span class="domain-badge">{domainBadge(entity)}</span>
+		{@const isUnsorted = entity.areaId === null}
+		{@const moveOpen = movePickerOpen.has(entity.id) || isUnsorted}
+		<div class="entity-shell" class:hidden={eHidden}>
+			<div class="entity-row">
+				<div class="entity-info">
+					<div class="entity-line-1">
+						<span class="domain-badge">{domainBadge(entity)}</span>
+						{#if eRenaming}
+							<input
+								type="text"
+								class="entity-rename-input"
+								bind:value={entityRenameBuffer[entity.id]}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') commitRenameEntity(entity.id);
+									if (e.key === 'Escape') cancelRenameEntity(entity.id);
+								}}
+							/>
+						{:else}
+							<span class="entity-name">{entity.name}</span>
+						{/if}
+						{#if reason}
+							<span class="reason-chip" title={reason.tooltip}>{reason.label}</span>
+						{/if}
+						{#if eUnhide}
+							<span class="reason-chip override" title="You forced this visible. Click Default to clear.">forced visible</span>
+						{/if}
+					</div>
+					<div class="entity-line-2">
+						<code class="entity-id">{entity.id}</code>
+						{#if stateLine(entity)}
+							<span class="state-sep" aria-hidden="true">·</span>
+							<span class="entity-state" data-state={entity.state?.state ?? 'unknown'}>
+								{stateLine(entity)}
+							</span>
+						{/if}
+						{#if lastChangedLine(entity)}
+							<span class="state-sep" aria-hidden="true">·</span>
+							<span class="entity-age">{lastChangedLine(entity)}</span>
+						{/if}
+					</div>
+				</div>
+				<div class="entity-actions">
 					{#if eRenaming}
-						<input
-							type="text"
-							class="entity-rename-input"
-							bind:value={entityRenameBuffer[entity.id]}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') commitRenameEntity(entity.id);
-								if (e.key === 'Escape') cancelRenameEntity(entity.id);
-							}}
-						/>
+						<button class="mini confirm" type="button" onclick={() => commitRenameEntity(entity.id)}>
+							Save
+						</button>
+						<button class="mini" type="button" onclick={() => cancelRenameEntity(entity.id)}>
+							Cancel
+						</button>
 					{:else}
-						<span class="entity-name">{entity.name}</span>
-					{/if}
-					{#if reason}
-						<span class="reason-chip" title={reason.tooltip}>{reason.label}</span>
-					{/if}
-					{#if eUnhide}
-						<span class="reason-chip override" title="You forced this visible. Click Default to clear.">forced visible</span>
-					{/if}
-				</div>
-				<div class="entity-line-2">
-					<code class="entity-id">{entity.id}</code>
-					{#if stateLine(entity)}
-						<span class="state-sep" aria-hidden="true">·</span>
-						<span class="entity-state" data-state={entity.state?.state ?? 'unknown'}>
-							{stateLine(entity)}
-						</span>
-					{/if}
-					{#if lastChangedLine(entity)}
-						<span class="state-sep" aria-hidden="true">·</span>
-						<span class="entity-age">{lastChangedLine(entity)}</span>
+						{#if !isUnsorted}
+							<button class="mini" type="button" onclick={() => toggleMovePicker(entity.id)}>
+								{moveOpen ? 'Close move' : 'Move…'}
+							</button>
+						{/if}
+						<button class="mini" type="button" onclick={() => startRenameEntity(entity)}>
+							Rename
+						</button>
+						{#if eUnhide}
+							<button class="mini" type="button" onclick={() => clearUnhide(entity)}>
+								Default
+							</button>
+						{:else}
+							<button class="mini" type="button" onclick={() => toggleEntityHidden(entity)}>
+								{eHidden ? 'Show' : 'Hide'}
+							</button>
+						{/if}
 					{/if}
 				</div>
 			</div>
-			<div class="entity-actions">
-				{#if eRenaming}
-					<button class="mini confirm" type="button" onclick={() => commitRenameEntity(entity.id)}>
-						Save
-					</button>
-					<button class="mini" type="button" onclick={() => cancelRenameEntity(entity.id)}>
-						Cancel
-					</button>
-				{:else}
-					<button class="mini" type="button" onclick={() => startRenameEntity(entity)}>
-						Rename
-					</button>
-					{#if eUnhide}
-						<button class="mini" type="button" onclick={() => clearUnhide(entity)}>
-							Default
-						</button>
-					{:else}
-						<button class="mini" type="button" onclick={() => toggleEntityHidden(entity)}>
-							{eHidden ? 'Show' : 'Hide'}
-						</button>
-					{/if}
-				{/if}
-			</div>
+
+			{#if moveOpen && !eRenaming}
+				<!--
+					Move-to-area picker. Always shown for entities currently in
+					Unsorted (so the "place" job is one click away). For entities
+					already in a room, only shown after clicking Move… (so it
+					doesn't clutter the list).
+
+					Writes to HA's entity_registry directly (lib/ha/registry.ts).
+					Discovery picks the change up via the
+					entity_registry_updated subscription within ~500ms.
+				-->
+				<div class="move-picker">
+					<span class="move-label">
+						{#if isUnsorted}
+							Place in
+						{:else}
+							Move to
+						{/if}
+					</span>
+					<div class="move-options">
+						{#each movableAreas as area (area.id)}
+							<button
+								type="button"
+								class="move-option"
+								class:current={entity.areaId === area.id}
+								onclick={() => moveEntity(entity, area.id)}
+							>
+								{area.name}
+							</button>
+						{/each}
+						{#if !isUnsorted}
+							<button
+								type="button"
+								class="move-option clear"
+								onclick={() => moveEntity(entity, null)}
+							>
+								(no area)
+							</button>
+						{/if}
+					</div>
+				</div>
+			{/if}
 		</div>
 	{/snippet}
 
@@ -738,22 +840,87 @@
 		flex-direction: column;
 	}
 
+	.entity-shell {
+		border-bottom: 1px solid var(--rule);
+	}
+
+	.entity-shell:last-child {
+		border-bottom: none;
+	}
+
+	.entity-shell.hidden .entity-name {
+		color: var(--fg-dim);
+		text-decoration: line-through;
+	}
+
 	.entity-row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-3);
 		padding: var(--space-2) var(--space-3);
-		border-bottom: 1px solid var(--rule);
 	}
 
-	.entity-row:last-child {
-		border-bottom: none;
+	.move-picker {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-3);
+		padding: var(--space-2) var(--space-3) var(--space-3);
+		background: rgba(192, 138, 74, 0.05);
+		border-top: 1px dashed var(--rule);
 	}
 
-	.entity-row.hidden .entity-name {
-		color: var(--fg-dim);
-		text-decoration: line-through;
+	.move-label {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--accent);
+		flex: 0 0 auto;
+		padding-top: var(--space-1);
+	}
+
+	.move-options {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		flex: 1;
+	}
+
+	.move-option {
+		font-family: var(--font-caption);
+		font-size: var(--text-caption);
+		padding: var(--space-1) var(--space-3);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-pill);
+		color: var(--fg);
+		background: var(--bg-card);
+		min-height: 32px;
+		transition: border-color var(--ease-quick), background var(--ease-quick), color var(--ease-quick);
+	}
+
+	.move-option:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.move-option.current {
+		border-color: var(--accent);
+		background: var(--accent-glow);
+		color: var(--accent);
+		opacity: 0.7;
+		cursor: default;
+	}
+
+	.move-option.clear {
+		font-style: italic;
+		color: var(--fg-muted);
+		border-style: dashed;
+	}
+
+	.move-option.clear:hover {
+		color: var(--state-alert);
+		border-color: var(--state-alert);
 	}
 
 	.entity-info {

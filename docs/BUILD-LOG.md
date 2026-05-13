@@ -1367,3 +1367,137 @@ Settings is now genuinely usable for the FRONT DOOR class of
 problem. The next design test is: does the rest of Alfie's house
 (Unsorted-heavy, lots of TRVs, lots of switches) read cleanly with
 the same patterns?
+
+---
+
+## 2026-05-13 — M4.x Leg 3 — Move-to-area for Unsorted entities
+
+### Why
+
+The third leg of the original three-leg design plan from earlier
+in M4. With Legs 1+2 done (device grouping, smart hiding) the
+"identify" + "suppress" sub-jobs of /settings/house were solved.
+The "place" sub-job — moving Unsorted entities into the right rooms
+— still required manually editing in HA. This leg closes that loop
+by writing area assignments directly to HA's entity registry from
+the broadsheet UI.
+
+Alfie's confirmation: tested Legs 1+2 against the rest of his house
+("all really hold up and make all the difference"). Green-lit Leg 3.
+
+### Decisions
+
+**New module: `lib/ha/registry.ts`** — separate from `actions.ts`
+because registry writes are conceptually different from service
+calls. Service calls actuate hardware (turn on a light, unlock a
+door); registry writes change metadata (area assignment, friendly
+name). They share the same WS connection but warrant distinct
+safety thinking.
+
+**Registry writes are NOT gated by the readonly flag.** Setting an
+entity's `area_id` can't unlock your front door. The hard-ban list
+is service-call-specific (lock.unlock); it doesn't apply to registry
+writes. Audit-log captures every registry write for observability,
+but `?allow-writes=true` isn't required.
+
+If a future case warrants gating (e.g. a hypothetical "delete
+entity" action), add a separate flag rather than overloading the
+service-call readonly. Keep the mental models distinct.
+
+**WS message used**: `config/entity_registry/update` with
+`{entity_id, area_id}`. Pass `area_id: null` to clear the
+assignment (entity returns to Unsorted).
+
+**Discovery picks up the change automatically.** The `entity_registry_updated`
+event subscription that's been wired since M2 fires when HA writes
+the new area_id; debounced 500ms re-pull of the entity registry
+brings the change into broadsheet's domain model. End-to-end
+latency in our tests: ~1.5 seconds from button click to UI
+migration.
+
+**UI: picker auto-visible for Unsorted, toggle for others.**
+- Entities in `area.id === '__unsorted__'` (or anywhere their
+  `entity.areaId === null`) show the Move picker inline by default.
+  The "place" job is one click away — no extra tap to reveal.
+- Entities already in a room show a "Move…" mini button alongside
+  Rename/Hide. Clicking opens the picker. Default-collapsed because
+  most entities don't need re-placing.
+- Picker is a chip-row of all visible (non-curation-hidden) areas
+  + "(no area)" pill for entities that ARE in a room (clicks send
+  them back to Unsorted).
+- The "current" area chip is shown faded + non-clickable so the
+  user can see where the entity already is.
+
+**Curation renames flow through to the picker.** The dropdown
+shows your renamed area names ("Alfie's office", "Library"),
+not the raw HA forms (`alfies_office`, `library`). One source of
+truth for area display names — the picker uses the same Layer 2/3
+projection.
+
+### Verified live against production HA via Chrome MCP
+
+Round-trip test using `light.hallway_pendant` (a Z2M group of 3
+Third Reality pendants per Alfie's CLAUDE.md, sitting in Unsorted
+because the entity has no area_id even though the device is
+known to belong in the hallway):
+
+| Step | Result |
+|---|---|
+| Pre-state: `light.hallway_pendant.areaId` | `null` (Unsorted) |
+| Click "Front Hallway" in the picker UI | Calls `updateEntityArea` |
+| `entity_registry/update` WS reply | `success: true` |
+| Wait 1.5s for entity_registry_updated → debounced re-pull | |
+| Post-move: entity.areaId | `"front_hallway"` ✓ |
+| Visible in `area('front_hallway').lights` | true ✓ |
+| Removed from Unsorted bucket | true ✓ |
+| Visible in DOM under Front Hallway | confirmed ✓ |
+| Reverted via API for test cleanup | `success: true` |
+
+The picker correctly shows curation-renamed area names ("Alfie's
+office", "Library") — same source of truth as the editorial pages.
+
+### Files added in Leg 3
+
+- `lib/ha/registry.ts` — `updateEntityArea(entityId, areaId)` +
+  `updateAreaName(areaId, name)` (the latter unused in v0.1 but
+  available for power users via dev console)
+- `routes/+layout.svelte` — registry exposed on dev handle
+- `routes/settings/house/+page.svelte` — entity-shell wrapper,
+  move picker, movableAreas $derived, toggleMovePicker /
+  moveEntity handlers, picker styles
+
+### What this enables
+
+- The "place" job for the 315 visible Unsorted entities (down from
+  482 after auto-hide) is now a one-click affordance per entity
+- Entities moved via broadsheet are persisted to HA's registry —
+  visible to every HA frontend, every automation, every other tool.
+  Not a broadsheet-private override.
+- Reversible — clicking "(no area)" on a placed entity sends it
+  back to Unsorted
+
+### Followups beyond Leg 3 (deferred)
+
+1. **Bulk move** — for users with many similar Unsorted entities
+   (`sensor.kitchen_*` × N → all to Kitchen at once). v0.2.
+2. **Smart suggestions** — heuristic that says "broadsheet thinks
+   this entity belongs in Kitchen because (a) device is in
+   Kitchen-area device-pile, (b) entity_id contains 'kitchen', (c)
+   the same integration's other entities are mostly in Kitchen."
+   Surface as a one-click "Accept suggestion" pill. v0.2.
+3. **Search / filter the Unsorted list** — when there are 315
+   entities, scrolling to find one is hard. Add a search box at
+   the top of the Unsorted section. v0.2.
+4. **Move at the device level** — if a device has 4 entities in
+   Unsorted, "move whole device to Kitchen" should be one action.
+   Requires adding `device_registry/update` to registry.ts. v0.2.
+
+### M4.x Leg 3 closed; M4.x considered done overall
+
+The full /settings/house design loop is now complete:
+- **Identify** ✓ — device grouping + domain badges + state inline
+- **Suppress** ✓ — auto-hide for duplicates + system entities
+- **Place** ✓ — move-to-area picker
+
+Next gate: M5 (HA add-on packaging) — what makes broadsheet
+installable from the HA add-on store.

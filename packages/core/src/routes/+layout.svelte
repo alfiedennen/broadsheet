@@ -88,6 +88,7 @@
 		// `import.meta.env.DEV`.
 		if (import.meta.env.DEV && typeof window !== 'undefined') {
 			const curationMod = await import('$lib/curation/store.svelte');
+			const registryMod = await import('$lib/ha/registry');
 			(window as Window & { __broadsheet_dev__?: object }).__broadsheet_dev__ = {
 				callService,
 				getConnection,
@@ -96,7 +97,8 @@
 				audit,
 				discovery,
 				curation: curationStore,
-				curationApi: curationMod
+				curationApi: curationMod,
+				registry: registryMod
 			};
 			audit({ kind: 'auth-event', note: 'window.__broadsheet_dev__ exposed (dev only)' });
 		}
