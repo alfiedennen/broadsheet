@@ -48,6 +48,20 @@
 	let entityRenameBuffer = $state<Record<string, string>>({});
 	/** Entity IDs whose Move-to-area picker is currently visible. */
 	let movePickerOpen = $state<Set<string>>(new Set());
+	/**
+	 * Device group keys (deviceId) that are currently expanded.
+	 * Multi-entity device groups default to collapsed — the header
+	 * shows the count + manufacturer + model so the user can scan
+	 * without having every device's 24 sub-entities revealed.
+	 */
+	let expandedDevices = $state<Set<string>>(new Set());
+
+	function toggleDeviceExpanded(key: string) {
+		const next = new Set(expandedDevices);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		expandedDevices = next;
+	}
 
 	/**
 	 * Real (non-synthetic, non-hidden) areas users can move entities to.
@@ -548,9 +562,24 @@
 
 						{#each visibleGroups as group (group.key)}
 							{#if group.device && group.entities.length > 1}
-								<!-- Multi-entity device — render as a group with header -->
-								<div class="device-group">
-									<div class="device-head">
+								{@const deviceExpanded = expandedDevices.has(group.key)}
+								<!--
+									Multi-entity device — collapsed by default. Header shows
+									count + manufacturer + model so the user can scan; click
+									reveals sub-entities. This is critical for devices like
+									the XIAO Test ESP32 that produce 24 entities — without
+									collapse, expanding an area becomes a wall of rows.
+								-->
+								<div class="device-group" class:device-expanded={deviceExpanded}>
+									<button
+										class="device-head"
+										type="button"
+										onclick={() => toggleDeviceExpanded(group.key)}
+										aria-expanded={deviceExpanded}
+									>
+										<span class="device-chev" aria-hidden="true">
+											{deviceExpanded ? '−' : '+'}
+										</span>
 										<span class="device-icon" aria-hidden="true">▣</span>
 										<div class="device-meta">
 											<span class="device-name">{group.device.name ?? 'Unnamed device'}</span>
@@ -561,12 +590,14 @@
 											{/if}
 										</div>
 										<span class="device-count">{group.entities.length} entities</span>
-									</div>
-									<div class="device-entities">
-										{#each group.entities as entity (entity.id)}
-											{@render entityRow(entity)}
-										{/each}
-									</div>
+									</button>
+									{#if deviceExpanded}
+										<div class="device-entities">
+											{#each group.entities as entity (entity.id)}
+												{@render entityRow(entity)}
+											{/each}
+										</div>
+									{/if}
 								</div>
 							{:else}
 								<!-- Single-entity device or no-device — render as standalone row -->
@@ -603,8 +634,17 @@
 									{#each hiddenGroups as group (group.key)}
 										{@const isDeviceGroup = group.device && group.entities.length > 1}
 										{#if isDeviceGroup}
-											<div class="device-group hidden-device">
-												<div class="device-head">
+											{@const deviceExpanded = expandedDevices.has(group.key)}
+											<div class="device-group hidden-device" class:device-expanded={deviceExpanded}>
+												<button
+													class="device-head"
+													type="button"
+													onclick={() => toggleDeviceExpanded(group.key)}
+													aria-expanded={deviceExpanded}
+												>
+													<span class="device-chev" aria-hidden="true">
+														{deviceExpanded ? '−' : '+'}
+													</span>
 													<span class="device-icon" aria-hidden="true">▣</span>
 													<div class="device-meta">
 														<span class="device-name">{group.device?.name ?? 'Unnamed device'}</span>
@@ -615,12 +655,14 @@
 														{/if}
 													</div>
 													<span class="device-count">{group.entities.length} hidden</span>
-												</div>
-												<div class="device-entities">
-													{#each group.entities as entity (entity.id)}
-														{@render entityRow(entity)}
-													{/each}
-												</div>
+												</button>
+												{#if deviceExpanded}
+													<div class="device-entities">
+														{#each group.entities as entity (entity.id)}
+															{@render entityRow(entity)}
+														{/each}
+													</div>
+												{/if}
 											</div>
 										{:else}
 											{#each group.entities as entity (entity.id)}
@@ -794,7 +836,32 @@
 		gap: var(--space-3);
 		padding: var(--space-2) var(--space-3);
 		background: rgba(255, 255, 255, 0.015);
-		border-bottom: 1px solid var(--rule);
+		border-bottom: 1px solid transparent;
+		width: 100%;
+		text-align: left;
+		color: inherit;
+		transition: background var(--ease-quick), border-color var(--ease-quick);
+	}
+
+	.device-head:hover {
+		background: rgba(192, 138, 74, 0.06);
+	}
+
+	.device-group.device-expanded .device-head {
+		border-bottom-color: var(--rule);
+	}
+
+	.device-chev {
+		font-family: var(--font-mono);
+		font-size: 1.1rem;
+		color: var(--fg-muted);
+		flex: 0 0 1.2rem;
+		text-align: center;
+	}
+
+	.device-group.device-expanded .device-chev,
+	.device-head:hover .device-chev {
+		color: var(--accent);
 	}
 
 	.device-icon {
