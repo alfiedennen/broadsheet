@@ -1568,3 +1568,104 @@ for entities integrations forgot to mark, not the main mechanism.
   orphans flagged, the `_wake` button + `_operator` sensor still
   system-flagged)
 - Aggregate hidden count: 6 (was ~170)
+
+### M4.x.fix3 — platform display + device-level hide/rename + Unsorted reframe (caught by user testing)
+
+**Catalysts (all from one session of Alfie testing the live UI)**:
+
+1. Office Heater Plug device shows mixed entity names because the
+   user renamed `switch.office_heater_plug` to "Pixel 6 Plug" via
+   HA's friendly_name but other 8 sub-entities + the device itself
+   still display "Office Heater Plug." User asked: how do I rename
+   the device?
+
+2. Living Room TV Plug (10 entities, Sonoff Zigbee) was physically
+   pulled but is still alive on the Z2M network reporting voltage.
+   User can't remove it from HA because HA only deletes unreachable
+   devices. User asked: how do I get it out of broadsheet's view?
+
+3. Living Room shows 4 media_player entities for the TCL TV — same
+   physical TV, four integrations representing it (androidtv_remote
+   canonical + cast + homekit_controller + dlna_dmr shadows). Three
+   different device_ids (one per integration), so duplicate-detection
+   doesn't catch them. User asked: are these duplicates? How do I
+   know which is the real one?
+
+4. Unsorted bucket of 483 entities feels overwhelming. Many are
+   legitimately place-less (helpers, automations, scripts, template
+   sensors) but broadsheet was framing them as "things you should
+   place." User said: "things in there are entirely opaque to the
+   average user, and ultimately are not really tethered to place."
+
+### What landed
+
+**A. Platform shown inline on every entity row.** `DomainEntity`
+gains `platform` field (mirrored from `Entity.platform`). Renders
+as a small italic mono tag next to the entity_id. Now the user can
+see at a glance: `media_player.living_room_tv_2 · cast` vs
+`media_player.living_room_tv · androidtv_remote` — the integration
+source disambiguates same-named entities from different sources.
+
+**B. Device-level rename** (broadsheet curation). New
+`DeviceOverride` type in curation schema, new
+`curation.devices: Record<string, DeviceOverride>` map, new
+`renameDevice(id, name)` mutator. Applied at the device-header
+level in /settings/house — the Office Heater Plug case is now a
+5-second fix ("Office Heater Plug" → "Pixel 6 Charger"). Doesn't
+touch HA — keeps HA's authority over the underlying name in case
+the user wants to fix it there separately.
+
+**C. Device-level hide** (broadsheet curation). New
+`hideDevice(id, hidden)` mutator. When a device is hidden, its
+sub-entities get `autoHideReason: 'device-hidden'` and disappear
+from area visible buckets (move into hiddenEntities). One click
+sweeps all 10 Living Room TV Plug entities out of view. Doesn't
+remove from HA (correct — the plug is still alive on the network);
+just stops cluttering broadsheet.
+
+**D. Unsorted reframe** — split into two cohorts inside the
+expanded Unsorted area:
+- **"Devices needing placement"** (entities with `deviceId !== null`):
+  shown by default, with the "Place in" picker available per
+  entity. 190 of the 483 are in this cohort.
+- **"Helpers, automations & system"** (entities with
+  `deviceId === null`): collapsed under a toggle "+ 250 helpers...
+  (no physical place — broadsheet doesn't render these on pages)."
+  Surfaces them for visibility but doesn't nag the user to act.
+
+The reframe changes the Unsorted user's mental model from "I have
+483 things to fix" to "I have 190 devices to place + 250 system
+entities that legitimately have no place." Same data, much clearer
+where attention belongs.
+
+### Verified live against production HA via Chrome MCP
+
+| Test | Result |
+|---|---|
+| Platform tag | TVs show `cast` / `homekit_controller` / `dlna_dmr` / `androidtv_remote` |
+| Device rename + hide buttons | Present on every multi-entity device card |
+| Unsorted "Devices needing placement" | 190 entities |
+| Unsorted "Helpers + system" toggle | "+ 250 helpers, automations & system" (collapsed by default) |
+
+### Lesson — Svelte 5 TS narrowing doesn't propagate through `@const` chains
+
+`{@const isDeviceGroup = group.device && group.entities.length > 1}`
+followed by `{#if isDeviceGroup} ... group.device.id ...` failed
+TypeScript checks because Svelte 5's compiler doesn't narrow
+`group.device` from `RawDevice | null` to `RawDevice` based on the
+intermediate `@const`. Fix: introduce a non-null asserted local
+const `{@const dev = group.device!}` immediately inside the if
+block, then use `dev` everywhere. Slightly less elegant than
+implicit narrowing, but works reliably.
+
+### M4.x.fix3 considered done. Settings is now substantially
+better:
+
+- Identify: device grouping + domain badges + state inline +
+  PLATFORM source + collapsed-by-default
+- Suppress: smart auto-hide + device-level hide
+- Place: move-to-area picker + Unsorted reframed into actionable
+  vs-ignore cohorts
+- Rename: at entity-level AND device-level
+
+Next gate: M5 (HA add-on packaging).

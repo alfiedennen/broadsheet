@@ -48,6 +48,16 @@ export interface EntityOverride {
 	iconOverride?: string | null;
 }
 
+/**
+ * Per-device overrides. Renames apply at the device-header level
+ * in /settings/house; hide cascades to ALL entities under the
+ * device (autoHideReason='device-hidden').
+ */
+export interface DeviceOverride {
+	rename?: string | null;
+	hidden?: boolean;
+}
+
 /** Per-label overrides (orthogonal-tag styling + behaviour). */
 export interface LabelOverride {
 	iconOverride?: string | null;
@@ -101,6 +111,7 @@ export interface Curation {
 	people: PersonOverride[];
 	floors: Record<string, FloorOverride>; // keyed by floor_id
 	areas: Record<string, AreaOverride>; // keyed by area_id
+	devices: Record<string, DeviceOverride>; // keyed by device_id
 	entities: Record<string, EntityOverride>; // keyed by entity_id
 	labels: Record<string, LabelOverride>; // keyed by label_id
 	pagePins: Record<string, string | null>; // entity_id → page slug
@@ -121,6 +132,7 @@ export function defaultCuration(): Curation {
 		people: [],
 		floors: {},
 		areas: {},
+		devices: {},
 		entities: {},
 		labels: {},
 		pagePins: {},

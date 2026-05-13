@@ -59,17 +59,24 @@ export interface DomainEntity {
 	/**
 	 * If non-null, broadsheet auto-hid this entity. The user can override
 	 * via curation `unhide: true`. Reasons:
-	 *  - 'duplicate': another entity with the same device_id + domain
-	 *    is already visible (e.g. lock.front_door + lock.front_door_2).
+	 *  - 'duplicate': another entity with the same device + entity-id
+	 *    base is already visible (e.g. lock.front_door + lock.front_door_2).
 	 *  - 'system': matches a SYSTEM_PATTERNS regex (battery, wake button,
 	 *    operator status, etc.).
 	 *  - 'integration': HA's hidden_by from the integration.
+	 *  - 'device-hidden': the parent device is hidden via curation
+	 *    (e.g. user swept all entities under "Living Room TV Plug").
 	 */
-	autoHideReason: 'duplicate' | 'system' | 'integration' | null;
+	autoHideReason: 'duplicate' | 'system' | 'integration' | 'device-hidden' | null;
 	disabled: boolean; // disabled_by !== null
 	entityCategory: 'config' | 'diagnostic' | null;
 	icon: string | null;
 	deviceClass: string | null;
+	/** Integration source from HA's entity_registry — useful in /settings
+	 *  to disambiguate same-named entities from different integrations
+	 *  (e.g. media_player.living_room_tv from `androidtv_remote` vs the
+	 *  same-physical-TV's `cast` shadow at media_player.living_room_tv_2). */
+	platform: string;
 }
 
 export interface DomainArea {
@@ -205,9 +212,12 @@ export function projectDomain(input: {
 		const entityOverride = cur?.entities[e.entity_id];
 		const name = entityOverride?.rename || baseName;
 		const areaId = resolveAreaId(e, device);
+		// Device-level curation: hidden cascades to all entities under this device
+		const deviceHidden = !!(e.device_id && cur?.devices[e.device_id]?.hidden);
 		// Compute auto-hide reason BEFORE visibility (visibility consumes it)
-		let autoHideReason: 'duplicate' | 'system' | 'integration' | null = null;
-		if (duplicateIds.has(e.entity_id)) autoHideReason = 'duplicate';
+		let autoHideReason: 'duplicate' | 'system' | 'integration' | 'device-hidden' | null = null;
+		if (deviceHidden) autoHideReason = 'device-hidden';
+		else if (duplicateIds.has(e.entity_id)) autoHideReason = 'duplicate';
 		else if (looksLikeSystemEntity(e)) autoHideReason = 'system';
 		else if (e.hidden_by !== null) autoHideReason = 'integration';
 		const visibility = visibilityFor(e, entityOverride, autoHideReason);
@@ -238,7 +248,8 @@ export function projectDomain(input: {
 			disabled: e.disabled_by !== null,
 			entityCategory: e.entity_category,
 			icon: e.icon ?? e.original_icon,
-			deviceClass: e.device_class
+			deviceClass: e.device_class,
+			platform: e.platform
 		};
 	};
 
@@ -411,7 +422,7 @@ export function resolveAreaId(entity: RawEntity, device: RawDevice | null): stri
 function visibilityFor(
 	entity: RawEntity,
 	override: { hidden?: boolean; unhide?: boolean } | undefined,
-	autoHideReason: 'duplicate' | 'system' | 'integration' | null
+	autoHideReason: 'duplicate' | 'system' | 'integration' | 'device-hidden' | null
 ): 'show' | 'hidden' | 'skipped' {
 	if (entity.disabled_by !== null) return 'skipped';
 	if (entity.entity_category === 'config') return 'skipped';
@@ -457,7 +468,7 @@ type ComposedRec = {
 	name: string;
 	areaId: string | null;
 	visibility: 'show' | 'hidden' | 'skipped';
-	autoHideReason: 'duplicate' | 'system' | 'integration' | null;
+	autoHideReason: 'duplicate' | 'system' | 'integration' | 'device-hidden' | null;
 };
 
 function buildArea(

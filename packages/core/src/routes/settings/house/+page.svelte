@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * /settings/house — areas + entities curation, restructured for M4.x.
+	 * /settings/house â€” areas + entities curation, restructured for M4.x.
 	 *
 	 * Headline changes from the M4 v0:
 	 *  1. Group entities by device within each area (so the FRONT DOOR
@@ -8,7 +8,7 @@
 	 *  2. Show domain badge (LOCK / CONTACT / BUTTON / SENSOR) + current
 	 *     state inline so the user can see "is this the live one?"
 	 *  3. Auto-hidden entities (duplicates, system noise) collapsed
-	 *     under "N hidden — show" toggle per area, with the hide reason
+	 *     under "N hidden â€” show" toggle per area, with the hide reason
 	 *     surfaced as a chip
 	 *  4. Per-entity unhide button (uses curation `unhide` flag)
 	 */
@@ -19,6 +19,8 @@
 		curationStore,
 		hideArea,
 		renameArea,
+		hideDevice,
+		renameDevice,
 		hideEntity,
 		renameEntity,
 		unhideEntity
@@ -46,11 +48,13 @@
 	let showHiddenInAreaId = $state<string | null>(null);
 	let renameBuffer = $state<Record<string, string>>({});
 	let entityRenameBuffer = $state<Record<string, string>>({});
+	/** Device-rename buffer keyed by device_id. Open while user types. */
+	let deviceRenameBuffer = $state<Record<string, string>>({});
 	/** Entity IDs whose Move-to-area picker is currently visible. */
 	let movePickerOpen = $state<Set<string>>(new Set());
 	/**
 	 * Device group keys (deviceId) that are currently expanded.
-	 * Multi-entity device groups default to collapsed — the header
+	 * Multi-entity device groups default to collapsed â€” the header
 	 * shows the count + manufacturer + model so the user can scan
 	 * without having every device's 24 sub-entities revealed.
 	 */
@@ -144,6 +148,48 @@
 		showToast(ok ? `${entity.name} back to default` : 'Save failed', ok ? 'success' : 'error');
 	}
 
+	/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ device-level handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+	function startRenameDevice(deviceId: string, currentName: string | null) {
+		deviceRenameBuffer[deviceId] =
+			curationStore.current.devices[deviceId]?.rename ?? currentName ?? '';
+	}
+
+	async function commitRenameDevice(deviceId: string) {
+		const value = (deviceRenameBuffer[deviceId] ?? '').trim();
+		const ok = await renameDevice(deviceId, value || null);
+		showToast(
+			ok ? (value ? `Device renamed to "${value}"` : 'Device rename cleared') : 'Save failed',
+			ok ? 'success' : 'error'
+		);
+		delete deviceRenameBuffer[deviceId];
+	}
+
+	function cancelRenameDevice(deviceId: string) {
+		delete deviceRenameBuffer[deviceId];
+	}
+
+	async function toggleDeviceHidden(deviceId: string, currentlyHidden: boolean, displayName: string) {
+		const next = !currentlyHidden;
+		const ok = await hideDevice(deviceId, next);
+		showToast(
+			ok ? (next ? `${displayName} (device) hidden` : `${displayName} (device) visible`) : 'Save failed',
+			ok ? 'success' : 'error'
+		);
+	}
+
+	function isDeviceHidden(deviceId: string | null): boolean {
+		return !!(deviceId && curationStore.current.devices[deviceId]?.hidden);
+	}
+
+	function deviceDisplayName(deviceId: string | null, hadName: string | null | undefined): string {
+		if (!deviceId) return hadName ?? 'Unnamed device';
+		const override = curationStore.current.devices[deviceId]?.rename;
+		return override || hadName || 'Unnamed device';
+	}
+
+	/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ move-picker handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 	function toggleMovePicker(entityId: string) {
 		const next = new Set(movePickerOpen);
 		if (next.has(entityId)) next.delete(entityId);
@@ -163,7 +209,7 @@
 				: (movableAreas.find((a) => a.id === targetAreaId)?.name ?? targetAreaId);
 		const result = await updateEntityArea(entity.id, targetAreaId);
 		if (result.success) {
-			showToast(`Moved ${entity.name} → ${targetName}`, 'success');
+			showToast(`Moved ${entity.name} â†’ ${targetName}`, 'success');
 			// Close the picker
 			const next = new Set(movePickerOpen);
 			next.delete(entity.id);
@@ -173,7 +219,7 @@
 		}
 	}
 
-	/* ─────────────── helpers ─────────────── */
+	/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 	function rawNameFor(areaId: string): string | null {
 		return discoveryStore.areas.find((a) => a.area_id === areaId)?.name ?? null;
@@ -185,7 +231,7 @@
 		const parts: string[] = [];
 		if (visible > 0) parts.push(`${visible} visible`);
 		if (hidden > 0) parts.push(`${hidden} hidden`);
-		return parts.length === 0 ? 'no entities' : parts.join(' · ');
+		return parts.length === 0 ? 'no entities' : parts.join(' Â· ');
 	}
 
 	function isHidden(area: DomainArea): boolean {
@@ -250,9 +296,36 @@
 		});
 	}
 
+	/**
+	 * Split entities for the Unsorted area into two cohorts:
+	 *  - withDevice: real physical/integration-backed things that HA
+	 *    knows about but aren't area-assigned. The user CAN place these
+	 *    in rooms via the picker — that's the action that matters.
+	 *  - withoutDevice: helpers (input_*), automations, scripts, scenes,
+	 *    template sensors, groups, statistics. These are LEGITIMATELY
+	 *    place-less. broadsheet wasn't going to surface them on editorial
+	 *    pages anyway. Surfacing them in their own collapsed sub-group
+	 *    avoids the user thinking they need to "fix" 300+ helper entities.
+	 */
+	function splitUnsorted(entities: DomainEntity[]): {
+		withDevice: DomainEntity[];
+		withoutDevice: DomainEntity[];
+	} {
+		const withDevice: DomainEntity[] = [];
+		const withoutDevice: DomainEntity[] = [];
+		for (const e of entities) {
+			if (e.deviceId) withDevice.push(e);
+			else withoutDevice.push(e);
+		}
+		return { withDevice, withoutDevice };
+	}
+
+	/** Sub-group expanded state for Unsorted's "Helpers + system" cohort. */
+	let unsortedHelpersExpanded = $state<boolean>(false);
+
 	function domainBadge(entity: DomainEntity): string {
 		const dom = entity.domain;
-		// Friendly labels per domain — mirror /lights, /heat, /door classifications
+		// Friendly labels per domain â€” mirror /lights, /heat, /door classifications
 		switch (dom) {
 			case 'light':
 				return 'LIGHT';
@@ -295,12 +368,12 @@
 		const s = entity.state?.state;
 		if (s === undefined || s === null || s === 'unavailable' || s === 'unknown') {
 			// Surface specifically that this is the dead one
-			return s === 'unavailable' ? 'unavailable' : '—';
+			return s === 'unavailable' ? 'unavailable' : 'â€”';
 		}
 		const unit = entity.state?.attributes?.unit_of_measurement as string | undefined;
 		const formatted = unit ? `${s} ${unit}` : s;
 		// Limit length so it doesn't blow out the row
-		return formatted.length > 32 ? formatted.slice(0, 30) + '…' : formatted;
+		return formatted.length > 32 ? formatted.slice(0, 30) + 'â€¦' : formatted;
 	}
 
 	function lastChangedLine(entity: DomainEntity): string | null {
@@ -321,7 +394,7 @@
 				return {
 					label: 'duplicate',
 					tooltip:
-						'Another entity with the same device + domain is visible. This is likely an orphan from a re-pair — fix in HA Settings → Devices.'
+						'Another entity with the same device + domain is visible. This is likely an orphan from a re-pair â€” fix in HA Settings â†’ Devices.'
 				};
 			case 'system':
 				return {
@@ -334,6 +407,12 @@
 					label: 'integration',
 					tooltip: 'The integration that created this entity asked HA to hide it.'
 				};
+			case 'device-hidden':
+				return {
+					label: 'via device hide',
+					tooltip:
+						'You hid the parent device. All its entities are auto-hidden. Show the device to bring this back.'
+				};
 			default:
 				return null;
 		}
@@ -341,22 +420,22 @@
 </script>
 
 <svelte:head>
-	<title>House · Settings · broadsheet</title>
+	<title>House Â· Settings Â· broadsheet</title>
 </svelte:head>
 
 <PageShell width="wide">
 	<Hero size="md">
 		{#snippet eyebrow()}
-			<Eyebrow section="Settings · House" />
+			<Eyebrow section="Settings Â· House" />
 		{/snippet}
 		{#snippet headline()}
 			Your areas + entities.
 		{/snippet}
 		{#snippet dek()}
 			Tap a row to expand. Renames + hides save immediately. Entities are
-			grouped by device — the row that says "Front Door" is the Yale lock with
+			grouped by device â€” the row that says "Front Door" is the Yale lock with
 			its sub-entities folded inside. Auto-hidden entities (duplicates, system
-			noise) are tucked under "N hidden — show".
+			noise) are tucked under "N hidden â€” show".
 		{/snippet}
 	</Hero>
 
@@ -402,14 +481,18 @@
 					</div>
 					<div class="entity-line-2">
 						<code class="entity-id">{entity.id}</code>
+						{#if entity.platform}
+							<span class="state-sep" aria-hidden="true">Â·</span>
+							<span class="entity-platform" title="Integration source in HA">{entity.platform}</span>
+						{/if}
 						{#if stateLine(entity)}
-							<span class="state-sep" aria-hidden="true">·</span>
+							<span class="state-sep" aria-hidden="true">Â·</span>
 							<span class="entity-state" data-state={entity.state?.state ?? 'unknown'}>
 								{stateLine(entity)}
 							</span>
 						{/if}
 						{#if lastChangedLine(entity)}
-							<span class="state-sep" aria-hidden="true">·</span>
+							<span class="state-sep" aria-hidden="true">Â·</span>
 							<span class="entity-age">{lastChangedLine(entity)}</span>
 						{/if}
 					</div>
@@ -425,7 +508,7 @@
 					{:else}
 						{#if !isUnsorted}
 							<button class="mini" type="button" onclick={() => toggleMovePicker(entity.id)}>
-								{moveOpen ? 'Close move' : 'Move…'}
+								{moveOpen ? 'Close move' : 'Moveâ€¦'}
 							</button>
 						{/if}
 						<button class="mini" type="button" onclick={() => startRenameEntity(entity)}>
@@ -448,7 +531,7 @@
 				<!--
 					Move-to-area picker. Always shown for entities currently in
 					Unsorted (so the "place" job is one click away). For entities
-					already in a room, only shown after clicking Move… (so it
+					already in a room, only shown after clicking Moveâ€¦ (so it
 					doesn't clutter the list).
 
 					Writes to HA's entity_registry directly (lib/ha/registry.ts).
@@ -522,7 +605,7 @@
 							onclick={() => toggleExpand(area.id)}
 							aria-expanded={expanded}
 						>
-							<span class="chev">{expanded ? '−' : '+'}</span>
+							<span class="chev">{expanded ? 'âˆ’' : '+'}</span>
 							<div class="title-block">
 								<span class="area-name">{area.name}</span>
 								{#if raw && raw !== area.name && !isUnsorted}
@@ -560,38 +643,178 @@
 							<p class="empty">No visible entities in this area.</p>
 						{/if}
 
+						{#if isUnsorted}
+							{@const split = splitUnsorted(visibleEntitiesIn(area))}
+							{@const withDeviceGroups = groupByDevice(split.withDevice)}
+							{@const withoutDeviceGroups = groupByDevice(split.withoutDevice)}
+
+							<div class="unsorted-cohort">
+								<div class="cohort-head">
+									<h4 class="cohort-title">Devices needing placement</h4>
+									<p class="cohort-tag">
+										{split.withDevice.length} entities — these are physical things HA knows
+										about but you haven't told HA which room. Use the "Place in" picker on
+										each row to assign one (writes to HA's registry, not just to broadsheet).
+									</p>
+								</div>
+								{#if withDeviceGroups.length === 0}
+									<p class="empty">Nothing here. Tidy install.</p>
+								{:else}
+									{#each withDeviceGroups as group (group.key)}
+										{#if group.device && group.entities.length > 1}
+											{@const dev = group.device}
+											{@const deviceExpanded = expandedDevices.has(group.key)}
+											{@const dRenaming = deviceRenameBuffer[dev.id] !== undefined}
+											{@const dDisplayName = deviceDisplayName(dev.id, dev.name)}
+											<div class="device-group" class:device-expanded={deviceExpanded}>
+												<div class="device-head-wrap">
+													{#if dRenaming}
+														<div class="device-rename">
+															<span class="device-icon" aria-hidden="true">▣</span>
+															<input
+																type="text"
+																class="device-rename-input"
+																bind:value={deviceRenameBuffer[dev.id]}
+																placeholder={dev.name ?? 'Unnamed device'}
+																onkeydown={(e) => {
+																	if (e.key === 'Enter') commitRenameDevice(dev.id);
+																	if (e.key === 'Escape') cancelRenameDevice(dev.id);
+																}}
+															/>
+														</div>
+													{:else}
+														<button class="device-head" type="button" onclick={() => toggleDeviceExpanded(group.key)} aria-expanded={deviceExpanded}>
+															<span class="device-chev" aria-hidden="true">{deviceExpanded ? '−' : '+'}</span>
+															<span class="device-icon" aria-hidden="true">▣</span>
+															<div class="device-meta">
+																<span class="device-name">{dDisplayName}</span>
+																{#if dev.manufacturer || dev.model}
+																	<span class="device-detail">{[dev.manufacturer, dev.model].filter(Boolean).join(' · ')}</span>
+																{/if}
+															</div>
+															<span class="device-count">{group.entities.length} entities</span>
+														</button>
+													{/if}
+													<div class="device-actions" role="group">
+														{#if dRenaming}
+															<button class="mini confirm" type="button" onclick={() => commitRenameDevice(dev.id)}>Save</button>
+															<button class="mini" type="button" onclick={() => cancelRenameDevice(dev.id)}>Cancel</button>
+														{:else}
+															<button class="mini" type="button" onclick={() => startRenameDevice(dev.id, dev.name)}>Rename device</button>
+															<button class="mini" type="button" onclick={() => toggleDeviceHidden(dev.id, false, dDisplayName)}>Hide device</button>
+														{/if}
+													</div>
+												</div>
+												{#if deviceExpanded && !dRenaming}
+													<div class="device-entities">
+														{#each group.entities as entity (entity.id)}
+															{@render entityRow(entity)}
+														{/each}
+													</div>
+												{/if}
+											</div>
+										{:else}
+											{#each group.entities as entity (entity.id)}
+												{@render entityRow(entity)}
+											{/each}
+										{/if}
+									{/each}
+								{/if}
+							</div>
+
+							{#if split.withoutDevice.length > 0}
+								<button class="unsorted-cohort-toggle" type="button" onclick={() => (unsortedHelpersExpanded = !unsortedHelpersExpanded)}>
+									{unsortedHelpersExpanded ? '−' : '+'}
+									{split.withoutDevice.length} helpers, automations & system
+									<span class="hidden-detail">(no physical place — broadsheet doesn't render these on pages)</span>
+								</button>
+								{#if unsortedHelpersExpanded}
+									<div class="helpers-block">
+										{#each withoutDeviceGroups as group (group.key)}
+											{#each group.entities as entity (entity.id)}
+												{@render entityRow(entity)}
+											{/each}
+										{/each}
+									</div>
+								{/if}
+							{/if}
+						{:else}
 						{#each visibleGroups as group (group.key)}
 							{#if group.device && group.entities.length > 1}
+								{@const dev = group.device}
 								{@const deviceExpanded = expandedDevices.has(group.key)}
+								{@const dHidden = false /* visible block: by definition not hidden */}
+								{@const dRenaming = deviceRenameBuffer[dev.id] !== undefined}
+								{@const dDisplayName = deviceDisplayName(dev.id, dev.name)}
+								{@const dHasOverride = !!curationStore.current.devices[dev.id]?.rename}
 								<!--
-									Multi-entity device — collapsed by default. Header shows
+									Multi-entity device â€” collapsed by default. Header shows
 									count + manufacturer + model so the user can scan; click
 									reveals sub-entities. This is critical for devices like
-									the XIAO Test ESP32 that produce 24 entities — without
+									the XIAO Test ESP32 that produce 24 entities â€” without
 									collapse, expanding an area becomes a wall of rows.
+
+									Device-level Rename + Hide actions sit on the right of
+									the header. Hide cascades to all sub-entities (they get
+									autoHideReason='device-hidden' and disappear from this
+									area's visible buckets).
 								-->
-								<div class="device-group" class:device-expanded={deviceExpanded}>
-									<button
-										class="device-head"
-										type="button"
-										onclick={() => toggleDeviceExpanded(group.key)}
-										aria-expanded={deviceExpanded}
-									>
-										<span class="device-chev" aria-hidden="true">
-											{deviceExpanded ? '−' : '+'}
-										</span>
-										<span class="device-icon" aria-hidden="true">▣</span>
-										<div class="device-meta">
-											<span class="device-name">{group.device.name ?? 'Unnamed device'}</span>
-											{#if group.device.manufacturer || group.device.model}
-												<span class="device-detail">
-													{[group.device.manufacturer, group.device.model].filter(Boolean).join(' · ')}
+								<div class="device-group" class:device-expanded={deviceExpanded} class:device-hidden-card={dHidden}>
+									<div class="device-head-wrap">
+										{#if dRenaming}
+											<div class="device-rename">
+												<span class="device-icon" aria-hidden="true">â–£</span>
+												<input
+													type="text"
+													class="device-rename-input"
+													bind:value={deviceRenameBuffer[dev.id]}
+													placeholder={dev.name ?? 'Unnamed device'}
+													onkeydown={(e) => {
+														if (e.key === 'Enter') commitRenameDevice(dev.id);
+														if (e.key === 'Escape') cancelRenameDevice(dev.id);
+													}}
+												/>
+											</div>
+										{:else}
+											<button
+												class="device-head"
+												type="button"
+												onclick={() => toggleDeviceExpanded(group.key)}
+												aria-expanded={deviceExpanded}
+											>
+												<span class="device-chev" aria-hidden="true">
+													{deviceExpanded ? 'âˆ’' : '+'}
 												</span>
+												<span class="device-icon" aria-hidden="true">â–£</span>
+												<div class="device-meta">
+													<span class="device-name">{dDisplayName}</span>
+													{#if dHasOverride && dev.name}
+														<span class="device-was">was: {dev.name}</span>
+													{/if}
+													{#if dev.manufacturer || dev.model}
+														<span class="device-detail">
+															{[dev.manufacturer, dev.model].filter(Boolean).join(' Â· ')}
+														</span>
+													{/if}
+												</div>
+												<span class="device-count">{group.entities.length} entities</span>
+											</button>
+										{/if}
+										<div class="device-actions" role="group">
+											{#if dRenaming}
+												<button class="mini confirm" type="button" onclick={() => commitRenameDevice(dev.id)}>Save</button>
+												<button class="mini" type="button" onclick={() => cancelRenameDevice(dev.id)}>Cancel</button>
+											{:else}
+												<button class="mini" type="button" onclick={() => startRenameDevice(dev.id, dev.name)}>
+													Rename device
+												</button>
+												<button class="mini" type="button" onclick={() => toggleDeviceHidden(dev.id, dHidden, dDisplayName)}>
+													{dHidden ? 'Show device' : 'Hide device'}
+												</button>
 											{/if}
 										</div>
-										<span class="device-count">{group.entities.length} entities</span>
-									</button>
-									{#if deviceExpanded}
+									</div>
+									{#if deviceExpanded && !dRenaming}
 										<div class="device-entities">
 											{#each group.entities as entity (entity.id)}
 												{@render entityRow(entity)}
@@ -600,12 +823,13 @@
 									{/if}
 								</div>
 							{:else}
-								<!-- Single-entity device or no-device — render as standalone row -->
+								<!-- Single-entity device or no-device â€” render as standalone row -->
 								{#each group.entities as entity (entity.id)}
 									{@render entityRow(entity)}
 								{/each}
 							{/if}
 						{/each}
+						{/if}
 
 						{#if hiddenGroups.length > 0}
 							<button
@@ -613,7 +837,7 @@
 								type="button"
 								onclick={() => toggleShowHidden(area.id)}
 							>
-								{showingHidden ? '−' : '+'}
+								{showingHidden ? 'âˆ’' : '+'}
 								{area.hiddenEntities.length} hidden
 								<span class="hidden-detail">
 									({[
@@ -622,10 +846,12 @@
 										area.hiddenEntities.filter((e) => e.autoHideReason === 'system').length &&
 											`${area.hiddenEntities.filter((e) => e.autoHideReason === 'system').length} system`,
 										area.hiddenEntities.filter((e) => e.autoHideReason === 'integration').length &&
-											`${area.hiddenEntities.filter((e) => e.autoHideReason === 'integration').length} integration`
+											`${area.hiddenEntities.filter((e) => e.autoHideReason === 'integration').length} integration`,
+										area.hiddenEntities.filter((e) => e.autoHideReason === 'device-hidden').length &&
+											`${area.hiddenEntities.filter((e) => e.autoHideReason === 'device-hidden').length} via device-hide`
 									]
 										.filter(Boolean)
-										.join(' · ')})
+										.join(' Â· ')})
 								</span>
 							</button>
 
@@ -634,29 +860,66 @@
 									{#each hiddenGroups as group (group.key)}
 										{@const isDeviceGroup = group.device && group.entities.length > 1}
 										{#if isDeviceGroup}
+											{@const dev = group.device!}
 											{@const deviceExpanded = expandedDevices.has(group.key)}
-											<div class="device-group hidden-device" class:device-expanded={deviceExpanded}>
-												<button
-													class="device-head"
-													type="button"
-													onclick={() => toggleDeviceExpanded(group.key)}
-													aria-expanded={deviceExpanded}
-												>
-													<span class="device-chev" aria-hidden="true">
-														{deviceExpanded ? '−' : '+'}
-													</span>
-													<span class="device-icon" aria-hidden="true">▣</span>
-													<div class="device-meta">
-														<span class="device-name">{group.device?.name ?? 'Unnamed device'}</span>
-														{#if group.device?.manufacturer || group.device?.model}
-															<span class="device-detail">
-																{[group.device.manufacturer, group.device.model].filter(Boolean).join(' · ')}
+											{@const dHidden = isDeviceHidden(dev.id)}
+											{@const dRenaming = deviceRenameBuffer[dev.id] !== undefined}
+											{@const dDisplayName = deviceDisplayName(dev.id, dev.name)}
+											<div class="device-group hidden-device" class:device-expanded={deviceExpanded} class:device-hidden-card={dHidden}>
+												<div class="device-head-wrap">
+													{#if dRenaming}
+														<div class="device-rename">
+															<span class="device-icon" aria-hidden="true">â–£</span>
+															<input
+																type="text"
+																class="device-rename-input"
+																bind:value={deviceRenameBuffer[dev.id]}
+																placeholder={dev.name ?? 'Unnamed device'}
+																onkeydown={(e) => {
+																	if (e.key === 'Enter') commitRenameDevice(dev.id);
+																	if (e.key === 'Escape') cancelRenameDevice(dev.id);
+																}}
+															/>
+														</div>
+													{:else}
+														<button
+															class="device-head"
+															type="button"
+															onclick={() => toggleDeviceExpanded(group.key)}
+															aria-expanded={deviceExpanded}
+														>
+															<span class="device-chev" aria-hidden="true">
+																{deviceExpanded ? 'âˆ’' : '+'}
 															</span>
+															<span class="device-icon" aria-hidden="true">â–£</span>
+															<div class="device-meta">
+																<span class="device-name">{dDisplayName}</span>
+																{#if dev.manufacturer || dev.model}
+																	<span class="device-detail">
+																		{[dev.manufacturer, dev.model].filter(Boolean).join(' Â· ')}
+																	</span>
+																{/if}
+															</div>
+															<span class="device-count">
+																{group.entities.length} {dHidden ? 'hidden (whole device)' : 'hidden'}
+															</span>
+														</button>
+													{/if}
+													<div class="device-actions" role="group">
+														{#if dRenaming}
+															<button class="mini confirm" type="button" onclick={() => commitRenameDevice(dev.id)}>Save</button>
+															<button class="mini" type="button" onclick={() => cancelRenameDevice(dev.id)}>Cancel</button>
+														{:else}
+															<button class="mini" type="button" onclick={() => startRenameDevice(dev.id, dev.name)}>
+																Rename device
+															</button>
+															<button class="mini" type="button" onclick={() => toggleDeviceHidden(dev.id, dHidden, dDisplayName)}>
+																{dHidden ? 'Show device' : 'Hide device'}
+															</button>
 														{/if}
 													</div>
-													<span class="device-count">{group.entities.length} hidden</span>
-												</button>
-												{#if deviceExpanded}
+												</div>
+												{#if deviceExpanded && !dRenaming}
 													<div class="device-entities">
 														{#each group.entities as entity (entity.id)}
 															{@render entityRow(entity)}
@@ -864,6 +1127,69 @@
 		color: var(--accent);
 	}
 
+	.device-head-wrap {
+		display: flex;
+		align-items: stretch;
+	}
+
+	.device-head-wrap .device-head {
+		flex: 1;
+		border: none;
+	}
+
+	.device-head-wrap .device-rename {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		background: rgba(255, 255, 255, 0.015);
+	}
+
+	.device-rename-input {
+		flex: 1;
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.05rem;
+		padding: var(--space-1) var(--space-2);
+		background: var(--bg-raised);
+		color: var(--fg);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-input);
+	}
+
+	.device-actions {
+		display: flex;
+		gap: var(--space-1);
+		align-items: center;
+		padding: 0 var(--space-3);
+		background: rgba(255, 255, 255, 0.015);
+		border-bottom: 1px solid transparent;
+		flex: 0 0 auto;
+	}
+
+	.device-group.device-expanded .device-actions {
+		border-bottom-color: var(--rule);
+	}
+
+	.device-was {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-dim);
+	}
+
+	.device-group.device-hidden-card {
+		border-color: var(--state-alert);
+		opacity: 0.85;
+	}
+
+	.device-group.device-hidden-card .device-name {
+		color: var(--fg-dim);
+		text-decoration: line-through;
+	}
+
 	.device-icon {
 		color: var(--fg-muted);
 		font-size: 1rem;
@@ -1038,6 +1364,13 @@
 		color: var(--fg-dim);
 	}
 
+	.entity-platform {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--fg-muted);
+		font-style: italic;
+	}
+
 	.entity-state {
 		font-family: var(--font-mono);
 		font-size: 0.75rem;
@@ -1163,5 +1496,63 @@
 		flex-direction: column;
 		gap: var(--space-3);
 		opacity: 0.85;
+	}
+
+	.unsorted-cohort {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		margin-bottom: var(--space-4);
+	}
+
+	.cohort-head {
+		margin-bottom: var(--space-2);
+	}
+
+	.cohort-title {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.2rem;
+		color: var(--accent);
+		margin: 0 0 var(--space-1);
+		font-weight: 400;
+	}
+
+	.cohort-tag {
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+		line-height: var(--leading-snug);
+		margin: 0;
+		max-width: 64ch;
+	}
+
+	.unsorted-cohort-toggle {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		padding: var(--space-3) var(--space-3);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		text-align: left;
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+		transition: color var(--ease-quick), border-color var(--ease-quick);
+		margin-top: var(--space-3);
+	}
+
+	.unsorted-cohort-toggle:hover {
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.helpers-block {
+		display: flex;
+		flex-direction: column;
+		opacity: 0.85;
+		padding: var(--space-2) 0;
 	}
 </style>

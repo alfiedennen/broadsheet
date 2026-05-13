@@ -137,6 +137,8 @@ function mergeWithDefault(input: Record<string, unknown>): Curation {
 		people: Array.isArray(input.people) ? input.people : def.people,
 		floors: typeof input.floors === 'object' && input.floors ? (input.floors as never) : def.floors,
 		areas: typeof input.areas === 'object' && input.areas ? (input.areas as never) : def.areas,
+		devices:
+			typeof input.devices === 'object' && input.devices ? (input.devices as never) : def.devices,
 		entities:
 			typeof input.entities === 'object' && input.entities
 				? (input.entities as never)

@@ -18,6 +18,7 @@ import {
 	defaultCuration,
 	type Curation,
 	type AreaOverride,
+	type DeviceOverride,
 	type EntityOverride,
 	type PersonOverride
 } from './types';
@@ -106,6 +107,27 @@ export async function renameArea(areaId: string, name: string | null): Promise<b
 
 export async function hideArea(areaId: string, hidden: boolean): Promise<boolean> {
 	return setAreaOverride(areaId, { hidden });
+}
+
+/* ─────────────── device mutators ─────────────── */
+
+export async function setDeviceOverride(
+	deviceId: string,
+	patch: Partial<DeviceOverride>
+): Promise<boolean> {
+	return update((c) => {
+		const existing = c.devices[deviceId] ?? {};
+		c.devices[deviceId] = { ...existing, ...patch };
+		return c;
+	});
+}
+
+export async function renameDevice(deviceId: string, name: string | null): Promise<boolean> {
+	return setDeviceOverride(deviceId, { rename: name });
+}
+
+export async function hideDevice(deviceId: string, hidden: boolean): Promise<boolean> {
+	return setDeviceOverride(deviceId, { hidden });
 }
 
 /* ─────────────── entity mutators ─────────────── */
