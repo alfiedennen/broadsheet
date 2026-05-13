@@ -417,3 +417,54 @@ Verification gated on Alfie pasting LLAT into
 
 If any of these fail, the bug is in M1 code — file as a finding
 in BUILD-LOG before starting M2.
+
+### M1 verification finding — duplicate-key crash on initial render
+
+**Reported by Alfie during first browser test, fixed in same session.**
+
+Symptom: page stuck on "Connecting to the house…" boot screen.
+DevTools console showed:
+```
+Uncaught Svelte error: each_key_duplicate
+Keyed each block has duplicate key `2026-05-13T09:11:26.476Z`
+at indexes 1 and 2
+  in +page.svelte
+  in +layout.svelte
+```
+
+Root cause: `+page.svelte` keyed the audit-log `{#each}` block on
+`entry.timestamp`. Two audit entries fired within the same
+millisecond (the auth-event for boot + the connection-status for
+the connecting transition both run inside the same onMount tick).
+ISO timestamps quantise to the millisecond → identical strings →
+Svelte 5's keyed-each correctly throws.
+
+Knock-on effect (the visual symptom): Svelte 5's render guard
+halted +page.svelte's render, but +layout.svelte's `{#if booted}`
+block had already flipped to render children. The boot screen text
+stayed visible because nothing replaced it. So a Svelte error in
+the child component looked like a stuck boot.
+
+Fix:
+1. Add monotonic per-session `id: number` to AuditEntry
+2. `audit()` assigns id via `++_seq` counter
+3. `restoreAuditFromStorage()` re-assigns IDs to loaded entries
+   (so they don't collide with new ones)
+4. Key the each block on `entry.id` not `entry.timestamp`
+
+Lesson for future Svelte 5 reactive lists: **never key on
+`Date.now()` or `new Date().toISOString()` outputs.** They quantise.
+Use a counter, a UUID, or a deterministic hash. Documented in
+DISCOVERY-CONTRACT.md when M2 lands the entity-list rendering
+surfaces (entity_id is a stable key there — won't repeat this
+particular trap).
+
+Confirmed working: hard-refresh after the patch, page renders,
+connection shows `connected` with HA version, audit log displays
+boot-sequence entries cleanly.
+
+### M1 considered closed
+
+Connection + safety surfaces verified working. Safety-rail
+behavioural tests (block / arm / call / hard-ban) gated on
+DevTools console verification — to run before M2 starts.

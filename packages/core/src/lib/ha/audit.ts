@@ -24,10 +24,24 @@ const STORAGE_TAIL = 100;
 const ring: AuditEntry[] = [];
 let writeListeners: Array<(entry: AuditEntry) => void> = [];
 
+/**
+ * Per-session monotonic counter for audit entry IDs.
+ *
+ * Why: timestamps from `new Date().toISOString()` collide when multiple
+ * events fire within the same millisecond — which happens on every
+ * boot (auth-event + connection-status fire back-to-back). Svelte 5
+ * keyed-each rightly throws `each_key_duplicate` if we use timestamp.
+ *
+ * IDs are session-only; restored entries from localStorage get fresh
+ * IDs assigned during restoreAuditFromStorage().
+ */
+let _seq = 0;
+
 /** Record an audit event. */
-export function audit(entry: Omit<AuditEntry, 'timestamp'>): void {
+export function audit(entry: Omit<AuditEntry, 'timestamp' | 'id'>): void {
 	const full: AuditEntry = {
 		...entry,
+		id: ++_seq,
 		timestamp: new Date().toISOString()
 	};
 
@@ -99,7 +113,9 @@ export function restoreAuditFromStorage(): void {
 		if (!Array.isArray(parsed)) return;
 		for (const entry of parsed) {
 			if (entry && typeof entry === 'object' && entry.timestamp && entry.kind) {
-				ring.push(entry as AuditEntry);
+				// Re-assign id from this session's _seq — restored entries
+				// don't keep their old IDs (they could collide with new ones)
+				ring.push({ ...entry, id: ++_seq } as AuditEntry);
 			}
 		}
 	} catch {

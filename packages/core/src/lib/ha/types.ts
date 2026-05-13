@@ -128,8 +128,14 @@ export interface ServiceCallResult {
 /**
  * Audit log entry — every service call attempt produces one of these,
  * regardless of outcome. JSONL format on disk, ring buffer in memory.
+ *
+ * `id` is a monotonic per-session counter assigned by `audit()`.
+ * Used as the stable key for reactive views — `timestamp` alone
+ * collides when multiple events fire within the same millisecond
+ * (which happens on boot every single time).
  */
 export interface AuditEntry {
+	id: number;
 	timestamp: string; // ISO
 	kind:
 		| 'call-service' // the call was made

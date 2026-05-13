@@ -82,7 +82,7 @@
 			<p class="empty">No events yet.</p>
 		{:else}
 			<ol>
-				{#each recent as entry (entry.timestamp)}
+				{#each recent as entry (entry.id)}
 					<li class="audit-entry" data-kind={entry.kind}>
 						<time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
 						<code>{entry.kind}</code>
