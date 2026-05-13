@@ -9,6 +9,7 @@
 	import { auditStore } from '$lib/stores/audit.svelte';
 	import { getHardBannedDomains } from '$lib/ha/actions';
 	import { getAuditLog } from '$lib/ha/audit';
+	import { discovery, NAV_ORDER, PAGES } from '$lib/discovery';
 
 	// Read auditStore.tick to establish reactive dependency — every audit
 	// write bumps tick, this re-runs, recent re-renders.
@@ -74,6 +75,91 @@
 				<small>(blocked even with writes armed)</small>
 			</dd>
 		</dl>
+	</section>
+
+	<section class="card discovery">
+		<h2>Discovery <small>(layer 1 + 2)</small></h2>
+		{#if !discovery.booted}
+			<p class="empty">Booting…</p>
+		{:else}
+			<dl>
+				<dt>Floors</dt>
+				<dd>{discovery.rawCounts.floors} <small>raw</small> · {discovery.floors.length} <small>projected</small></dd>
+				<dt>Areas</dt>
+				<dd>{discovery.rawCounts.areas} <small>raw</small> · {discovery.areas.length} <small>projected{discovery.unsorted ? ' (incl. Unsorted)' : ''}</small></dd>
+				<dt>Devices</dt>
+				<dd>{discovery.rawCounts.devices}</dd>
+				<dt>Entities</dt>
+				<dd>{discovery.rawCounts.entities} <small>raw</small> · {discovery.rawCounts.states} <small>states</small></dd>
+				<dt>Persons</dt>
+				<dd>{discovery.persons.length}: {discovery.persons.map((p) => p.name).join(', ') || '—'}</dd>
+				<dt>Labels</dt>
+				<dd>{discovery.rawCounts.labels}</dd>
+				{#if discovery.lastRefreshAt}
+					<dt>Last refresh</dt>
+					<dd>{new Date(discovery.lastRefreshAt).toLocaleTimeString()}</dd>
+				{/if}
+				{#if discovery.lastError}
+					<dt>Last error</dt>
+					<dd class="error">{discovery.lastError}</dd>
+				{/if}
+			</dl>
+
+			{#if discovery.floors.length > 0}
+				<h3>Floors</h3>
+				<ul class="floors">
+					{#each discovery.floors as floor (floor.id)}
+						<li>
+							<span class="floor-name">{floor.name}</span>
+							<span class="floor-meta">
+								{floor.areas.length} areas
+								{#if floor.level !== null && floor.level < 99}
+									· level {floor.level}
+								{/if}
+							</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+
+			<h3>Pages <small>(by area count)</small></h3>
+			<ul class="pages">
+				{#each NAV_ORDER as slug (slug)}
+					{@const areas = discovery.areasForPage(slug)}
+					{@const cross = discovery.crossAreaEntitiesForPage(slug)}
+					<li>
+						<span class="page-name">{PAGES[slug].label}</span>
+						<span class="page-meta">
+							{areas.length} areas{cross.length > 0 ? ` · ${cross.length} cross-area entities` : ''}
+						</span>
+					</li>
+				{/each}
+			</ul>
+
+			{#if discovery.areas.length > 0}
+				<h3>Sample area buckets</h3>
+				<ul class="sample-areas">
+					{#each discovery.areas.slice(0, 4) as area (area.id)}
+						<li>
+							<span class="area-name">{area.name}</span>
+							<span class="area-meta">
+								{#if area.lights.length}{area.lights.length} lights · {/if}
+								{#if area.climates.length}{area.climates.length} climate · {/if}
+								{#if area.locks.length}{area.locks.length} locks · {/if}
+								{#if area.contacts.length}{area.contacts.length} contacts · {/if}
+								{#if area.tvs.length}{area.tvs.length} tv · {/if}
+								{#if area.media.length}{area.media.length} media · {/if}
+								{#if area.cameras.length}{area.cameras.length} cameras · {/if}
+								{#if area.sensors.length}{area.sensors.length} sensors · {/if}
+								{#if area.scenes.length}{area.scenes.length} scenes · {/if}
+								{#if area.switches.length}{area.switches.length} switches · {/if}
+								{#if area.otherEntities.length}{area.otherEntities.length} other{/if}
+							</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{/if}
 	</section>
 
 	<section class="card audit">
@@ -291,5 +377,66 @@
 		font-family: 'JetBrains Mono', ui-monospace, monospace;
 		font-size: 0.9em;
 		color: var(--fg);
+	}
+
+	.card h3 {
+		margin: 1.5rem 0 0.5rem;
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.75rem;
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+	}
+
+	.card h3 small {
+		text-transform: none;
+		letter-spacing: 0;
+		font-weight: 400;
+		margin-left: 0.4rem;
+	}
+
+	.floors,
+	.pages,
+	.sample-areas {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.floors li,
+	.pages li,
+	.sample-areas li {
+		display: grid;
+		grid-template-columns: 12rem 1fr;
+		gap: 0.75rem;
+		padding: 0.35rem 0;
+		font-size: 0.85rem;
+		border-bottom: 1px solid var(--rule);
+	}
+
+	.floors li:last-child,
+	.pages li:last-child,
+	.sample-areas li:last-child {
+		border-bottom: none;
+	}
+
+	.floor-name,
+	.page-name,
+	.area-name {
+		color: var(--fg);
+		font-family: 'Instrument Serif', Georgia, serif;
+		font-style: italic;
+		font-size: 1rem;
+	}
+
+	.floor-meta,
+	.page-meta,
+	.area-meta {
+		color: var(--muted);
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.5;
 	}
 </style>

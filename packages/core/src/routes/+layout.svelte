@@ -12,6 +12,7 @@
 	import { detectAuthMode, getAuthCredentials } from '$lib/ha/auth';
 	import { connect, getConnection } from '$lib/ha/client';
 	import { callService } from '$lib/ha/actions';
+	import { discovery, bootDiscovery } from '$lib/discovery';
 	import WriteAllowedBanner from '$lib/components/WriteAllowedBanner.svelte';
 
 	let { children } = $props();
@@ -58,7 +59,20 @@
 			// connect() already audited the failure + set connection.lastError
 			// eslint-disable-next-line no-console
 			console.error('[broadsheet] initial connect failed', err);
+			booted = true;
+			return;
 		}
+
+		// Connect succeeded — run discovery boot. Failures here aren't
+		// fatal (UI can still render with empty domain model); we just
+		// surface them via discovery.lastError.
+		try {
+			await bootDiscovery();
+		} catch (err) {
+			// eslint-disable-next-line no-console
+			console.error('[broadsheet] discovery boot failed', err);
+		}
+
 		booted = true;
 
 		// Dev-only test handle. Exposes the SAME module bindings the
@@ -74,7 +88,8 @@
 				getConnection,
 				getAuditLog,
 				connection,
-				audit
+				audit,
+				discovery
 			};
 			audit({ kind: 'auth-event', note: 'window.__broadsheet_dev__ exposed (dev only)' });
 		}

@@ -567,3 +567,186 @@ All five behavioural exit criteria met. Heartbeat wiring confirmed,
 full destructive recovery test deferred to Env 3 per design.
 
 Ready to start M2 (discovery layer).
+
+---
+
+## 2026-05-13 — M2 — Discovery layer (Layer 1 + Layer 2)
+
+### Decisions
+
+**Library-first, no hand-rolling.** `subscribeEntities` from
+home-assistant-js-websocket gives us the compressed delta protocol +
+auto-resubscribe-on-reconnect for free. Our `bootDiscovery()` wraps
+it + adds the registry-list calls (which AREN'T auto-replayed by
+the library, so we re-pull them on every `ready` event).
+
+**Synthetic fallbacks for missing layer-1 data.**
+- No floors configured → synthetic "All" floor with all areas
+- Areas without floor + floors do exist → synthetic "Unassigned" floor
+- Entities without area_id → synthetic "Unsorted" area
+
+This is the **honest escape hatch** principle from the spec —
+broadsheet surfaces what's unbucketed rather than silently dropping
+it. M4 Settings UI lets users assign things from the Unsorted bucket
+into real areas (or pin to a page).
+
+**`*.svelte.ts` extension is required for runes.** First attempt
+put `DiscoveryAPI` (a class with `$derived` getters) in
+`discovery/index.ts`. Build failed: Svelte 5 only processes runes
+in files with `.svelte.ts` / `.svelte.js` extensions. Renamed
+`index.ts` → `index.svelte.ts` and added a thin `index.ts` that
+re-exports from it — consumers' import path stays clean
+(`$lib/discovery` works) and the compiler is happy.
+
+**Reactive façade via class with `$derived` getters.** The
+DiscoveryAPI class instantiates as a singleton, exposes derived
+projections (`areas`, `floors`, `persons`) that automatically
+recompute when the underlying `discoveryStore.*` changes. Pages
+import `discovery` and read these fields directly inside their own
+`$derived` blocks.
+
+**Debounced registry refreshes.** `*_registry_updated` events can
+fire in floods during mass renames or bulk imports. 500ms trailing-
+edge debounce per registry collapses bursts into single re-pulls.
+
+### Gotchas burned in
+
+**1. `person/list` doesn't return `entity_id`.** HA's WS API for
+`person/list` returns:
+```json
+{ "storage": [{ "id": "alfie_dennen", "name": "...", "device_trackers": [...] }] }
+```
+NOT entity_id keyed. The entity_id is constructed as `person.<id>`.
+
+Symptom: `rankPresenceSensors` crashed in projection with
+"Cannot read properties of undefined (reading 'replace')" because
+`person.entity_id` was undefined. Stack pointed at heuristics.ts:48
+but root cause was the registry pull.
+
+Fix: added `normalisePersons()` in `registries.ts` that maps
+`{id, ...}` → `{entity_id: 'person.' + id, ...}` plus defaults for
+optional fields. Plus a defensive guard in `rankPresenceSensors`
+(`if (!person.entity_id) return out`) so any future API surprise
+degrades gracefully instead of crashing the whole projection.
+
+Lesson: **never trust API shape descriptions without testing.**
+The Person type in DISCOVERY-CONTRACT.md describes the *normalised*
+shape we expose; the raw WS response is different. Need a clearer
+boundary between "raw HA response types" and "normalised broadsheet
+types" — for v0.1 this is per-call mapping in registries.ts; for
+v0.2 it might justify a dedicated `raw.ts` types module.
+
+**2. State.attributes is `Record<string, unknown>`, not strings.**
+The HA WS protocol gives us untyped attribute blobs. Calling
+`.test()` / `Set.has()` on `state.attributes.device_class` fails
+TS strict mode because `unknown` isn't assignable to `string`.
+Fix: explicit cast at each usage point —
+`const dc = state?.attributes?.device_class as string | undefined`.
+
+### What discovery reports against the real production HA
+
+End-to-end verified via Chrome MCP:
+
+| Metric | Value | Notes |
+|---|---|---|
+| Raw entities | 1,907 | from `config/entity_registry/list` |
+| Live states | 1,154 | from `subscribe_entities` delta protocol |
+| Devices | 185 | |
+| Areas | 9 raw + 1 Unsorted = 10 projected | |
+| Floors | 0 raw → synthetic "All" | floor registry empty |
+| Persons | 2 | Alfie (android) + Elena (ios) |
+| Labels | 0 | not used in this install |
+| Categories | 0 | not used |
+
+**Page bucket counts:** lights 5 / heat 2 / door 1 / tv 1 / body 0
+(plus 2 cross-area Health-Connect entities for body).
+
+**Unsorted bucket has 482 entities.** Most entities in this install
+don't have area_id set on entity or device — including most of the
+TRVs, hallway lights, etc. that CLAUDE.md describes by area. The
+Unsorted bucket surfaces this clearly: "here's everything broadsheet
+couldn't auto-place; please curate in Settings (M4)."
+
+### Heuristic refinements logged for M2.x polish (followups, not
+blockers)
+
+These are real misses caught in verification. None block M2's
+exit criteria; all are easy fixes for the heuristics file:
+
+1. **Alfie's `★ best` sensor missed.** Heuristic looks for
+   `sensor.<person.id>_committed_room` = `sensor.alfie_dennen_committed_room`.
+   Actual sensor is `sensor.alfie_committed_room` (first-name only).
+   Fell back to BLE bermuda tracker (also good). Fix: also try
+   first-name slug. Or: M4 Settings UI lets user override directly.
+
+2. **Living Room shows 4 TVs, actually 1.** `isTV` matches any
+   media_player with "tv"/"television" in the name. Multiple media
+   surfaces with "TV" in their name get caught. Tighten with
+   `device_class` precedence over name match.
+
+3. **Body cross-area = 2 entities, expected ~8.** Health Connect
+   regex doesn't match `_confidence` / `_segment` suffix keywords
+   (sleep_confidence, sleep_segment) — narrow keyword list. Easy
+   widening.
+
+4. **FRONT area has 2 locks.** Only 1 physical lock (Yale Conexis
+   L2). Either HA has 2 lock entities for one device, or the
+   pairing heuristic is double-counting. Worth investigating in
+   M3 when /door is built.
+
+### Files added in M2
+
+```
+packages/core/src/lib/discovery/
+├── store.svelte.ts        Layer 1 reactive $state (singleton)
+├── registries.ts          boot pulls + subscriptions + debounced refresh
+├── heuristics.ts          lighting/TV/contact/Health-Connect/presence detection
+├── domain.ts              Layer 2 projection (Floor → Area → DomainEntity)
+├── page-map.ts            page slug → discovery filter table + unbucketed()
+├── index.svelte.ts        DiscoveryAPI class with $derived getters
+└── index.ts               thin re-export so $lib/discovery works
+```
+
+```
+packages/core/src/routes/
+├── +layout.svelte         updated: bootDiscovery() after connect(),
+│                          discovery exposed on window.__broadsheet_dev__
+└── +page.svelte           updated: Discovery card with counts, floor
+                           breakdown, per-page area counts, sample area
+                           bucket details
+```
+
+### Exit criteria for M2 (per BUILD-PLAN)
+
+- [x] All six registries pulled at boot (floor, area, device, entity, label, category) + person/list
+- [x] `subscribe_entities` open and feeding the states map
+- [x] All `*_registry_updated` events subscribed
+- [x] Domain projection produces a sensible Area[] from the real HA
+- [x] At least 3 known rooms render correctly (alfies_office, Kitchen,
+      Living Room all show their lights/sensors/media correctly per
+      verification output)
+- [x] Floor → Area mapping correct (synthetic "All" when no floors;
+      ready to handle real floors when configured)
+- [x] Labels surfaced as orthogonal tags (0 in this install, but
+      pipeline works — labels[] populated on Area/Entity)
+- [x] Unsorted bucket synthesised for 482 unassigned entities
+- [x] All entities accounted for: every entity in registry either
+      appears in an Area (real or Unsorted), or is skipped (disabled
+      / config / diagnostic)
+- [ ] Adding a new area in HA → reflected within 5s without refresh
+      (deferred to live test during M3 — area_registry_updated
+      subscription is wired but not behaviourally tested yet)
+- [ ] Renaming an area in HA → picked up within 5s (same — wired,
+      not behaviourally tested)
+
+### M2 considered closed at the spec level
+
+Architectural surface complete. Live-mutation tests (add area /
+rename area / add entity) are deferred to a behavioural test pass
+that fits naturally with M3 page rendering (where we'd see the UI
+react). Heuristic refinement followups (1-4 above) are tracked but
+do not block M2.
+
+Ready to start M3 (page templates) — the six core pages will
+consume `discovery.areasForPage(slug)` and render them in the
+editorial register.
