@@ -10,6 +10,7 @@
  */
 
 import type { Entity, Device, Person, State } from '$lib/ha/types';
+export type { Device };
 
 /* ─────────────── lighting switches ─────────────── */
 
@@ -283,6 +284,57 @@ const SYSTEM_PATTERNS: RegExp[] = [
 
 export function looksLikeSystemEntity(entity: Entity): boolean {
 	return SYSTEM_PATTERNS.some((p) => p.test(entity.entity_id));
+}
+
+/**
+ * The HACS iBeacon Tracker integration creates an entity for every
+ * BLE advertisement it sees, including environmental noise — strangers'
+ * AirTags, neighbours' BLE devices, cheap fitness trackers in range,
+ * etc. Real user beacons get explicit friendly names ("Alfie Pixel
+ * Watch", "Elena iPhone"); auto-detected noise has names taken raw
+ * from the advertisement payload — uppercase manufacturer codes,
+ * trailing hex serials, sometimes with mis-decoded null bytes
+ * (`DP_2_1_TORNY100680  7D51`).
+ *
+ * Flag these as system noise so they auto-hide. User keeps full
+ * control via curation.entities[id].unhide if a "noise" beacon
+ * turns out to be useful.
+ *
+ * Does NOT flag IRK-resolved Private BLE Device entities or named
+ * Bermuda trackers — those are different platforms and have
+ * human-readable names.
+ */
+export function isBleAdvertisementNoise(entity: Entity, device: Device | null): boolean {
+	if (entity.platform !== 'ibeacon') return false;
+	// The noise lives in the DEVICE name, not the entity name. iBeacon
+	// integration creates one device per detected beacon (with the raw
+	// advertisement payload as the device name) and entities under it
+	// have generic names: "Signal strength", "Power", "Estimated
+	// distance", "Vendor". So we check the device.
+	const deviceName = device?.name_by_user ?? device?.name ?? '';
+	if (!deviceName) return false;
+
+	// Control char / null byte = raw BLE payload mis-decoded as string.
+	if (/[\x00-\x1f]/.test(deviceName)) return true;
+
+	// Trailing " HHHH" — space + 4 uppercase-hex chars at the end.
+	// This is the MAC-suffix / beacon-serial pattern that the iBeacon
+	// integration appends. Catches: "Ooono F358", "QMHConnect-0184 9A59",
+	// "GVH5075 1042", "IMS-0620 D5DE", "M400ZU 9113",
+	// "DP_2_1_TORNY100680 7D51". Strong signal — real user-named
+	// beacons don't have a hex MAC tail.
+	if (/\s[0-9A-F]{4}$/.test(deviceName)) return true;
+
+	// All-uppercase (no lowercase) + has a digit + length >= 5.
+	// Catches names that don't have the trailing-hex pattern but are
+	// still clearly auto-generated codes ("DP_2_1_TORNY100680" without
+	// the trailing hex, "GVH5075_1042" with underscore not space).
+	// Real user beacons contain at least one lowercase letter.
+	const hasLower = /[a-z]/.test(deviceName);
+	const hasDigit = /\d/.test(deviceName);
+	if (!hasLower && hasDigit && deviceName.length >= 5) return true;
+
+	return false;
 }
 
 /* ─────────────── Sensor categorisation ─────────────── */

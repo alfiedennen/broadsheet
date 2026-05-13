@@ -1669,3 +1669,46 @@ better:
 - Rename: at entity-level AND device-level
 
 Next gate: M5 (HA add-on packaging).
+
+### M4.x.fix4 — iBeacon environmental noise (caught by user testing)
+
+**Catalyst**: Alfie spotted `DP_2_1_TORNY100680  7D51` in
+Unsorted and asked if it was an iBeacon. Investigation surfaced a
+~57-entity cohort: HACS iBeacon Tracker creates a device + 4
+entities (Signal strength, Power, Estimated distance, Vendor) for
+every BLE advertisement it sees. Most aren't user beacons — they're
+neighbours' AirTags, fitness trackers, road-safety devices (Ooono),
+lithium-battery monitors (QMHConnect), etc. broadcasting in range.
+
+**Where the noise lives**: in the DEVICE name, not the entity name.
+First heuristic attempt checked `entity.name` / `original_name`,
+which are generic ("Signal strength" etc.) — no match. Second
+attempt checked `device.name` directly — caught 28 of 57.
+Refined further with a trailing-hex pattern.
+
+**Final heuristic** (`isBleAdvertisementNoise(entity, device)`):
+1. `entity.platform === 'ibeacon'`
+2. AND any of:
+   - device.name contains control chars (`\x00-\x1f`) — mis-decoded
+     BLE payload
+   - device.name ends in ` HHHH` (space + 4 hex chars) — MAC-suffix
+     pattern. Catches "Ooono F358", "QMHConnect-0184 9A59", etc.
+   - device.name has no lowercase + has a digit + length ≥ 5 —
+     all-caps manufacturer codes ("DP_2_1_TORNY100680", "GVH5075_1042")
+
+Real user beacons (named Pixel Watch, iPhone, named Bermuda
+trackers, IRK-resolved Private BLE Devices) are on different
+platforms (`bermuda`, `private_ble_device`, `mobile_app`) so they
+don't trip the platform check. Even iBeacon-platform user beacons
+named with human words ("Car Keys Tag") have lowercase letters and
+no MAC-suffix tail — pass through visible.
+
+**Verified**: 14 → 28 → expected ~57 hidden after the trailing-hex
+extension. User can un-hide any false-positive via the per-device
+"Show device" button (M4.x.fix3) or per-entity unhide button.
+
+**Lesson — heuristic data lives where you don't expect**. First
+try checked the entity's friendly_name; the noise was in the parent
+device's name. Always inspect the actual data structure, don't
+assume the obvious field is the source. Burned 30 min on the wrong
+heuristic before the data check revealed it.

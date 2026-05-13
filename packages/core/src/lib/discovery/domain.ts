@@ -31,6 +31,7 @@ import {
 	isDoorOrWindowContact,
 	isHealthConnect,
 	isAmbientRoomSensor,
+	isBleAdvertisementNoise,
 	looksLikeSystemEntity,
 	pickBestPresenceSensor,
 	rankPresenceSensors,
@@ -218,7 +219,8 @@ export function projectDomain(input: {
 		let autoHideReason: 'duplicate' | 'system' | 'integration' | 'device-hidden' | null = null;
 		if (deviceHidden) autoHideReason = 'device-hidden';
 		else if (duplicateIds.has(e.entity_id)) autoHideReason = 'duplicate';
-		else if (looksLikeSystemEntity(e)) autoHideReason = 'system';
+		else if (looksLikeSystemEntity(e) || isBleAdvertisementNoise(e, device))
+			autoHideReason = 'system';
 		else if (e.hidden_by !== null) autoHideReason = 'integration';
 		const visibility = visibilityFor(e, entityOverride, autoHideReason);
 		return { entity: e, device, name, areaId, visibility, autoHideReason };
