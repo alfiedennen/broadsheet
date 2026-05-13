@@ -1210,3 +1210,160 @@ don't burn time on it.
 The user did NOT delete the saved settings during this — localStorage
 is per-browser and unaffected by Vite cache state. Settings tests
 can resume without re-doing renames.
+
+---
+
+## 2026-05-13 — M4.x — /settings/house restructure (device grouping + smart hiding)
+
+### Why
+
+After the Vite cache fix, Alfie tested /settings/house and surfaced
+the real UX problem: a flat list of entities with Rename + Hide
+buttons is unusable when one physical thing produces 6 entities and
+the user has no way to tell which are real, which are duplicates,
+and which are system plumbing.
+
+Specific example from his FRONT door: 6 entities (`lock.front_door`,
+`lock.front_door_2`, `binary_sensor.front_door_door`,
+`binary_sensor.front_door_door_2`, `button.front_door_wake`,
+`sensor.front_door_operator`) all named "FRONT DOOR" — homework, not
+curation.
+
+### JTBD framing
+
+We renamed the screen's job from "rename and hide entities" to:
+**"Make my dashboard show only the things I care about, in the rooms
+they belong to, with a way to know what each thing actually does."**
+
+Three sub-jobs nested:
+1. **Identify** — what is this entity, and is it the live one?
+2. **Place** — this thing is in this room (Unsorted entities)
+3. **Suppress** — I don't need to see this because [reason]
+
+### Decisions
+
+**Smart defaults at the discovery layer**, not just UI hints. The
+heuristic decision lives in `heuristics.ts` (`looksLikeSystemEntity`)
++ `domain.ts` (duplicate detection during projection). When an entity
+is auto-hidden, it carries an `autoHideReason: 'duplicate' | 'system'
+| 'integration' | null` field that flows through to:
+- Pages: just don't render hidden entities (no change needed)
+- Settings UI: surface the reason as a chip, offer a "force visible"
+  override
+
+This means the auto-hide affects the actual editorial pages too —
+not just the Settings preview. `/door` will show 2 lock entities
+becoming 1 visible lock + 1 hidden duplicate, matching the physical
+reality. Same for `binary_sensor.front_door_door_2`.
+
+**Curation `unhide: true` is the universal override.** Wins over HA's
+`hidden_by`, over user's previous `hidden`, over broadsheet's
+auto-hide. One mental model: "I want to see this regardless of any
+hide source."
+
+**Device grouping is a UI-layer concern.** The discovery layer
+exposes `entity.deviceId` + a small `entity.device` summary
+(`{id, name, model, manufacturer}`); the Settings page does the
+grouping by `deviceId` at render time. Pages that don't care about
+device grouping (everyone except Settings) ignore the field.
+
+**Two parallel buckets per area: visible + hidden.**
+`DomainArea.lights/switches/etc` are visible-only (pages render
+these directly). `DomainArea.hiddenEntities` is a flat list of
+HA-hidden + auto-hidden + user-hidden, sorted with duplicates first.
+Pages don't read `hiddenEntities`; only `/settings/house` does.
+
+### Heuristics in detail
+
+**`looksLikeSystemEntity(entity)`** in `heuristics.ts` — pattern
+matchers for HA's per-integration plumbing:
+```ts
+const SYSTEM_PATTERNS = [
+  /^button\..*_(?:wake|identify|restart|update|reboot|reset|refresh|reload)$/i,
+  /^sensor\..*_(?:battery|signal_strength|rssi|link_quality|connectivity|last_seen|last_updated|operator|esp_temperature|node_status|cpu_usage|memory_usage|wifi_strength)$/i,
+  /^update\./i,
+  /^select\..*_(?:log_level|profile|notification_action)$/i,
+  /^number\..*_(?:polling_interval|update_interval|timeout|brightness_calibration|color_temp_calibration)$/i,
+  /^binary_sensor\..*_(?:problem|update_available|connectivity)$/i
+];
+```
+
+Caught against the Yale: `button.front_door_wake` (wake the radio),
+`sensor.front_door_operator` (who last operated). Both correctly
+hidden + tagged as 'system'.
+
+**Duplicate detection** in `projectDomain` — a pre-pass over all
+entities builds a `Map<\`${device_id}:${domain}\`, count>`. The FIRST
+entity in registry order is treated as primary; subsequent ones get
+`autoHideReason='duplicate'`. Caught the Yale's `lock.front_door_2`
++ `binary_sensor.front_door_door_2` immediately.
+
+### Verified live against production HA via Chrome MCP
+
+FRONT door cluster after the changes:
+
+```
+FRONT DOOR · Yale/August · MD-04I · 2 entities
+  [LOCK]    FRONT DOOR    unlocked
+  [CONTACT] FRONT DOOR    off
+
++ 4 hidden (2 duplicate · 2 system)
+   FRONT DOOR · 4 hidden
+    [CONTACT] front_door_door_2   duplicate    off
+    [LOCK]    front_door_2        duplicate    unlocked
+    [BUTTON]  front_door_wake     system       2026-04-19T08:27:31...
+    [SENSOR]  front_door_operator system       alfie dennen
+```
+
+The `sensor.front_door_operator` showing "alfie dennen" as its state
+is itself a teaching moment for the design: that's literally
+metadata about who last operated the lock — exactly the kind of
+thing that doesn't belong on the user-facing /door page but is
+useful debug info if the user explicitly looks for it.
+
+6 confusing rows → 1 device with 2 useful + 4 informatively-hidden.
+
+### Files touched
+
+- `lib/discovery/heuristics.ts` — added `looksLikeSystemEntity` + SYSTEM_PATTERNS
+- `lib/discovery/domain.ts` — added `autoHideReason` + `device` summary to DomainEntity, added `hiddenEntities` to DomainArea, duplicate-detection pre-pass, visibility update
+- `routes/settings/house/+page.svelte` — full rebuild for device grouping, domain badges, state-inline display, hidden-collapsed expander, per-entity unhide
+
+### Lesson burned: Svelte 5 root-level snippets get exported
+
+**Problem**: defining `{#snippet entityRow(entity)}` at the root of
+the component template (direct child of the page's root) caused
+svelte-check to complain `'entityRow' does not exist in type
+'$$ComponentProps'` — Svelte 5 treats root-level snippets as named
+slot props that the parent might pass.
+
+**Fix**: wrap the snippet + its consumers in any HTML element
+(I used a `<div class="house-area-block">`) so the snippet is
+nested inside an element rather than at template root. Then it's
+local-scope.
+
+**Lesson**: when you want a re-usable snippet local to a single
+component, define it inside an HTML element wrapper. Defining it as
+a direct template-root child makes it a public component slot prop.
+
+### Followups carried into M4.x.NEXT (still pending)
+
+1. **Move-to-area for Unsorted** — the third leg of the original
+   design proposal. Per-entity dropdown of areas + Move button that
+   calls HA's `entity_registry/update_entity` to set the area. This
+   is a real write against HA's registry, so it needs to flow
+   through the safety wrapper. ~half a session of work.
+2. **What's actually in the /settings/house entities for Unsorted?**
+   Worth a check after the auto-hide changes — likely many of the
+   482 unsorted entities are now auto-hidden (system noise, etc),
+   making the "Unsorted" bucket smaller and more curatable.
+3. **Show domain badges + state on the editorial pages too?** Right
+   now /lights shows light names without domain. Probably overkill
+   for editorial pages — they're for usage, not curation. Skip.
+
+### M4.x considered closed at design level
+
+Settings is now genuinely usable for the FRONT DOOR class of
+problem. The next design test is: does the rest of Alfie's house
+(Unsorted-heavy, lots of TRVs, lots of switches) read cleanly with
+the same patterns?

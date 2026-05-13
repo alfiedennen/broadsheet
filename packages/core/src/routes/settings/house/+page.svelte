@@ -1,16 +1,28 @@
 <script lang="ts">
 	/**
-	 * /settings/house — areas + entities curation.
+	 * /settings/house — areas + entities curation, restructured for M4.x.
 	 *
-	 * The most-impactful screen — this is where the user fixes the
-	 * ugly raw HA area names (alfies_office → Alfie's office), hides
-	 * entities they don't want surfaced, and pins entities to the
-	 * pages they expect.
+	 * Headline changes from the M4 v0:
+	 *  1. Group entities by device within each area (so the FRONT DOOR
+	 *     cluster shows as one row, not 6)
+	 *  2. Show domain badge (LOCK / CONTACT / BUTTON / SENSOR) + current
+	 *     state inline so the user can see "is this the live one?"
+	 *  3. Auto-hidden entities (duplicates, system noise) collapsed
+	 *     under "N hidden — show" toggle per area, with the hide reason
+	 *     surfaced as a chip
+	 *  4. Per-entity unhide button (uses curation `unhide` flag)
 	 */
 
 	import { discovery } from '$lib/discovery';
 	import type { DomainArea, DomainEntity } from '$lib/discovery';
-	import { curationStore, hideArea, renameArea, hideEntity, renameEntity } from '$lib/curation/store.svelte';
+	import {
+		curationStore,
+		hideArea,
+		renameArea,
+		hideEntity,
+		renameEntity,
+		unhideEntity
+	} from '$lib/curation/store.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
@@ -18,9 +30,7 @@
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
 
-	// Sort areas: visible first, then hidden (still curatable), then Unsorted
 	const sortedAreas = $derived.by(() => {
-		// Reactive on curation tick
 		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 		curationStore.tick;
 		const all = [...discovery.areas];
@@ -32,17 +42,21 @@
 	});
 
 	let expandedAreaId = $state<string | null>(null);
-
-	function toggleExpand(id: string) {
-		expandedAreaId = expandedAreaId === id ? null : id;
-	}
-
-	// Edit-buffer for the in-place rename input. Keyed by area_id.
+	let showHiddenInAreaId = $state<string | null>(null);
 	let renameBuffer = $state<Record<string, string>>({});
 	let entityRenameBuffer = $state<Record<string, string>>({});
 
+	function toggleExpand(id: string) {
+		expandedAreaId = expandedAreaId === id ? null : id;
+		// Reset show-hidden when collapsing
+		if (expandedAreaId !== id) showHiddenInAreaId = null;
+	}
+
+	function toggleShowHidden(id: string) {
+		showHiddenInAreaId = showHiddenInAreaId === id ? null : id;
+	}
+
 	function startRenameArea(area: DomainArea) {
-		// Look up the raw HA name (since `area.name` might already be a curated rename)
 		const raw = discoveryStore.areas.find((a) => a.area_id === area.id);
 		renameBuffer[area.id] = curationStore.current.areas[area.id]?.rename ?? raw?.name ?? area.name;
 	}
@@ -50,8 +64,7 @@
 	async function commitRenameArea(areaId: string) {
 		const value = (renameBuffer[areaId] ?? '').trim();
 		const ok = await renameArea(areaId, value || null);
-		if (ok) showToast(value ? `Renamed to "${value}"` : 'Rename cleared', 'success');
-		else showToast('Save failed — try again', 'error');
+		showToast(ok ? (value ? `Renamed to "${value}"` : 'Rename cleared') : 'Save failed', ok ? 'success' : 'error');
 		delete renameBuffer[areaId];
 	}
 
@@ -62,20 +75,17 @@
 	async function toggleAreaHidden(area: DomainArea) {
 		const next = !curationStore.current.areas[area.id]?.hidden;
 		const ok = await hideArea(area.id, next);
-		if (ok) showToast(next ? `${area.name} hidden` : `${area.name} visible`, 'success');
-		else showToast('Save failed', 'error');
+		showToast(ok ? (next ? `${area.name} hidden` : `${area.name} visible`) : 'Save failed', ok ? 'success' : 'error');
 	}
 
 	function startRenameEntity(entity: DomainEntity) {
-		entityRenameBuffer[entity.id] =
-			curationStore.current.entities[entity.id]?.rename ?? entity.name;
+		entityRenameBuffer[entity.id] = curationStore.current.entities[entity.id]?.rename ?? entity.name;
 	}
 
 	async function commitRenameEntity(entityId: string) {
 		const value = (entityRenameBuffer[entityId] ?? '').trim();
 		const ok = await renameEntity(entityId, value || null);
-		if (ok) showToast(value ? `Renamed to "${value}"` : 'Rename cleared', 'success');
-		else showToast('Save failed — try again', 'error');
+		showToast(ok ? (value ? `Renamed to "${value}"` : 'Rename cleared') : 'Save failed', ok ? 'success' : 'error');
 		delete entityRenameBuffer[entityId];
 	}
 
@@ -86,35 +96,32 @@
 	async function toggleEntityHidden(entity: DomainEntity) {
 		const next = !curationStore.current.entities[entity.id]?.hidden;
 		const ok = await hideEntity(entity.id, next);
-		if (ok) showToast(next ? `${entity.name} hidden` : `${entity.name} visible`, 'success');
-		else showToast('Save failed', 'error');
+		showToast(ok ? (next ? `${entity.name} hidden` : `${entity.name} visible`) : 'Save failed', ok ? 'success' : 'error');
 	}
 
-	// Helpers
+	async function showThisAnyway(entity: DomainEntity) {
+		const ok = await unhideEntity(entity.id, true);
+		showToast(ok ? `${entity.name} forced visible` : 'Save failed', ok ? 'success' : 'error');
+	}
+
+	async function clearUnhide(entity: DomainEntity) {
+		const ok = await unhideEntity(entity.id, false);
+		showToast(ok ? `${entity.name} back to default` : 'Save failed', ok ? 'success' : 'error');
+	}
+
+	/* ─────────────── helpers ─────────────── */
+
 	function rawNameFor(areaId: string): string | null {
 		return discoveryStore.areas.find((a) => a.area_id === areaId)?.name ?? null;
 	}
 
 	function entityCountSummary(area: DomainArea): string {
+		const visible = visibleEntitiesIn(area).length;
+		const hidden = area.hiddenEntities.length;
 		const parts: string[] = [];
-		const map: Array<[number, string]> = [
-			[area.lights.length, 'lights'],
-			[area.switches.length, 'switches'],
-			[area.climates.length, 'climate'],
-			[area.locks.length, 'locks'],
-			[area.contacts.length, 'contacts'],
-			[area.cameras.length, 'cameras'],
-			[area.tvs.length, 'tvs'],
-			[area.media.length, 'media'],
-			[area.remotes.length, 'remotes'],
-			[area.sensors.length, 'sensors'],
-			[area.scenes.length, 'scenes'],
-			[area.otherEntities.length, 'other']
-		];
-		for (const [n, label] of map) {
-			if (n > 0) parts.push(`${n} ${label}`);
-		}
-		return parts.length === 0 ? '0 entities' : parts.join(' · ');
+		if (visible > 0) parts.push(`${visible} visible`);
+		if (hidden > 0) parts.push(`${hidden} hidden`);
+		return parts.length === 0 ? 'no entities' : parts.join(' · ');
 	}
 
 	function isHidden(area: DomainArea): boolean {
@@ -125,7 +132,11 @@
 		return !!curationStore.current.entities[entity.id]?.hidden;
 	}
 
-	function allEntitiesIn(area: DomainArea): DomainEntity[] {
+	function isUnhideForced(entity: DomainEntity): boolean {
+		return !!curationStore.current.entities[entity.id]?.unhide;
+	}
+
+	function visibleEntitiesIn(area: DomainArea): DomainEntity[] {
 		return [
 			...area.lights,
 			...area.switches,
@@ -140,6 +151,128 @@
 			...area.scenes,
 			...area.otherEntities
 		];
+	}
+
+	/**
+	 * Group entities by device_id. Entities without a device_id form
+	 * their own pseudo-group (id = `__no-device__:${entity.id}` so
+	 * each becomes its own row).
+	 */
+	interface DeviceGroup {
+		key: string;
+		device: DomainEntity['device'] | null;
+		entities: DomainEntity[];
+	}
+
+	function groupByDevice(entities: DomainEntity[]): DeviceGroup[] {
+		const map = new Map<string, DeviceGroup>();
+		for (const e of entities) {
+			const key = e.deviceId ?? `__no-device__:${e.id}`;
+			if (!map.has(key)) {
+				map.set(key, { key, device: e.device, entities: [] });
+			}
+			map.get(key)!.entities.push(e);
+		}
+		// Sort: groups with device first, by device name; then no-device groups by entity name
+		const groups = Array.from(map.values());
+		return groups.sort((a, b) => {
+			const aHas = !!a.device;
+			const bHas = !!b.device;
+			if (aHas && !bHas) return -1;
+			if (!aHas && bHas) return 1;
+			const an = a.device?.name ?? a.entities[0]?.name ?? '';
+			const bn = b.device?.name ?? b.entities[0]?.name ?? '';
+			return an.localeCompare(bn);
+		});
+	}
+
+	function domainBadge(entity: DomainEntity): string {
+		const dom = entity.domain;
+		// Friendly labels per domain — mirror /lights, /heat, /door classifications
+		switch (dom) {
+			case 'light':
+				return 'LIGHT';
+			case 'switch':
+				return 'SWITCH';
+			case 'climate':
+				return 'TRV';
+			case 'lock':
+				return 'LOCK';
+			case 'binary_sensor': {
+				const dc = (entity.state?.attributes?.device_class as string | undefined) ?? entity.deviceClass;
+				if (dc === 'door' || dc === 'window' || dc === 'opening') return 'CONTACT';
+				if (dc === 'motion' || dc === 'occupancy' || dc === 'presence') return 'PRESENCE';
+				return 'BSENSOR';
+			}
+			case 'sensor':
+				return 'SENSOR';
+			case 'camera':
+				return 'CAMERA';
+			case 'media_player':
+				return 'MEDIA';
+			case 'remote':
+				return 'REMOTE';
+			case 'scene':
+				return 'SCENE';
+			case 'button':
+				return 'BUTTON';
+			case 'select':
+				return 'SELECT';
+			case 'number':
+				return 'NUMBER';
+			case 'update':
+				return 'UPDATE';
+			default:
+				return dom.toUpperCase().slice(0, 7);
+		}
+	}
+
+	function stateLine(entity: DomainEntity): string | null {
+		const s = entity.state?.state;
+		if (s === undefined || s === null || s === 'unavailable' || s === 'unknown') {
+			// Surface specifically that this is the dead one
+			return s === 'unavailable' ? 'unavailable' : '—';
+		}
+		const unit = entity.state?.attributes?.unit_of_measurement as string | undefined;
+		const formatted = unit ? `${s} ${unit}` : s;
+		// Limit length so it doesn't blow out the row
+		return formatted.length > 32 ? formatted.slice(0, 30) + '…' : formatted;
+	}
+
+	function lastChangedLine(entity: DomainEntity): string | null {
+		if (!entity.state?.last_changed) return null;
+		const ms = Date.now() - new Date(entity.state.last_changed).getTime();
+		const mins = Math.round(ms / 60_000);
+		if (mins < 1) return 'just now';
+		if (mins < 60) return `${mins}m ago`;
+		const hrs = Math.round(mins / 60);
+		if (hrs < 24) return `${hrs}h ago`;
+		const days = Math.round(hrs / 24);
+		return `${days}d ago`;
+	}
+
+	function hideReasonChip(entity: DomainEntity): { label: string; tooltip: string } | null {
+		switch (entity.autoHideReason) {
+			case 'duplicate':
+				return {
+					label: 'duplicate',
+					tooltip:
+						'Another entity with the same device + domain is visible. This is likely an orphan from a re-pair — fix in HA Settings → Devices.'
+				};
+			case 'system':
+				return {
+					label: 'system',
+					tooltip:
+						'Looks like integration plumbing (battery, signal strength, wake button, operator status, etc). Hidden by default.'
+				};
+			case 'integration':
+				return {
+					label: 'integration',
+					tooltip: 'The integration that created this entity asked HA to hide it.'
+				};
+			default:
+				return null;
+		}
 	}
 </script>
 
@@ -156,13 +289,89 @@
 			Your areas + entities.
 		{/snippet}
 		{#snippet dek()}
-			Tap a row to expand. Renames + hides save immediately. To assign an
-			Unsorted entity to a room, set its area in HA itself — broadsheet picks
-			it up within 5 seconds.
+			Tap a row to expand. Renames + hides save immediately. Entities are
+			grouped by device — the row that says "Front Door" is the Yale lock with
+			its sub-entities folded inside. Auto-hidden entities (duplicates, system
+			noise) are tucked under "N hidden — show".
 		{/snippet}
 	</Hero>
 
 	<OutLine label="Areas" />
+
+	<!--
+		The snippet + the ul wrap together in a div so the snippet
+		isn't at PageShell-root (root-level snippets get exported as
+		component props in Svelte 5).
+	-->
+	<div class="house-area-block">
+	{#snippet entityRow(entity: DomainEntity)}
+		{@const eRenaming = entityRenameBuffer[entity.id] !== undefined}
+		{@const eHidden = isEntityHidden(entity)}
+		{@const eUnhide = isUnhideForced(entity)}
+		{@const reason = hideReasonChip(entity)}
+		<div class="entity-row" class:hidden={eHidden}>
+			<div class="entity-info">
+				<div class="entity-line-1">
+					<span class="domain-badge">{domainBadge(entity)}</span>
+					{#if eRenaming}
+						<input
+							type="text"
+							class="entity-rename-input"
+							bind:value={entityRenameBuffer[entity.id]}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') commitRenameEntity(entity.id);
+								if (e.key === 'Escape') cancelRenameEntity(entity.id);
+							}}
+						/>
+					{:else}
+						<span class="entity-name">{entity.name}</span>
+					{/if}
+					{#if reason}
+						<span class="reason-chip" title={reason.tooltip}>{reason.label}</span>
+					{/if}
+					{#if eUnhide}
+						<span class="reason-chip override" title="You forced this visible. Click Default to clear.">forced visible</span>
+					{/if}
+				</div>
+				<div class="entity-line-2">
+					<code class="entity-id">{entity.id}</code>
+					{#if stateLine(entity)}
+						<span class="state-sep" aria-hidden="true">·</span>
+						<span class="entity-state" data-state={entity.state?.state ?? 'unknown'}>
+							{stateLine(entity)}
+						</span>
+					{/if}
+					{#if lastChangedLine(entity)}
+						<span class="state-sep" aria-hidden="true">·</span>
+						<span class="entity-age">{lastChangedLine(entity)}</span>
+					{/if}
+				</div>
+			</div>
+			<div class="entity-actions">
+				{#if eRenaming}
+					<button class="mini confirm" type="button" onclick={() => commitRenameEntity(entity.id)}>
+						Save
+					</button>
+					<button class="mini" type="button" onclick={() => cancelRenameEntity(entity.id)}>
+						Cancel
+					</button>
+				{:else}
+					<button class="mini" type="button" onclick={() => startRenameEntity(entity)}>
+						Rename
+					</button>
+					{#if eUnhide}
+						<button class="mini" type="button" onclick={() => clearUnhide(entity)}>
+							Default
+						</button>
+					{:else}
+						<button class="mini" type="button" onclick={() => toggleEntityHidden(entity)}>
+							{eHidden ? 'Show' : 'Hide'}
+						</button>
+					{/if}
+				{/if}
+			</div>
+		</div>
+	{/snippet}
 
 	<ul class="area-list">
 		{#each sortedAreas as area (area.id)}
@@ -171,6 +380,9 @@
 			{@const hidden = isHidden(area)}
 			{@const raw = rawNameFor(area.id)}
 			{@const isUnsorted = area.id === '__unsorted__'}
+			{@const visibleGroups = groupByDevice(visibleEntitiesIn(area))}
+			{@const hiddenGroups = groupByDevice(area.hiddenEntities)}
+			{@const showingHidden = showHiddenInAreaId === area.id}
 			<li class="area-row" class:expanded class:hidden class:unsorted={isUnsorted}>
 				<header class="area-head">
 					{#if renaming}
@@ -188,7 +400,12 @@
 							<span class="area-count">{entityCountSummary(area)}</span>
 						</div>
 					{:else}
-						<button class="expand" type="button" onclick={() => toggleExpand(area.id)} aria-expanded={expanded}>
+						<button
+							class="expand"
+							type="button"
+							onclick={() => toggleExpand(area.id)}
+							aria-expanded={expanded}
+						>
 							<span class="chev">{expanded ? '−' : '+'}</span>
 							<div class="title-block">
 								<span class="area-name">{area.name}</span>
@@ -223,53 +440,101 @@
 
 				{#if expanded}
 					<div class="entities">
-						{#each allEntitiesIn(area) as entity (entity.id)}
-							{@const eRenaming = entityRenameBuffer[entity.id] !== undefined}
-							{@const eHidden = isEntityHidden(entity)}
-							<div class="entity-row" class:hidden={eHidden}>
-								<div class="entity-info">
-									{#if eRenaming}
-										<input
-											type="text"
-											class="rename-input"
-											bind:value={entityRenameBuffer[entity.id]}
-											onkeydown={(e) => {
-												if (e.key === 'Enter') commitRenameEntity(entity.id);
-												if (e.key === 'Escape') cancelRenameEntity(entity.id);
-											}}
-													/>
-									{:else}
-										<span class="entity-name">{entity.name}</span>
-									{/if}
-									<code class="entity-id">{entity.id}</code>
+						{#if visibleGroups.length === 0}
+							<p class="empty">No visible entities in this area.</p>
+						{/if}
+
+						{#each visibleGroups as group (group.key)}
+							{#if group.device && group.entities.length > 1}
+								<!-- Multi-entity device — render as a group with header -->
+								<div class="device-group">
+									<div class="device-head">
+										<span class="device-icon" aria-hidden="true">▣</span>
+										<div class="device-meta">
+											<span class="device-name">{group.device.name ?? 'Unnamed device'}</span>
+											{#if group.device.manufacturer || group.device.model}
+												<span class="device-detail">
+													{[group.device.manufacturer, group.device.model].filter(Boolean).join(' · ')}
+												</span>
+											{/if}
+										</div>
+										<span class="device-count">{group.entities.length} entities</span>
+									</div>
+									<div class="device-entities">
+										{#each group.entities as entity (entity.id)}
+											{@render entityRow(entity)}
+										{/each}
+									</div>
 								</div>
-								<div class="entity-actions">
-									{#if eRenaming}
-										<button class="mini confirm" type="button" onclick={() => commitRenameEntity(entity.id)}>
-											Save
-										</button>
-										<button class="mini" type="button" onclick={() => cancelRenameEntity(entity.id)}>
-											Cancel
-										</button>
-									{:else}
-										<button class="mini" type="button" onclick={() => startRenameEntity(entity)}>
-											Rename
-										</button>
-										<button class="mini" type="button" onclick={() => toggleEntityHidden(entity)}>
-											{eHidden ? 'Show' : 'Hide'}
-										</button>
-									{/if}
-								</div>
-							</div>
+							{:else}
+								<!-- Single-entity device or no-device — render as standalone row -->
+								{#each group.entities as entity (entity.id)}
+									{@render entityRow(entity)}
+								{/each}
+							{/if}
 						{/each}
-						{#if allEntitiesIn(area).length === 0}
-							<p class="empty">No entities.</p>
+
+						{#if hiddenGroups.length > 0}
+							<button
+								class="hidden-toggle"
+								type="button"
+								onclick={() => toggleShowHidden(area.id)}
+							>
+								{showingHidden ? '−' : '+'}
+								{area.hiddenEntities.length} hidden
+								<span class="hidden-detail">
+									({[
+										area.hiddenEntities.filter((e) => e.autoHideReason === 'duplicate').length &&
+											`${area.hiddenEntities.filter((e) => e.autoHideReason === 'duplicate').length} duplicate`,
+										area.hiddenEntities.filter((e) => e.autoHideReason === 'system').length &&
+											`${area.hiddenEntities.filter((e) => e.autoHideReason === 'system').length} system`,
+										area.hiddenEntities.filter((e) => e.autoHideReason === 'integration').length &&
+											`${area.hiddenEntities.filter((e) => e.autoHideReason === 'integration').length} integration`
+									]
+										.filter(Boolean)
+										.join(' · ')})
+								</span>
+							</button>
+
+							{#if showingHidden}
+								<div class="hidden-block">
+									{#each hiddenGroups as group (group.key)}
+										{@const isDeviceGroup = group.device && group.entities.length > 1}
+										{#if isDeviceGroup}
+											<div class="device-group hidden-device">
+												<div class="device-head">
+													<span class="device-icon" aria-hidden="true">▣</span>
+													<div class="device-meta">
+														<span class="device-name">{group.device?.name ?? 'Unnamed device'}</span>
+														{#if group.device?.manufacturer || group.device?.model}
+															<span class="device-detail">
+																{[group.device.manufacturer, group.device.model].filter(Boolean).join(' · ')}
+															</span>
+														{/if}
+													</div>
+													<span class="device-count">{group.entities.length} hidden</span>
+												</div>
+												<div class="device-entities">
+													{#each group.entities as entity (entity.id)}
+														{@render entityRow(entity)}
+													{/each}
+												</div>
+											</div>
+										{:else}
+											{#each group.entities as entity (entity.id)}
+												{@render entityRow(entity)}
+											{/each}
+										{/if}
+									{/each}
+								</div>
+							{/if}
 						{/if}
 					</div>
 				{/if}
 			</li>
 		{/each}
 	</ul>
+	</div>
 </PageShell>
 
 <style>
@@ -405,9 +670,72 @@
 		padding: var(--space-3) var(--space-3) var(--space-4) calc(var(--space-3) + 1.2rem);
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: var(--space-3);
 		border-top: 1px solid var(--rule);
 		background: var(--bg-card);
+	}
+
+	.device-group {
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		background: rgba(255, 255, 255, 0.01);
+		overflow: hidden;
+	}
+
+	.device-group.hidden-device {
+		opacity: 0.7;
+	}
+
+	.device-head {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		background: rgba(255, 255, 255, 0.015);
+		border-bottom: 1px solid var(--rule);
+	}
+
+	.device-icon {
+		color: var(--fg-muted);
+		font-size: 1rem;
+		flex: 0 0 auto;
+	}
+
+	.device-meta {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.device-name {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.05rem;
+		color: var(--fg);
+	}
+
+	.device-detail {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		letter-spacing: var(--track-caption);
+		color: var(--fg-dim);
+		text-transform: uppercase;
+	}
+
+	.device-count {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		flex: 0 0 auto;
+	}
+
+	.device-entities {
+		display: flex;
+		flex-direction: column;
 	}
 
 	.entity-row {
@@ -415,7 +743,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-3);
-		padding: var(--space-2) var(--space-2);
+		padding: var(--space-2) var(--space-3);
 		border-bottom: 1px solid var(--rule);
 	}
 
@@ -436,6 +764,34 @@
 		flex: 1;
 	}
 
+	.entity-line-1 {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+
+	.entity-line-2 {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+
+	.domain-badge {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		font-weight: 500;
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--accent);
+		background: rgba(192, 138, 74, 0.1);
+		padding: 1px var(--space-2);
+		border-radius: var(--radius-pill);
+		flex: 0 0 auto;
+		font-variant-numeric: tabular-nums;
+	}
+
 	.entity-name {
 		font-family: var(--font-body);
 		font-size: var(--text-body);
@@ -448,6 +804,63 @@
 		color: var(--fg-dim);
 	}
 
+	.entity-state {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		color: var(--fg-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.entity-state[data-state='on'],
+	.entity-state[data-state='unlocked'],
+	.entity-state[data-state='open'] {
+		color: var(--state-on);
+	}
+
+	.entity-state[data-state='unavailable'] {
+		color: var(--state-alert);
+	}
+
+	.entity-age {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--fg-dim);
+	}
+
+	.state-sep {
+		color: var(--fg-dim);
+	}
+
+	.reason-chip {
+		font-family: var(--font-mono);
+		font-size: 0.55rem;
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		border: 1px solid var(--rule);
+		padding: 1px var(--space-2);
+		border-radius: var(--radius-pill);
+		flex: 0 0 auto;
+		cursor: help;
+	}
+
+	.reason-chip.override {
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.entity-rename-input {
+		font-family: var(--font-body);
+		font-size: var(--text-body);
+		padding: 2px var(--space-2);
+		background: var(--bg-raised);
+		color: var(--fg);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-input);
+		flex: 1;
+		min-width: 0;
+	}
+
 	.entity-actions {
 		display: flex;
 		gap: var(--space-1);
@@ -456,7 +869,7 @@
 
 	.mini {
 		font-family: var(--font-mono);
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		letter-spacing: var(--track-caption);
 		text-transform: uppercase;
 		color: var(--fg-muted);
@@ -481,5 +894,40 @@
 		color: var(--fg-muted);
 		font-style: italic;
 		font-size: var(--text-caption);
+	}
+
+	.hidden-toggle {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		padding: var(--space-2) var(--space-3);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		text-align: left;
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+		transition: color var(--ease-quick), border-color var(--ease-quick);
+	}
+
+	.hidden-toggle:hover {
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.hidden-detail {
+		font-size: 0.65rem;
+		color: var(--fg-dim);
+		text-transform: lowercase;
+		letter-spacing: 0;
+	}
+
+	.hidden-block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		opacity: 0.85;
 	}
 </style>

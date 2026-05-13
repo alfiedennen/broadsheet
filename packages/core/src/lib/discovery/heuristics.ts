@@ -248,6 +248,38 @@ export function detectPersonDeviceClass(
 	return 'unknown';
 }
 
+/* ─────────────── System-noise entities ─────────────── */
+
+/**
+ * Patterns that indicate an entity is HA's per-integration plumbing,
+ * not a user-facing thing the homeowner ever wants to see on a page.
+ *
+ * These ARE valid entities (broadsheet doesn't filter them out
+ * entirely — they show up in /settings/house with a "system" tag),
+ * but the auto-hide logic suppresses them from default rendering
+ * unless the user explicitly un-hides via curation.
+ *
+ * Common offenders this catches across HA integrations:
+ *  - button.*_wake / *_identify / *_restart / *_update — device commands
+ *  - sensor.*_battery / *_signal_strength / *_rssi / *_link_quality
+ *  - sensor.*_operator (Yale lock metadata, etc)
+ *  - sensor.*_last_changed_by / *_changed_by
+ *  - update.* — firmware update entities
+ *  - select.*_log_level / number.*_polling_interval — config-style
+ */
+const SYSTEM_PATTERNS: RegExp[] = [
+	/^button\..*_(?:wake|identify|restart|update|reboot|reset|refresh|reload)$/i,
+	/^sensor\..*_(?:battery|signal_strength|rssi|link_quality|connectivity|last_seen|last_updated|operator|esp_temperature|node_status|cpu_usage|memory_usage|wifi_strength)$/i,
+	/^update\./i,
+	/^select\..*_(?:log_level|profile|notification_action)$/i,
+	/^number\..*_(?:polling_interval|update_interval|timeout|brightness_calibration|color_temp_calibration)$/i,
+	/^binary_sensor\..*_(?:problem|update_available|connectivity)$/i
+];
+
+export function looksLikeSystemEntity(entity: Entity): boolean {
+	return SYSTEM_PATTERNS.some((p) => p.test(entity.entity_id));
+}
+
 /* ─────────────── Sensor categorisation ─────────────── */
 
 /**

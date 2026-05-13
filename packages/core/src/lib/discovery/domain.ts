@@ -31,6 +31,7 @@ import {
 	isDoorOrWindowContact,
 	isHealthConnect,
 	isAmbientRoomSensor,
+	looksLikeSystemEntity,
 	pickBestPresenceSensor,
 	rankPresenceSensors,
 	detectPersonDeviceClass
@@ -45,9 +46,26 @@ export interface DomainEntity {
 	domain: string; // 'light', 'climate', 'lock', ...
 	state: State | null;
 	deviceId: string | null;
+	/** Lightweight device summary, populated when deviceId resolves. */
+	device: {
+		id: string;
+		name: string | null;
+		model: string | null;
+		manufacturer: string | null;
+	} | null;
 	areaId: string | null; // resolved area_id (entity > device fallback)
 	labels: string[]; // label_ids carried from registry
 	hidden: boolean; // hidden_by !== null OR future-curation override
+	/**
+	 * If non-null, broadsheet auto-hid this entity. The user can override
+	 * via curation `unhide: true`. Reasons:
+	 *  - 'duplicate': another entity with the same device_id + domain
+	 *    is already visible (e.g. lock.front_door + lock.front_door_2).
+	 *  - 'system': matches a SYSTEM_PATTERNS regex (battery, wake button,
+	 *    operator status, etc.).
+	 *  - 'integration': HA's hidden_by from the integration.
+	 */
+	autoHideReason: 'duplicate' | 'system' | 'integration' | null;
 	disabled: boolean; // disabled_by !== null
 	entityCategory: 'config' | 'diagnostic' | null;
 	icon: string | null;
@@ -62,8 +80,8 @@ export interface DomainArea {
 	floorId: string | null;
 	labels: string[];
 
-	// Pre-bucketed entities (visible only — hidden/disabled excluded
-	// unless un-hidden via M4 curation)
+	// Pre-bucketed VISIBLE entities (auto-hidden + user-hidden +
+	// HA-hidden excluded). Pages render from these.
 	lights: DomainEntity[]; // domain=light + lighting switches
 	switches: DomainEntity[]; // domain=switch (non-lighting)
 	climates: DomainEntity[];
@@ -76,6 +94,15 @@ export interface DomainArea {
 	sensors: DomainEntity[]; // ambient sensors (temp/humidity/lux/etc)
 	scenes: DomainEntity[];
 	otherEntities: DomainEntity[]; // anything we couldn't bucket
+
+	/**
+	 * Everything HA-hidden / auto-hidden / user-hidden in this area,
+	 * flat. Surfaced ONLY by /settings/house so the user can curate
+	 * them (un-hide, see why broadsheet hid each one). Each entity
+	 * carries `autoHideReason` explaining the hide. Pages do NOT
+	 * read this field.
+	 */
+	hiddenEntities: DomainEntity[];
 
 	// Computed flags — drive page-level "show this area?" filtering
 	hasLighting: boolean;
@@ -136,6 +163,23 @@ export function projectDomain(input: {
 	const deviceById = new Map(input.devices.map((d) => [d.id, d]));
 	const cur = input.curation;
 
+	// Pre-pass: detect duplicates by device_id + domain. The FIRST entity
+	// in registry order is treated as primary; subsequent ones get
+	// autoHideReason='duplicate'. Catches the lock.front_door +
+	// lock.front_door_2 class of orphans cleanly.
+	const seenInDevice = new Map<string, boolean>();
+	const duplicateIds = new Set<string>();
+	for (const e of input.entities) {
+		if (!e.device_id) continue;
+		const domain = e.entity_id.split('.')[0];
+		const key = `${e.device_id}:${domain}`;
+		if (seenInDevice.has(key)) {
+			duplicateIds.add(e.entity_id);
+		} else {
+			seenInDevice.set(key, true);
+		}
+	}
+
 	// Build a per-entity name + area resolution + visibility map.
 	// Curation: respect entity rename, hidden, unhide overrides; respect
 	// pagePins (entities forced to a specific page rather than living in
@@ -147,22 +191,36 @@ export function projectDomain(input: {
 		const entityOverride = cur?.entities[e.entity_id];
 		const name = entityOverride?.rename || baseName;
 		const areaId = resolveAreaId(e, device);
-		const visibility = visibilityFor(e, entityOverride);
-		return { entity: e, device, name, areaId, visibility };
+		// Compute auto-hide reason BEFORE visibility (visibility consumes it)
+		let autoHideReason: 'duplicate' | 'system' | 'integration' | null = null;
+		if (duplicateIds.has(e.entity_id)) autoHideReason = 'duplicate';
+		else if (looksLikeSystemEntity(e)) autoHideReason = 'system';
+		else if (e.hidden_by !== null) autoHideReason = 'integration';
+		const visibility = visibilityFor(e, entityOverride, autoHideReason);
+		return { entity: e, device, name, areaId, visibility, autoHideReason };
 	});
 
 	// Helper: build a DomainEntity from a composed record
 	const toDomain = (rec: (typeof composed)[number]): DomainEntity => {
-		const { entity: e, device, name, areaId } = rec;
+		const { entity: e, device, name, areaId, autoHideReason } = rec;
 		return {
 			id: e.entity_id,
 			name,
 			domain: e.entity_id.split('.')[0],
 			state: input.states[e.entity_id] ?? null,
 			deviceId: e.device_id,
+			device: device
+				? {
+						id: device.id,
+						name: device.name_by_user ?? device.name,
+						model: device.model,
+						manufacturer: device.manufacturer
+					}
+				: null,
 			areaId,
 			labels: e.labels ?? [],
-			hidden: e.hidden_by !== null,
+			hidden: e.hidden_by !== null || autoHideReason !== null,
+			autoHideReason,
 			disabled: e.disabled_by !== null,
 			entityCategory: e.entity_category,
 			icon: e.icon ?? e.original_icon,
@@ -170,14 +228,19 @@ export function projectDomain(input: {
 		};
 	};
 
-	// Build the area buckets. Visible entities only (hidden/disabled/skipped
-	// excluded — Settings UI in M4 will offer the view-all view).
+	// Build two per-area maps:
+	//  - visibleByArea: for page rendering (lights/climates/etc buckets)
+	//  - hiddenByArea: for /settings/house (so the user can see + un-hide)
+	// Skipped entities (disabled / config / diagnostic) appear in
+	// neither; they're never relevant.
 	const visibleByArea = new Map<string, (typeof composed)[number][]>();
+	const hiddenByArea = new Map<string, (typeof composed)[number][]>();
 	for (const rec of composed) {
-		if (rec.visibility !== 'show') continue;
+		if (rec.visibility === 'skipped') continue;
 		const key = rec.areaId ?? UNSORTED_ID;
-		if (!visibleByArea.has(key)) visibleByArea.set(key, []);
-		visibleByArea.get(key)!.push(rec);
+		const target = rec.visibility === 'show' ? visibleByArea : hiddenByArea;
+		if (!target.has(key)) target.set(key, []);
+		target.get(key)!.push(rec);
 	}
 
 	// Build DomainArea objects — one per HA area (skipping curation-hidden
@@ -187,17 +250,19 @@ export function projectDomain(input: {
 		.filter((a) => !cur?.areas[a.area_id]?.hidden)
 		.map((a) => {
 			const recs = visibleByArea.get(a.area_id) ?? [];
+			const hiddenRecs = hiddenByArea.get(a.area_id) ?? [];
 			const override = cur?.areas[a.area_id];
 			const decorated: RawArea = {
 				...a,
 				name: override?.rename || a.name,
 				icon: override?.iconOverride !== undefined ? override.iconOverride : a.icon
 			};
-			return buildArea(decorated, recs, toDomain, input.states, deviceById);
+			return buildArea(decorated, recs, hiddenRecs, toDomain, input.states, deviceById);
 		});
 
 	const unsortedRecs = visibleByArea.get(UNSORTED_ID) ?? [];
-	if (unsortedRecs.length > 0) {
+	const unsortedHiddenRecs = hiddenByArea.get(UNSORTED_ID) ?? [];
+	if (unsortedRecs.length > 0 || unsortedHiddenRecs.length > 0) {
 		realAreas.push(
 			buildArea(
 				{
@@ -210,6 +275,7 @@ export function projectDomain(input: {
 					labels: []
 				},
 				unsortedRecs,
+				unsortedHiddenRecs,
 				toDomain,
 				input.states,
 				deviceById
@@ -320,29 +386,31 @@ export function resolveAreaId(entity: RawEntity, device: RawDevice | null): stri
 /**
  * Visibility for an entity:
  *  - 'skipped': disabled OR config/diagnostic — never shown anywhere
- *  - 'hidden': hidden_by !== null OR user curation hide
+ *  - 'hidden': any of (HA hidden_by, user curation hide, broadsheet
+ *              auto-hide for duplicates / system entities)
  *  - 'show': default
  *
- * Curation `unhide: true` overrides HA's hidden_by.
- * Curation `hidden: true` user-hides a normally-visible entity.
+ * Curation `unhide: true` is the universal override — it makes the
+ * entity visible regardless of any hide source (HA's, the user's
+ * own previous hide, or broadsheet's auto-hide).
  */
 function visibilityFor(
 	entity: RawEntity,
-	override?: { hidden?: boolean; unhide?: boolean }
+	override: { hidden?: boolean; unhide?: boolean } | undefined,
+	autoHideReason: 'duplicate' | 'system' | 'integration' | null
 ): 'show' | 'hidden' | 'skipped' {
 	if (entity.disabled_by !== null) return 'skipped';
 	if (entity.entity_category === 'config') return 'skipped';
 	if (entity.entity_category === 'diagnostic') return 'skipped';
 
-	// User-hide always wins over default-show
+	// Universal "show this" override — wins over everything else
+	if (override?.unhide) return 'show';
+
+	// User-hide
 	if (override?.hidden) return 'hidden';
 
-	if (entity.hidden_by !== null) {
-		// HA's integration/user wants this hidden — but curation can
-		// explicitly un-hide
-		if (override?.unhide) return 'show';
-		return 'hidden';
-	}
+	// Auto-hide (system patterns, duplicates, HA's hidden_by)
+	if (autoHideReason) return 'hidden';
 
 	return 'show';
 }
@@ -375,11 +443,13 @@ type ComposedRec = {
 	name: string;
 	areaId: string | null;
 	visibility: 'show' | 'hidden' | 'skipped';
+	autoHideReason: 'duplicate' | 'system' | 'integration' | null;
 };
 
 function buildArea(
 	raw: RawArea,
 	recs: ComposedRec[],
+	hiddenRecs: ComposedRec[],
 	toDomain: (r: ComposedRec) => DomainEntity,
 	states: Record<string, State>,
 	_deviceById: Map<string, RawDevice>
@@ -436,6 +506,18 @@ function buildArea(
 		}
 	}
 
+	// Hidden entities — flat list for /settings/house. Sorted by
+	// (autoHideReason priority, then name) so duplicates surface first.
+	const hiddenPriority = (e: DomainEntity) =>
+		e.autoHideReason === 'duplicate' ? 0 : e.autoHideReason === 'system' ? 1 : 2;
+	const hiddenEntities: DomainEntity[] = hiddenRecs
+		.map((rec) => toDomain(rec))
+		.sort((a, b) => {
+			const dp = hiddenPriority(a) - hiddenPriority(b);
+			if (dp !== 0) return dp;
+			return a.name.localeCompare(b.name);
+		});
+
 	const sortByName = (arr: DomainEntity[]) => arr.sort((a, b) => a.name.localeCompare(b.name));
 
 	return {
@@ -457,6 +539,7 @@ function buildArea(
 		sensors: sortByName(sensors),
 		scenes: sortByName(scenes),
 		otherEntities: sortByName(otherEntities),
+		hiddenEntities,
 		hasLighting: lights.length > 0,
 		hasClimate: climates.length > 0,
 		hasLock: locks.length > 0,
