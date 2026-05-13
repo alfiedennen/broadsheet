@@ -14,6 +14,7 @@
 	import { callService } from '$lib/ha/actions';
 	import { discovery, bootDiscovery } from '$lib/discovery';
 	import WriteAllowedBanner from '$lib/components/WriteAllowedBanner.svelte';
+	import KebabNav from '$lib/components/KebabNav.svelte';
 
 	let { children } = $props();
 
@@ -97,6 +98,15 @@
 </script>
 
 <WriteAllowedBanner />
+
+<!--
+	KebabNav is sticky top-right on every page except /setup/. It needs
+	the connection to be live (it links to pages that read from
+	discovery), so we only mount once booted.
+-->
+{#if booted && page.url.pathname !== '/setup/'}
+	<KebabNav />
+{/if}
 
 <div class="app">
 	{#if booted}

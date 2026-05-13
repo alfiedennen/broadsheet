@@ -1,40 +1,296 @@
 /*
- * broadsheet — design tokens (placeholder)
+ * broadsheet — design system
  *
- * The full editorial register (warm off-black, amber accent, four-font
- * system: Newsreader / Instrument Serif / IBM Plex Sans / JetBrains Mono)
- * lands in M3 when page templates begin. M0 ships a minimal token set
- * to verify the build pipeline.
+ * Editorial register: warm off-black bg, amber accent, four-font
+ * stack. Italic Instrument Serif for display, Newsreader for body,
+ * IBM Plex Sans for labels/captions, JetBrains Mono for numbers and
+ * eyebrows.
+ *
+ * Tokens documented at top so plugin authors can extend cleanly.
+ * See: docs/RENDERER-CONTRACT.md
  */
 
 :root {
+	/* ── colours ── */
 	--bg: #1a1814;
+	--bg-raised: #211e18;
+	--bg-card: rgba(255, 255, 255, 0.025);
+
 	--fg: #f4ede1;
-	--muted: #8a7f6f;
-	--accent: #c08a4a;
-	--rule: #2a261e;
+	--fg-muted: #8a7f6f;
+	--fg-dim: #524a3f;
+
+	--accent: #c08a4a; /* amber — links, italic display, active states */
+	--accent-soft: #d4a05c;
+	--accent-glow: rgba(192, 138, 74, 0.15);
+
+	/* semantic state colours */
+	--state-on: #7aa37a; /* sage — successful, active */
+	--state-alert: #bf3a30; /* rust — error, banned */
+	--state-warn: #c08a4a; /* amber — careful */
+	--state-info: #a89978; /* gold — informational */
+
+	--rule: #2a261e; /* warm hairline — borders, dividers */
+	--rule-strong: #3a342a;
+
+	/* ── typography ── */
+	--font-display: 'Instrument Serif', Iowan, Georgia, serif;
+	--font-body: 'Newsreader', Iowan, Georgia, serif;
+	--font-caption: 'IBM Plex Sans', system-ui, -apple-system, Helvetica, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+	/* type scale (responsive — clamps with viewport) */
+	--text-eyebrow: 0.75rem;
+	--text-caption: 0.85rem;
+	--text-body: 1rem;
+	--text-body-lg: 1.125rem;
+	--text-headline-sm: 1.5rem;
+	--text-headline-md: clamp(2rem, 4vw, 3rem);
+	--text-headline-lg: clamp(3rem, 7vw, 5rem);
+	--text-headline-xl: clamp(4rem, 10vw, 7rem);
+
+	--leading-tight: 1.1;
+	--leading-snug: 1.3;
+	--leading-body: 1.6;
+	--leading-loose: 1.8;
+
+	--track-tight: -0.01em;
+	--track-normal: 0;
+	--track-caption: 0.02em;
+	--track-eyebrow: 0.08em;
+	--track-uppercase: 0.12em;
+
+	/* ── spacing ── */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+	--space-12: 3rem;
+	--space-16: 4rem;
+	--space-24: 6rem;
+
+	/* ── radii + borders ── */
+	--radius-card: 4px;
+	--radius-pill: 999px;
+	--radius-input: 4px;
+
+	--border-card: 1px solid var(--rule);
+	--border-card-hover: 1px solid var(--accent);
+
+	/* ── transitions ── */
+	--ease-quick: 120ms ease-out;
+	--ease-normal: 240ms ease-out;
+	--ease-slow: 480ms cubic-bezier(0.2, 0, 0, 1);
+
+	/* ── shadows (sparing) ── */
+	--shadow-lift: 0 1px 0 var(--rule);
+	--shadow-card: 0 1px 12px rgba(0, 0, 0, 0.2);
+
+	/* ── numeric defaults ── */
+	color-scheme: dark;
 }
 
-* {
+/* ── reset ── */
+*,
+*::before,
+*::after {
 	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+	-webkit-tap-highlight-color: transparent;
+}
+
+body,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd,
+ul,
+ol {
+	margin: 0;
+	padding: 0;
+}
+
+ul,
+ol {
+	list-style: none;
 }
 
 html,
 body {
-	margin: 0;
-	padding: 0;
+	min-height: 100vh;
 	background: var(--bg);
 	color: var(--fg);
-	font-family: 'Newsreader', Georgia, serif;
+	font-family: var(--font-body);
+	font-size: var(--text-body);
+	line-height: var(--leading-body);
+	font-variant-numeric: tabular-nums;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/* ── typography defaults ── */
+.eyebrow,
+:where([data-role='eyebrow']) {
+	font-family: var(--font-mono);
+	font-size: var(--text-eyebrow);
+	letter-spacing: var(--track-eyebrow);
+	text-transform: uppercase;
+	color: var(--accent);
+	line-height: 1.3;
+}
+
+.headline,
+:where([data-role='headline']) {
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-style: italic;
+	line-height: var(--leading-tight);
+	color: var(--accent);
+	letter-spacing: var(--track-tight);
+}
+
+.caption,
+:where([data-role='caption']) {
+	font-family: var(--font-caption);
+	font-size: var(--text-caption);
+	letter-spacing: var(--track-caption);
+	color: var(--fg-muted);
+}
+
+.mono,
+code,
+kbd,
+samp {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
 }
 
 a {
 	color: var(--accent);
 	text-decoration: none;
+	transition: color var(--ease-quick);
 }
 
 a:hover {
+	color: var(--accent-soft);
 	text-decoration: underline;
+}
+
+a:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: 2px;
+}
+
+button {
+	font-family: inherit;
+	font-size: inherit;
+	color: inherit;
+	background: none;
+	border: none;
+	cursor: pointer;
+}
+
+button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+input,
+textarea,
+select {
+	font-family: var(--font-mono);
+	font-size: var(--text-caption);
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid var(--rule);
+	border-radius: var(--radius-input);
+	padding: var(--space-3) var(--space-4);
+	color: var(--fg);
+	transition: border-color var(--ease-quick);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+/* ── pointer-only hover affordances ── */
+@media (hover: hover) and (pointer: fine) {
+	/* hover effects scoped to mouse devices, not touch */
+	.hoverable {
+		transition: border-color var(--ease-quick), background var(--ease-quick);
+	}
+	.hoverable:hover {
+		border-color: var(--accent);
+		background: var(--accent-glow);
+	}
+}
+
+/* ── touch target floor (44pt) ── */
+@media (hover: none), (pointer: coarse) {
+	button,
+	a[role='button'],
+	input[type='button'],
+	input[type='submit'] {
+		min-height: 44px;
+		min-width: 44px;
+	}
+}
+
+/* ── responsive breakpoints ── */
+/*
+ * Tier 1: phone (< 640px) — single column, full-bleed cards
+ * Tier 2: tablet / small laptop (640-1024px) — comfortable single column
+ * Tier 3: desktop (> 1024px) — wider gutters, magazine-spread Hero
+ * Tier 4: wall tablet (portrait Fire HD = 1200×1920) — special-cased per page
+ */
+
+/* ── utility classes ── */
+.text-accent {
+	color: var(--accent);
+}
+.text-muted {
+	color: var(--fg-muted);
+}
+.italic {
+	font-style: italic;
+}
+.tabular {
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── scrollbar (subtle) ── */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--rule-strong);
+	border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: var(--fg-dim);
+}
+
+/* ── selection ── */
+::selection {
+	background: var(--accent);
+	color: var(--bg);
 }

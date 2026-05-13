@@ -153,11 +153,19 @@ export function rankPresenceSensors(person: Person, allEntities: Entity[]): Rank
 	if (!person.entity_id) return out;
 	const personSlug = person.entity_id.replace(/^person\./, '');
 
-	// Tier 1: server-side committed_room sensor
-	const committedRoomId = `sensor.${personSlug}_committed_room`;
-	if (allEntities.some((e) => e.entity_id === committedRoomId)) {
+	// Tier 1: server-side committed_room sensor.
+	// Try the full slug first (sensor.alfie_dennen_committed_room), then
+	// fall back to first-name only (sensor.alfie_committed_room) — many
+	// installs name their fusion sensors with the short form.
+	const candidates = [`sensor.${personSlug}_committed_room`];
+	const firstName = personSlug.split('_')[0];
+	if (firstName !== personSlug) {
+		candidates.push(`sensor.${firstName}_committed_room`);
+	}
+	const found = candidates.find((id) => allEntities.some((e) => e.entity_id === id));
+	if (found) {
 		out.push({
-			entityId: committedRoomId,
+			entityId: found,
 			tier: 1,
 			badge: 'best',
 			reason: 'server-side fusion (committed_room sensor)',

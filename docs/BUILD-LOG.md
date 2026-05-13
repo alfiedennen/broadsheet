@@ -750,3 +750,207 @@ do not block M2.
 Ready to start M3 (page templates) — the six core pages will
 consume `discovery.areasForPage(slug)` and render them in the
 editorial register.
+
+---
+
+## 2026-05-13 — M3 — Page templates + editorial design system
+
+### Decisions
+
+**Full design token system in app.css.** Warm off-black bg
+(#1a1814), amber accent (#c08a4a), four-font stack via Google
+Fonts (Newsreader body / Instrument Serif display / IBM Plex Sans
+caption / JetBrains Mono code). Semantic state colours (sage on,
+rust alert, amber warn, gold info). All exposed as CSS variables
+so plugin authors can extend cleanly.
+
+**Hover scoped to pointer-fine, touch-target floor 44pt.**
+`@media (hover: hover) and (pointer: fine)` for hover effects;
+`@media (hover: none), (pointer: coarse)` enforces 44pt minimum
+on all buttons + a-with-role-button. Same wall-tablet + phone +
+desktop set works without per-surface tuning.
+
+**Eight layout primitives ship as the M3 toolkit.**
+- `PageShell` — width modes (narrow / default / wide / bleed)
+- `Eyebrow` — № section number + name in mono caps
+- `Hero` — eyebrow + italic display headline + dek (snippet-based)
+- `OutLine` — ruled section divider with optional centred label
+- `KebabNav` — sticky top-right kebab → full-height sheet (NAV_ORDER
+  + Wall + Settings + Forget token)
+- `RoomReveal` — collapsed area summary + expanded controls (snippet-
+  based so each page composes its own controls)
+- `UnsortedSection` — surfaces unbucketed entities with assign-via-
+  Settings CTA
+- `ProceduralPainting` — hash-seeded animated CSS gradient (default
+  visual centre when no painting plugin installed)
+
+Pages compose these — never reach inside, never duplicate the
+patterns. The eight primitives ARE the broadsheet visual identity;
+pages are choreography on top.
+
+**Manifest composer is a pure function.**
+`src/lib/manifest.ts` takes `{ persons, states }` and returns the
+sentence. Sentence shape changes by count (empty / one / two / 3+)
+and by whether rooms are knowable. Pure function = easy to test,
+easy to override per-string in M4 Settings → /settings/voice.
+
+**Painting + manifest is the landing in v0.1.** No control surface
+on `/`. The page is for arrival, not action — tap the kebab to go
+anywhere. Procedural gradient as the visual centre means the page
+feels alive even with no `@broadsheet/emanations` plugin installed.
+
+**Hard-banned domains visible-but-blocked, not hidden.**
+On `/door` the Unlock button renders with full styling and a
+"Lock writes are hard-banned in dev mode" banner above. Tapping
+it shows the audit-logged block in the response (`last attempt:
+hard-banned` chip below the lock tile). Design intent: the user
+sees the affordance, understands the safety floor, knows exactly
+what'll happen if they try.
+
+**Six pages + Wall.** /lights /heat /door /tv /body all from
+NAV_ORDER plus /wall as the dense-action-grid surface (separate
+because its design intent — every action one tap — is opposite to
+the editorial register's "three deliberate tap-targets above the
+fold").
+
+**TMDB content slot is a placeholder in core.** /tv shows an
+"empty content slot" card with copy pointing at the
+@broadsheet/tmdb-tv plugin. v0.1 ships without TMDB integration;
+the slot is a placeholder + invitation to install the plugin.
+
+**dev test handle exposes `discovery` too.** Added to
+window.__broadsheet_dev__ in M3 wave so MCP-driven verification
+can inspect domain projection live.
+
+### Heuristic fix landed mid-M3 (M3.11b)
+
+**Presence-sensor first-name slug fallback.** M2 caught that
+Alfie's `★ best` sensor was missed because the heuristic looked
+for `sensor.alfie_dennen_committed_room` and the actual sensor is
+`sensor.alfie_committed_room`. Fix in heuristics.ts: try the
+full slug first, then fall back to first-name only:
+```ts
+const candidates = [`sensor.${personSlug}_committed_room`];
+const firstName = personSlug.split('_')[0];
+if (firstName !== personSlug) {
+  candidates.push(`sensor.${firstName}_committed_room`);
+}
+```
+Landing manifest immediately changed from "Alfie home, Elena in
+the kitchen." to "Alfie in the office, Elena in the kitchen." —
+real visible improvement to the most-viewed surface.
+
+### Gotchas burned in
+
+**1. Svelte 5 `state_referenced_locally` warning.** First version
+of `RoomReveal` had `let open = $state(startOpen)` where
+`startOpen` was a prop. Svelte 5's lint correctly flags this:
+prop changes after init don't update `open`. Tried wrapping in a
+const — same warning (lint traces back to the prop). Tried
+`untrack()` — overkill. Real fix: dropped the `startOpen` prop
+entirely. No current consumer needs it; if a page ever wants a
+specific room to start open, we'll add the API back behind a
+different shape (e.g. ref-based programmatic open) when there's
+a real use case. **Lesson: don't add props for hypothetical
+needs — they end up costing more than they save.**
+
+**2. `state.attributes.brightness` is `unknown`.** Same root
+cause as M2's device_class casts. The `state.attributes` blob is
+`Record<string, unknown>`. Pages read `brightness`, `temperature`,
+`current_temperature`, `media_title`, etc. — every read needs an
+explicit cast. Tedious but correct (HA can return any shape per
+integration). For M3 we cast at point of use; for v0.2 might
+introduce typed accessor helpers per domain.
+
+**3. Area names are HA-side raw forms.** Several of your areas
+have lowercase / underscored / SHOUT-CASE names from the registry:
+`alfies_office`, `elenas_office`, `library`, `FRONT`,
+`Utility_Room`. They render verbatim in headlines like
+"alfies_office, library, and Living Room are on." This is HA's
+data, not a broadsheet bug — but it reads ugly. M4 Settings will
+let users override display names per area. For now: works,
+visible, low-friction to fix once Settings ships.
+
+### What works against your real HA (verified live via Chrome MCP)
+
+| Page | Headline composed | Notes |
+|---|---|---|
+| `/` | "Alfie in the office, Elena in the kitchen." | painting drifting, dateline, people row, kebab nav |
+| `/lights` | "alfies_office, library, and Living Room are on." | 5 areas + 4 scenes (Bright / Movie / Relax / Warm Evening); 25 unsorted lights surfaced |
+| `/heat` | "Every radiator at frost." | 3 macros (Boost / All warm / All frost); 2 climate areas; 5 unsorted TRVs |
+| `/door` | "All unlocked." | Hard-ban banner shown above; 2 lock tiles (the M2 dupe), 2 contacts |
+| `/tv` | "Living room TV: off." | D-pad + Power/Vol/Mute/Home/Back; content slot stub |
+| `/body` | "Quiet — Health Connect hasn't reported recently." | Only 2 of 8 sensors (regex limitation, M2 followup #3 confirmed) |
+| `/wall` | "Everything within reach." | 3 BIG primary tiles + 5 room tiles with live state + 4 scene pills + 2 boost tiles |
+
+**Real auto-toggle test:** library lights showed "2 of 2 on" while
+office showed "2 of 2 on" — matches the live state of the house
+during verification. Wall tablet's per-room toggle correctly
+coloured `data-on=true` rooms with the accent border + glow.
+
+### Files added in M3
+
+```
+packages/core/src/
+├── app.css                                 design tokens (rewrite)
+├── app.html                                fonts wired in head
+├── lib/
+│   ├── manifest.ts                         pure-function manifest composer
+│   └── components/
+│       ├── PageShell.svelte                width modes
+│       ├── Eyebrow.svelte                  № X · SECTION
+│       ├── Hero.svelte                     eyebrow+headline+dek
+│       ├── OutLine.svelte                  ruled section divider
+│       ├── KebabNav.svelte                 sticky kebab → sheet
+│       ├── RoomReveal.svelte               area summary + expandable controls
+│       ├── UnsortedSection.svelte          unbucketed surface
+│       └── ProceduralPainting.svelte       hash-seeded gradient
+└── routes/
+    ├── +page.svelte                        / landing (rewrite — manifest + painting)
+    ├── lights/+page.svelte                 NEW
+    ├── heat/+page.svelte                   NEW
+    ├── door/+page.svelte                   NEW
+    ├── tv/+page.svelte                     NEW
+    ├── body/+page.svelte                   NEW
+    └── wall/+page.svelte                   NEW
+```
+
+### Followups carried into M3.x polish (post-commit)
+
+These don't block M3 closure — pages render, actions fire, safety
+rails hold — but they're worth a polish pass before M4 starts:
+
+1. **Health Connect regex too narrow** (M2 followup #3 confirmed
+   live). Currently catches `_sleep / _heart_rate / _hrv /
+   _oxygen_saturation / _body_temperature / _respiratory_rate /
+   _steps / _calories`. Misses `_confidence` and `_segment`
+   suffixes. Need to widen OR drop the suffix requirement and
+   match purely on the `pixel|wear` prefix + `sensor.` domain.
+2. **Sleep segment value rendering "28800000.0 ms"** instead of
+   "8h". Need a per-attribute formatter for known Health Connect
+   units (ms → h for sleep_segment, etc.).
+3. **2 lock entities for 1 physical front door** (M2 followup #4).
+   Investigate which integration creates the duplicate; might be
+   a Yale + frontend lock entity pair. Could de-duplicate via
+   device_id grouping in Layer 2.
+4. **TV detection still too liberal**. Living Room shows 4 TVs
+   (only 1 physical TCL). Tighten via device_class precedence
+   over name match.
+5. **Area names are raw HA forms** (alfies_office, FRONT,
+   Utility_Room). M4 Settings will let users override; until
+   then, they read ugly in composed headlines.
+
+### Bundle baseline at end of M3
+
+- Build: clean, 4-5s
+- svelte-check: 0 errors / 0 warnings, 295 files
+- Source lines: substantial growth from M2 (+~2000 lines for
+  primitives + 6 pages + landing rewrite)
+- Bundle size will be checked in next build cycle
+
+### M3 considered closed and verified
+
+All seven pages render against the real HA install with composed
+prose state, working actions (subject to safety rails), and the
+editorial register. Polish followups logged. M4 (curation +
+Settings UI) is ready to start.
