@@ -1501,3 +1501,70 @@ The full /settings/house design loop is now complete:
 
 Next gate: M5 (HA add-on packaging) — what makes broadsheet
 installable from the HA add-on store.
+
+### M4.x.fix — duplicate-detection over-flagging (caught by Alfie testing)
+
+**Symptom**: Alfie asked "why is the esp32 presence node we use
+for trilateration in the bedroom hidden?" and pointed at
+`sensor.presence_node_bedroom_watch_rssi` +
+`sensor.presence_node_bedroom_phone_rssi`. Both flagged as
+`autoHideReason: 'duplicate'` despite being separate functional
+sensors (one tracking the watch beacon, one tracking the phone
+beacon — both required for Bermuda trilateration).
+
+**Root cause**: M4.x duplicate detection grouped on
+`${device_id}:${domain}`. ANY second-or-later entity sharing a
+device + domain was flagged duplicate. Worked correctly for the
+Yale lock case (`lock.front_door` + `lock.front_door_2` — the `_2`
+IS an orphan), but failed for any multi-purpose device that
+legitimately produces many sensor entities — ESP32 BLE proxies,
+multi-sensor TRVs (current_temp + setpoint + valve_position),
+weather stations, etc.
+
+**Magnitude**: ~168 functional sensors across the install were
+incorrectly hidden. The "315 visible Unsorted" celebrated as
+M4.x cleanup was partly this — auto-hide was sweeping real data
+under the rug. Fix restores visible count to 483, with truly
+conservative auto-hide (6 entities total: 3 duplicate + 3 system).
+
+**Fix**: dedupe heuristic now requires entity_id base-name match
+after stripping a trailing numeric suffix:
+
+```ts
+const stripNumSuffix = (id: string) => id.replace(/_(\d+)$/, '');
+const key = `${e.device_id}:${stripNumSuffix(e.entity_id)}`;
+// Two entities are duplicates iff they share device + this key
+```
+
+Examples:
+- `lock.front_door` + `lock.front_door_2` → DUPLICATE
+  (suffix-stripped both = `lock.front_door`)
+- `sensor.bedroom_watch_rssi` + `sensor.bedroom_phone_rssi` → NOT
+  duplicate (different base names)
+- `sensor.weather_temp` + `sensor.weather_humidity` → NOT
+  duplicate (different functional sensors on one weather station)
+
+Plus removed bare `_rssi` and `_link_quality` from system patterns
+(they were catching tracker RSSI sensors, which are functional
+not system noise). Added `_uptime`, `_loop_time`, `_free_memory`
+to system patterns to keep ESPHome diagnostic-style sensors
+suppressed (those usually lack `entity_category: diagnostic`).
+
+**Lesson**: heuristic over-aggression is silent and easy to miss.
+Smart-hide MUST default to false-negative-biased (let some noise
+through) rather than false-positive-biased (hide real data). The
+"315 unsorted" win was illusory — accuracy beats perceived cleanup.
+
+**Lesson 2 — diagnostic does most of the work**: 6 entities total
+auto-hidden by broadsheet's heuristics across the entire install.
+The reason isn't that broadsheet's heuristic is weak; it's that
+HA's `entity_category: diagnostic` on integrations is doing 95% of
+the noise suppression already. The smart-hide is a small fallback
+for entities integrations forgot to mark, not the main mechanism.
+
+**Verified post-fix**:
+- bedroom presence_node RSSI sensors visible in Bedroom area
+- FRONT DOOR cluster still de-dupes correctly (the actual `_2`
+  orphans flagged, the `_wake` button + `_operator` sensor still
+  system-flagged)
+- Aggregate hidden count: 6 (was ~170)

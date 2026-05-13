@@ -269,7 +269,12 @@ export function detectPersonDeviceClass(
  */
 const SYSTEM_PATTERNS: RegExp[] = [
 	/^button\..*_(?:wake|identify|restart|update|reboot|reset|refresh|reload)$/i,
-	/^sensor\..*_(?:battery|signal_strength|rssi|link_quality|connectivity|last_seen|last_updated|operator|esp_temperature|node_status|cpu_usage|memory_usage|wifi_strength)$/i,
+	// NOTE: bare `_rssi` and `_link_quality` were removed (M4.x.fix) — they
+	// caught BLE-tracker RSSI sensors used for trilateration (e.g.
+	// sensor.presence_node_bedroom_watch_rssi), which are FUNCTIONAL data
+	// not system noise. `_wifi_signal_strength` / `_signal_strength` /
+	// `_wifi_strength` keep catching the device's own WiFi metrics.
+	/^sensor\..*_(?:battery|signal_strength|wifi_signal_strength|wifi_strength|connectivity|last_seen|last_updated|operator|esp_temperature|node_status|cpu_usage|memory_usage|free_memory|loop_time|uptime)$/i,
 	/^update\./i,
 	/^select\..*_(?:log_level|profile|notification_action)$/i,
 	/^number\..*_(?:polling_interval|update_interval|timeout|brightness_calibration|color_temp_calibration)$/i,

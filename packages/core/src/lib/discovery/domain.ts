@@ -163,20 +163,34 @@ export function projectDomain(input: {
 	const deviceById = new Map(input.devices.map((d) => [d.id, d]));
 	const cur = input.curation;
 
-	// Pre-pass: detect duplicates by device_id + domain. The FIRST entity
-	// in registry order is treated as primary; subsequent ones get
-	// autoHideReason='duplicate'. Catches the lock.front_door +
-	// lock.front_door_2 class of orphans cleanly.
-	const seenInDevice = new Map<string, boolean>();
+	// Pre-pass: detect duplicates. Two entities are duplicates iff they
+	// share a device + their entity_ids match after stripping a trailing
+	// numeric suffix (`_2`, `_3` etc.).
+	//
+	// Examples:
+	//   lock.front_door + lock.front_door_2          → DUPLICATE (orphan re-pair)
+	//   binary_sensor.front_door_door + ..._door_2   → DUPLICATE
+	//   sensor.bedroom_watch_rssi + ..._phone_rssi   → NOT duplicate (different
+	//     functional sensors on one ESP32 multi-tracker; both are real data)
+	//   sensor.weather_temp + sensor.weather_humidity → NOT duplicate (different
+	//     sensors on one weather station)
+	//
+	// Earlier (M4.x v0) version grouped on `${device_id}:${domain}` which
+	// over-flagged anything where a multi-purpose device legitimately
+	// produced many entities of the same domain. The suffix-strip
+	// heuristic catches the orphan case (which IS what `_2` suffix
+	// strongly implies in HA's auto-naming) without the false positives.
+	const stripNumSuffix = (id: string) => id.replace(/_(\d+)$/, '');
+	const seenBaseIds = new Map<string, boolean>();
 	const duplicateIds = new Set<string>();
 	for (const e of input.entities) {
 		if (!e.device_id) continue;
-		const domain = e.entity_id.split('.')[0];
-		const key = `${e.device_id}:${domain}`;
-		if (seenInDevice.has(key)) {
+		const baseId = stripNumSuffix(e.entity_id);
+		const key = `${e.device_id}:${baseId}`;
+		if (seenBaseIds.has(key)) {
 			duplicateIds.add(e.entity_id);
 		} else {
-			seenInDevice.set(key, true);
+			seenBaseIds.set(key, true);
 		}
 	}
 
