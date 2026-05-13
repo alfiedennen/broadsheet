@@ -50,10 +50,12 @@ export function getConnection(): Connection | null {
 /**
  * Connect to HA. Idempotent — if already connected, no-op.
  *
- * For M1, only LLAT mode is supported. Add-on mode is detected at
- * the auth layer but the connection logic for it lands in M5 (it
- * needs a custom WS factory that talks to same-origin without an
- * explicit token).
+ * Both LLAT (dev / standalone) and addon (HA add-on with ingress)
+ * modes go through the same `createLongLivedTokenAuth` path — the
+ * difference is just which URL + token. For addon mode, the URL is
+ * the ingress entry (so requests route through the addon's nginx
+ * which injects the bearer for the supervisor proxy) and the token
+ * is the SUPERVISOR_TOKEN (visible to the SPA via runtime-env.js).
  */
 export async function connect(credentials: AuthCredentials): Promise<void> {
 	if (_connection) {
@@ -61,22 +63,19 @@ export async function connect(credentials: AuthCredentials): Promise<void> {
 		return;
 	}
 
-	if (credentials.mode === 'addon') {
-		// M5 implements add-on connection. For now, fail loud rather than
-		// silently misbehave.
-		const msg = 'add-on auth mode not yet implemented (M5)';
-		connStore.status = 'fatal';
-		connStore.lastError = msg;
-		audit({ kind: 'connection-status', note: msg });
-		throw new Error(msg);
-	}
-
 	connStore.status = 'connecting';
 	connStore.lastError = null;
-	audit({ kind: 'connection-status', note: `connecting to ${credentials.url}` });
+
+	const url = credentials.url;
+	const token =
+		credentials.mode === 'llat' ? credentials.token : credentials.supervisorToken;
+	audit({
+		kind: 'connection-status',
+		note: `connecting (${credentials.mode}) to ${url || '(same-origin)'}`
+	});
 
 	try {
-		const auth = createLongLivedTokenAuth(credentials.url, credentials.token);
+		const auth = createLongLivedTokenAuth(url, token);
 		const conn = await createConnection({ auth });
 		_connection = conn;
 		_reconnectTimestamps = [];

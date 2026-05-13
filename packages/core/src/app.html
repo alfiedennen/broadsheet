@@ -23,6 +23,15 @@
 			rel="stylesheet"
 		/>
 
+		<!--
+			Runtime env injection point. The HA add-on's run.sh writes
+			a fresh runtime-env.js on every container boot, populating
+			window.__BROADSHEET_ENV__ with SUPERVISOR_TOKEN + ingressEntry.
+			Empty in dev / standalone — auth.ts falls through to LLAT.
+			404 on this script is fine (added defer + no error handler).
+		-->
+		<script src="./runtime-env.js" defer onerror="void 0"></script>
+
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

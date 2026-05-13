@@ -31,9 +31,26 @@ export interface LLATCredentials {
 
 export interface AddonCredentials {
 	mode: 'addon';
-	// SPA hits same-origin; nginx injects Supervisor token via header.
-	// No token visible to the SPA itself.
-	url: string; // typically `''` (same-origin)
+	/**
+	 * The full origin + ingress entry path. WS connections + API calls
+	 * route through this so HA's ingress proxy → addon's nginx → HA Core
+	 * with the SUPERVISOR_TOKEN bearer injected by nginx.
+	 *
+	 * Example: `https://homeassistant.local:8123/api/hassio_ingress/Abc123`
+	 *
+	 * Built from `window.location.origin + window.__BROADSHEET_ENV__.ingressEntry`
+	 * at runtime — `ingressEntry` is set by the addon's run.sh from
+	 * `bashio::addon.ingress_entry`.
+	 */
+	url: string;
+	/**
+	 * The Supervisor token. Exposed to the SPA via runtime-env.js
+	 * (written by run.sh on container boot). Used as the WS auth
+	 * credential. Acceptable to expose to the SPA because it's
+	 * scoped to the addon's permissions (hassio_role: default) and
+	 * the user implicitly trusts the addon they installed.
+	 */
+	supervisorToken: string;
 }
 
 export type AuthCredentials = LLATCredentials | AddonCredentials;
@@ -42,26 +59,40 @@ const STORAGE_KEY_URL = 'broadsheet:ha:url';
 const STORAGE_KEY_TOKEN = 'broadsheet:ha:token';
 
 /**
+ * Shape of `window.__BROADSHEET_ENV__` written by the addon's run.sh.
+ *
+ * Spec: docs/ADDON-MOCK.md § "run.sh — the entrypoint"
+ */
+interface BroadsheetEnv {
+	ingressEntry: string; // e.g. "/api/hassio_ingress/Abc123"
+	supervisorToken: string; // SUPERVISOR_TOKEN auto-injected by HA
+	region?: string;
+	tmdbKey?: string | null;
+	curationEndpoint?: string;
+	pluginsEnabled?: string[];
+}
+
+declare global {
+	interface Window {
+		__BROADSHEET_ENV__?: BroadsheetEnv;
+	}
+}
+
+/**
  * Detect which auth mode we should use.
  *
  * Heuristic order (first match wins):
- *  1. If `window.__BROADSHEET_ENV__.ingressEntry` is set, we're inside
- *     the HA add-on (the add-on's `run.sh` writes this — see
- *     docs/ADDON-MOCK.md). Mode = 'addon'.
+ *  1. If `window.__BROADSHEET_ENV__.ingressEntry` AND `supervisorToken`
+ *     are set, we're inside the HA add-on. Mode = 'addon'.
  *  2. If we have an LLAT in localStorage, mode = 'llat'.
  *  3. Otherwise, mode = 'none' — UI shows /setup.
- *
- * M1 only fully implements (2) + (3). (1) is detected but the
- * connection logic for it lands in M5.
  */
 export function detectAuthMode(): AuthMode {
 	if (typeof window === 'undefined') return 'none';
 
-	// 1. Add-on environment (M5 path)
-	if (
-		typeof (window as Window & { __BROADSHEET_ENV__?: { ingressEntry?: string } })
-			.__BROADSHEET_ENV__ !== 'undefined'
-	) {
+	// 1. Add-on environment — both fields needed for a real connection
+	const env = window.__BROADSHEET_ENV__;
+	if (env && env.ingressEntry && env.supervisorToken) {
 		return 'addon';
 	}
 
@@ -78,7 +109,15 @@ export function detectAuthMode(): AuthMode {
 export function getAuthCredentials(): AuthCredentials | null {
 	const mode = detectAuthMode();
 	if (mode === 'addon') {
-		return { mode: 'addon', url: '' };
+		const env = window.__BROADSHEET_ENV__;
+		if (env && env.ingressEntry && env.supervisorToken) {
+			// Build the full URL: origin + ingress entry. The trailing path
+			// resolves to ${url}/api/websocket inside the lib's WS connector,
+			// which lands at the addon's nginx, which proxies to supervisor.
+			const url = window.location.origin + env.ingressEntry.replace(/\/$/, '');
+			return { mode: 'addon', url, supervisorToken: env.supervisorToken };
+		}
+		return null;
 	}
 	if (mode === 'llat') {
 		const { url, token } = getStoredLLAT();

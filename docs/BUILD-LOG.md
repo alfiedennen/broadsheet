@@ -1712,3 +1712,166 @@ try checked the entity's friendly_name; the noise was in the parent
 device's name. Always inspect the actual data structure, don't
 assume the obvious field is the source. Burned 30 min on the wrong
 heuristic before the data check revealed it.
+
+---
+
+## 2026-05-13 — M5 — HA add-on packaging (foundation; verification deferred)
+
+### What landed
+
+A second repo (`alfiedennen/broadsheet-addon`) packaging the SPA
+as an installable HA add-on. End-state user experience is what
+PUBLIC-README-DRAFT promised: add the repo URL, click Install,
+click Open Web UI, no token paste required.
+
+### broadsheet/core changes
+
+**`auth.ts`**: addon-mode credentials shape extended to include
+`supervisorToken` (separate from URL). Pulled from
+`window.__BROADSHEET_ENV__` set by the addon's `run.sh`.
+`detectAuthMode()` now requires both `ingressEntry` AND
+`supervisorToken` to return `'addon'`. `getAuthCredentials()` builds
+the full URL as `window.location.origin + ingressEntry`.
+
+**`client.ts`**: removed the M1 stub error for addon mode.
+`connect()` now accepts addon credentials and routes through the
+same `createLongLivedTokenAuth()` path as LLAT — the difference is
+just which URL + which token. The library handles the WS auth
+handshake; nginx adds the Supervisor bearer as belt-and-braces on
+the upgrade request.
+
+**`app.html`**: `<script src="./runtime-env.js" defer onerror="void 0">`
+added before SvelteKit boots. The script populates
+`window.__BROADSHEET_ENV__`. 404 in dev / standalone is fine
+(`onerror="void 0"` swallows it) — auth.ts falls through to LLAT.
+
+### broadsheet-addon repo (new)
+
+Structure:
+
+```
+broadsheet-addon/
+├── repository.yaml              HA recognises this as an addon repo
+├── README.md                    repo-level docs
+├── LICENSE                      MIT
+├── .gitignore                   ignores broadsheet/www/ (CI-populated)
+├── broadsheet/
+│   ├── config.yaml              addon manifest (ingress, perms, options)
+│   ├── Dockerfile               multi-arch (hass-base + nginx + Python)
+│   ├── run.sh                   entrypoint
+│   ├── nginx.conf.tpl           SPA + supervisor-bearer-injected proxy
+│   ├── sidecar.py               curation API on localhost:8100
+│   ├── DOCS.md                  shown in HA's add-on store
+│   ├── README.md                addon-internal notes
+│   ├── translations/en.yaml     options panel labels
+│   └── www/                     SPA bundle (gitignored, CI populates)
+└── .github/workflows/
+    └── builder.yaml             multi-arch CI [aarch64, amd64]
+```
+
+### Auth flow (zero user-paste)
+
+1. HA's Supervisor injects `SUPERVISOR_TOKEN` as an env var at
+   container start
+2. `run.sh` reads it + `bashio::addon.ingress_entry`, writes
+   `runtime-env.js` populating `window.__BROADSHEET_ENV__`
+3. SPA reads the env at boot, addon-mode detected by `auth.ts`
+4. Connection client builds WS URL as `<origin><ingress-entry>` and
+   passes `SUPERVISOR_TOKEN` as the auth credential
+5. Browser opens WS to `wss://<ha-host>/api/hassio_ingress/<token>/api/websocket`
+6. HA's ingress strips the prefix → addon's nginx receives
+   `/api/websocket` → `proxy_pass http://supervisor/core/api/websocket`
+   with `Authorization: Bearer ${SUPERVISOR_TOKEN}`
+7. HA Core accepts the bearer (or the JS lib's auth handshake using
+   the same token, whichever fires first)
+
+The SUPERVISOR_TOKEN is intentionally exposed to the SPA. It's
+scoped to addon-level permissions (`hassio_role: default`) and the
+user implicitly trusts the addon they installed. Same model as
+every other HA add-on with a web UI.
+
+### Curation persistence (addon mode)
+
+`/data/broadsheet.json` is in HA's snapshot map (`addon_config:rw`)
+— survives container restarts AND travels with HA backups.
+
+Sidecar (`sidecar.py`) is a tiny aiohttp service on `127.0.0.1:8100`:
+- `GET /curation` → returns the file
+- `PUT /curation` → atomic write (tmp + rename), schema-validates
+  (top-level keys + version), stamps `lastModifiedAt` server-side
+- `GET /health` → diagnostic
+
+nginx proxies `/api/broadsheet/*` → sidecar. The SPA's curation
+backend (`pickBackend()` in `lib/curation/persistence.ts`) detects
+addon mode via `window.__BROADSHEET_ENV__` and routes through the
+sidecar; localStorage backend takes over in dev / standalone.
+
+### CI: multi-arch builder
+
+`.github/workflows/builder.yaml`. On tag push (`v*.*.*`) or main
+push, matrix `[aarch64, amd64]` runs:
+
+1. Checkout addon repo at workspace root
+2. Checkout `alfiedennen/broadsheet` (SPA source) at `.broadsheet-source/`
+3. pnpm install + build the SPA
+4. Copy `packages/core/build/` into `broadsheet/www/`
+5. Login to GHCR
+6. Invoke `home-assistant/builder@2024.08.2` action with
+   `--target broadsheet --image broadsheet-{arch} --docker-hub
+   ghcr.io/<owner> --addon`
+7. Image pushed to `ghcr.io/alfiedennen/broadsheet-{aarch64|amd64}`
+
+HA's add-on Supervisor pulls from GHCR when the user installs.
+Updates flow via `version:` bump in `config.yaml` + tag push.
+
+### Verification — DEFERRED to next session
+
+I did NOT install + verify in HA OS this session. That requires
+Env 2 (VirtualBox HA OS) which is Alfie's track. The full
+verification path documented in DEV-ENVIRONMENTS.md § Env 2:
+
+1. Stand up `broadsheet-test.local` HA OS VM in VirtualBox
+2. Add `https://github.com/alfiedennen/broadsheet-addon` as a
+   custom add-on repository in HA → Settings → Add-ons → ⋮ →
+   Repositories
+3. Find broadsheet in the store, click Install (waits for CI to
+   produce the first GHCR image)
+4. Click Start, watch logs (`Starting sidecar... broadsheet ready
+   at ingress entry /api/hassio_ingress/...`)
+5. Click Open Web UI, expect zero token-paste, expect /lights / /heat /
+   /door pages to populate from the test HA's entities
+6. Open /settings/house, rename an area, restart the addon, verify
+   curation survived
+7. Verify update flow: bump `version: 0.1.0` → `0.1.1` in config.yaml,
+   push, wait for CI, HA shows update badge, apply update succeeds
+
+If any step fails, this commit is the iteration target.
+
+### Local build sanity (Env 1)
+
+Docker engine wasn't running on the dev machine, so the local
+`docker build` sanity check was skipped. svelte-check passed for
+broadsheet/core changes. The addon files weren't structurally
+verified beyond manual review.
+
+Risks:
+- HA's `hass-base` doesn't have `py3-aiohttp` available via apk in
+  some arches — Dockerfile may need `pip install aiohttp` instead.
+  Check on first CI run.
+- `tempio` template substitution syntax is `%%VAR%%` — verified
+  against the standard pattern but not tested in CI yet.
+- The HA WS server's behaviour on bearer-on-upgrade vs auth-handshake
+  is documented but not personally verified for SUPERVISOR_TOKEN
+  specifically. May need adjustment if Env 2 testing reveals an
+  auth-handshake-only requirement.
+
+### Next session priorities
+
+1. Stand up Env 2 (VirtualBox HA OS, hostname `broadsheet-test`)
+2. Verify CI builds the first GHCR image successfully
+3. Install in Env 2, walk through the verification checklist above
+4. Iterate on whatever breaks first
+5. Close out M5 once the install-to-working-page path is proven
+
+After M5 verification: M6 (production canary in real HA) → M7 (public
+release prep + flip both repos to public).
