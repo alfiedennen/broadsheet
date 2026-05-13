@@ -35,3 +35,6 @@ pnpm-debug.log*
 
 # Add-on local-build temp
 apps/addon/broadsheet/www/
+
+# Local temp files used during commit-message authoring
+.git-commit-msg.txt
