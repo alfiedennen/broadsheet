@@ -1154,3 +1154,59 @@ The full Layer 3 pipeline works end-to-end:
 
 **Settings is now the validator.** When the user tests it and reacts,
 we'll know which polish items deserve priority before M5 packaging.
+
+### M4.x — Vite stale-cache trap (post-commit)
+
+**Symptom**: Alfie opened /settings/house and reported "styling
+issues which means I cant test settings." Screenshot showed area
+rows with light grey backgrounds, near-invisible text, action
+buttons with the wrong background.
+
+**Diagnosis (via Chrome MCP `getComputedStyle`)**:
+- `.area-name` font-family = `Arial` (should be Instrument Serif)
+- `.expand` button bg = `rgb(240, 240, 240)` (browser default,
+  should be transparent inheriting warm bg)
+- `:root` had only the M0 5 tokens (`--bg/--fg/--muted/--accent/--rule`)
+  — the M3 rewrite added 30+ tokens
+- `html, body` rule still showed `font-family: Newsreader, Georgia,
+  serif` (M0 form, no `var(--font-body)`)
+- Component-scoped `.expand` rule WAS loaded correctly
+
+So `app.css` on disk was the M3 rewrite, but the browser was being
+served the M0 version. Hard browser refresh didn't fix it — the dev
+server itself was sending stale bytes.
+
+**Root cause**: Vite's dep-optimisation cache (`node_modules/.vite/`)
+and SvelteKit's generated tsconfig (`packages/core/.svelte-kit/`)
+accumulate state across long dev sessions. When something gets out
+of sync (probably the dev server got auto-restarted at some point
+and re-cached an older version of app.css before subsequent edits
+were saved), Vite happily keeps serving the cached version.
+
+**Fix**:
+1. Kill the dev server process (`Stop-Process -Id <pid> -Force`)
+2. `Remove-Item -Recurse node_modules/.vite/`
+3. `Remove-Item -Recurse packages/core/.svelte-kit/`
+4. `pnpm dev` fresh — Vite re-bundles from source
+
+**Verification post-fix**:
+- `:root` now has all 30+ M3 tokens
+- `button { background: none; ... }` reset is loaded
+- `.area-name` font = `"Instrument Serif", Iowan, Georgia, serif`
+- `.expand` button bg = `rgba(0, 0, 0, 0)` (transparent, correct)
+
+**Lesson — recurring kind of bug**: when dev hot-reload starts
+behaving strangely after a long session — especially when changes
+to global CSS imports don't seem to apply — the first thing to try
+is the cache nuke + restart sequence above. Don't waste time on
+hard-refresh / DevTools network reset / Vite-specific config
+flags; Vite's stale-cache failure mode is silent and the only
+reliable cure is the nuclear option.
+
+**For DEV-ENVIRONMENTS.md** (M4.x followup): document this in the
+"Things that go wrong in Env 1" section so future contributors
+don't burn time on it.
+
+The user did NOT delete the saved settings during this — localStorage
+is per-browser and unaffected by Vite cache state. Settings tests
+can resume without re-doing renames.
