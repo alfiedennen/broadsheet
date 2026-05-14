@@ -627,13 +627,13 @@
 					<button
 						type="button"
 						class="move-option"
-						class:current={dev.area_id === area.id}
+						class:current={dev.areaId === area.id}
 						onclick={() => moveDevice(dev.id, deviceDisplayName(dev.id, dev.name), groupKey, area.id)}
 					>
 						{area.name}
 					</button>
 				{/each}
-				{#if dev.area_id}
+				{#if dev.areaId}
 					<button
 						type="button"
 						class="move-option clear"

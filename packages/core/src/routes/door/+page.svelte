@@ -44,6 +44,16 @@
 
 	let lastAction: { id: string; result: string; at: Date } | null = $state(null);
 
+	// Cameras whose camera_proxy snapshot failed to load. Some HA camera
+	// integrations (battery P2P cams especially) expose a camera entity
+	// that 500s on camera_proxy — there's no still to serve. A broken
+	// <img> is exactly the kind of HA noise broadsheet should swallow:
+	// on error we swap in a quiet "no snapshot" placeholder instead.
+	let cameraErrors: Record<string, boolean> = $state({});
+	function markCameraFailed(id: string) {
+		cameraErrors = { ...cameraErrors, [id]: true };
+	}
+
 	async function unlock(lock: DomainEntity) {
 		const result = await callService('lock', 'unlock', { entity_id: lock.id });
 		lastAction = {
@@ -150,18 +160,26 @@
 		<div class="cameras">
 			{#each allCameras as cam (cam.id)}
 				<figure class="camera">
-					<!--
-						base-prefixed so the request rides broadsheet's nginx
-						/api/ proxy (which bearer-injects the SUPERVISOR_TOKEN).
-						A bare /api/camera_proxy/… resolves to origin root —
-						HA's own frontend — which 403s camera_proxy without a
-						signed token.
-					-->
-					<img
-						src="{base}/api/camera_proxy/{cam.id}"
-						alt={cam.name}
-						loading="lazy"
-					/>
+					{#if cameraErrors[cam.id]}
+						<div class="camera-fallback">
+							<span class="camera-fallback-icon" aria-hidden="true">⃠</span>
+							<span>No snapshot</span>
+						</div>
+					{:else}
+						<!--
+							base-prefixed so the request rides broadsheet's nginx
+							/api/ proxy (which bearer-injects the SUPERVISOR_TOKEN).
+							A bare /api/camera_proxy/… resolves to origin root —
+							HA's own frontend — which 403s camera_proxy without a
+							signed token.
+						-->
+						<img
+							src="{base}/api/camera_proxy/{cam.id}"
+							alt={cam.name}
+							loading="lazy"
+							onerror={() => markCameraFailed(cam.id)}
+						/>
+					{/if}
 					<figcaption>{cam.name}</figcaption>
 				</figure>
 			{/each}
@@ -381,6 +399,29 @@
 		aspect-ratio: 16 / 9;
 		object-fit: cover;
 		background: var(--bg-raised);
+	}
+
+	.camera-fallback {
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		border-radius: var(--radius-card);
+		border: 1px solid var(--rule);
+		background: var(--bg-raised);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-2);
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+	}
+
+	.camera-fallback-icon {
+		font-size: 1.6rem;
+		color: var(--rule-strong, var(--fg-muted));
 	}
 
 	.camera figcaption {
