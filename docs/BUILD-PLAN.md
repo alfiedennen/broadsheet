@@ -52,10 +52,15 @@ configuration required to feel complete on first paint.
 
 - **Docker / standalone path** (deferred to v0.2 gated on demand signal)
 - **OAuth flow** (only needed for the deferred Docker path)
-- **`@broadsheet/emanations` plugin** (multi-person painting renderer)
-  â€” ships as v0.1 plugin but not bundled into core
-- **`@broadsheet/ghost-cloud` plugin** (radar event playback) â€” same
-- **`@broadsheet/tmdb-tv` plugin** (TMDB content rows on `/tv`) â€” same
+- **`@broadsheet/ghost-cloud` plugin** (radar event playback) — the
+  plugin contract + system shipped in v0.1; ghost-cloud's *renderer*
+  is a post-v0.1 port.
+- **`@broadsheet/tmdb-tv` plugin** (TMDB content rows on `/tv`) — same:
+  contract in v0.1, renderer port post-v0.1.
+- _(NOTE — superseded: `@broadsheet/emanations` WAS ported in v0.1 as
+  the proof plugin during the P0–P4 plugin-system track. The bundling
+  model also changed — see the corrected section below + BUILD-LOG
+  "P0–P4" + RENDERER-CONTRACT.md.)_
 - **Lovelace strategy facade** (the v0.2 channel for using broadsheet
   renderers inside HA's own dashboards)
 - **Theme inheritance from HA** â€” i.e. broadsheet *adopting HA's*
@@ -78,16 +83,26 @@ configuration required to feel complete on first paint.
   remote `pnpm add`)
 - **Multi-instance HA support** (one HA per broadsheet install)
 
-## What's "v0.1 plugin" but ships separately
+## Plugins — how they actually ship (corrected post-P0–P4)
 
-- `@broadsheet/emanations` â€” published to npm, install via add-on
-  config option `enable_plugins: [emanations]`. Self-contained renderer.
-- `@broadsheet/ghost-cloud` â€” same
-- `@broadsheet/tmdb-tv` â€” same
+> The original plan said the trio would be "published to npm, install
+> via add-on config option `enable_plugins`". The P0–P4 plugin-system
+> build track revised this — `RENDERER-CONTRACT.md` § "Bundling model"
+> is the authoritative spec. Summary of the real model:
 
-These are the demo plugins that prove the contract. They ship
-*alongside* v0.1.0 but are toggleable; default add-on install is
-slim, plugins enable explicitly.
+- The three first-class plugins are **`workspace:*` dependencies of
+  `@broadsheet/core`**, statically imported by `registry.ts`, and
+  **bundled into the add-on image** — heavy code lazy-chunked so a
+  disabled plugin's chunks are present but never fetched.
+- A plugin is enabled per **`broadsheet.json → plugins.<id>.enabled`**
+  (toggled in `/settings/plugins`), NOT an `enable_plugins` add-on
+  option. Default install ships them all **disabled**.
+- `@broadsheet/emanations` shipped fully in v0.1 as the proof plugin
+  (page + renderer + settings panel + discoveryContributor + static
+  assets). `@broadsheet/ghost-cloud` + `@broadsheet/tmdb-tv` are
+  contract-ready stubs; their renderers are post-v0.1 ports.
+- v0.2 adds runtime install of *third-party* plugins — `registry.ts`
+  is the single seam that changes; the first-class trio stays bundled.
 
 ---
 

@@ -1875,3 +1875,179 @@ Risks:
 
 After M5 verification: M6 (production canary in real HA) → M7 (public
 release prep + flip both repos to public).
+
+---
+
+## 2026-05-14 — M5 + M6 + the plugin-system track (P0–P4)
+
+A long session. M5 closed, M6 stood up, and the whole plugin system
+got built and proven live. Addon went 0.1.0 → 0.1.31 across it.
+
+### M5 — add-on packaging, closed
+
+Verified end-to-end in Env 2 (VirtualBox HAOS). ~13 fixes burned in;
+the load-bearing ones:
+
+- **`init: false` in config.yaml.** THE root-cause fix. The hass-base
+  image's ENTRYPOINT is s6-overlay's `/init`. Supervisor's default
+  `init: true` wraps the container with `tini` as PID 1, demoting
+  s6-overlay to PID 2 → `s6-overlay-suexec: fatal: can only run as
+  pid 1` and the addon dies on every start.
+- **tempio CLI** is `echo '{}' | tempio -template <tpl> -out <out>`;
+  template syntax `{{ env "VAR" }}` (not `%%VAR%%` as the M5-prep
+  note guessed). `export INGRESS_ENTRY` so tempio sees it.
+- **nginx `sub_filter` + `sendfile off`.** SvelteKit's built SPA emits
+  absolute `/_app/` asset paths and bakes `base: ""`. nginx
+  `sub_filter` rewrites both to the ingress entry — but sub_filter
+  lives in the user-space filter chain that `sendfile()` bypasses, so
+  `sendfile off` is mandatory.
+- **`/_app/` must 404, not SPA-fallback.** A stale tab requesting old
+  chunk hashes after an addon update would otherwise get index.html
+  (200, text/html) and choke with "expected a JS module". Dedicated
+  `location /_app/ { try_files $uri =404; }`.
+- CI: addon repo at workspace root + sibling checkout of the private
+  `broadsheet` SPA repo via a fine-grained PAT (`BROADSHEET_SOURCE_PAT`).
+
+### M6 — production canary on the real ProDesk HA
+
+Installed on the live HA (addon slug `68fa04fc_broadsheet`). Bugs
+caught + fixed against the real house:
+
+- **`read_only` addon option.** Defaulted true → broadsheet couldn't
+  control anything. Now `read_only: false` default; `run.sh` injects
+  it into `runtime-env.js` as `window.__BROADSHEET_ENV__.readOnly`;
+  `initSafety` branches addon-mode on it.
+- **camera_proxy 403 → base-prefix.** `/door`'s `<img src="/api/
+  camera_proxy/…">` was root-absolute → hit HA's origin-root frontend
+  → 403. Fixed with `{base}` prefix so it rides the addon's
+  bearer-injecting `/api/` proxy. (Then 500 — that camera genuinely
+  can't serve a still; added a graceful "No snapshot" fallback.)
+- **`image.*` entities discovered as cameras.** Battery/P2P cams
+  expose a working `image.*` still while their `camera.*` sibling
+  500s. Discovery now buckets `image.*` with `camera.*`; `/door`
+  renders via the entity's `entity_picture` (correct proxy path per
+  domain).
+- **stale-sub `Uncaught (in promise)`.** The HA lib's unsubscribe fns
+  are `() => Promise<void>` (mistyped `() => void`); they reject with
+  "Subscription not found" post-reconnect. `teardownDiscovery`'s
+  synchronous try/catch couldn't catch the async rejection — wrapped
+  in `Promise.resolve(fn()).catch()`.
+
+### v0.1 broadsheet HA theme + core curation parity
+
+- HA theme (`broadsheet-addon/.../theme/broadsheet.yaml`) styles HA's
+  own chrome to the editorial register. v0.1 of the replacement
+  vision: HA's sidebar stays, just re-skinned; v0.2 inverts the
+  iframe. The HA token migration burned a lesson — `--mdc-*` (oldest)
+  → `--input-*` (mid) → `--ha-color-*` (current); `ha-select` reads
+  `ha-picker-field` reads `--ha-color-form-background`.
+- Core curation parity applied to the live HA via the sidecar
+  curation API: 5 area renames (`alfies_office`→Office etc — display
+  overrides only, HA's registry untouched so Harold's voice-intent
+  matching is unaffected), camera hides, people/presence verified.
+
+### Plugin system — P0–P4
+
+The headline work. The whole plugin system, built in five phases,
+each ending with a deploy + live verification (browser MCP from M6
+onward). The frozen `BroadsheetPlugin` contract needed **zero
+breaking changes** to ship `@broadsheet/emanations` as the proof
+plugin — P4's bar, met.
+
+**P0 — contract freeze.** `packages/core/src/lib/plugins/types.ts` is
+the machine-readable source of truth; `RENDERER-CONTRACT.md` promoted
+sketch → spec. The `@broadsheet/core` barrel (`src/lib/index.ts`) +
+`package.json` `exports` so plugins `import type` from it.
+
+**P1 — loader + registry + routing.**
+- `registry.ts` is THE bundling-aware module — the single seam v0.2's
+  runtime-install extends. Everything downstream is bundling-agnostic.
+- `loader.svelte.ts` — static validation (id/slug collisions) +
+  reactive `PluginStatus`.
+- `[pluginSlug]` catch-all route; static core routes win by
+  specificity. Plugin component rendered in `<svelte:boundary>`.
+
+**P2 — `/settings/plugins` + `useRenderer`.** The honesty escape
+hatch (status + working enable/disable toggle) and the opportunistic
+renderer hook (core's `/` upgrades its `ProceduralPainting` to a
+plugin renderer when active).
+
+**P3 — static-asset pipeline.** `pluginAssetUrl` + CI staging plugin
+`static/` dirs into `www/plugin-assets/<id>/` + nginx
+`location /plugin-assets/`. NOT `/local/<id>/` — the addon's nginx
+already owns `/local/` (HA-Core proxy); plugin assets get their own
+namespace.
+
+**P4 — emanations ported.** Every contract surface exercised by one
+plugin: page, renderer (procedural + painting-capable), settingsPanel
+(`useCurationField` + `SettingsRow` + `[pluginId]/config` route),
+discoveryContributor (sandboxed fetch → `discovery.plugins.<id>`),
+static painting assets. The chain works end to end: contributor finds
+the painting manifest → `pluginAssetUrl` resolves it → a settings
+field gates it → the renderer paints.
+
+### Gotchas burned in (P0–P4)
+
+- **`return $derived(...)` is illegal.** `$derived` may only be a
+  variable-declaration initializer / class field. And a Svelte 5
+  function can't return a reactive primitive at all — `useRenderer`
+  returns a `{ get current }` handle; the getter is the reactive
+  access point.
+- **`LazyComponent` must be `Component<any>`.** `Component<Props>` is
+  contravariant in `Props`, so no concrete props type accepts *every*
+  component (a no-props component is `Component<Record<string,
+  never>>`). `Component<any>` is the deliberate escape hatch for a
+  heterogeneous registry.
+- **Reactive-churn restarting `{#await}`.** The `[pluginSlug]` route
+  awaited `activePage.component()` — but `activePage` is rebuilt on
+  every discovery tick (the loader's derived chain produces fresh
+  wrapper objects per HA state delta). Each tick handed `{#await}` a
+  new promise → the import restarted forever, "Loading…" with no
+  error. Fix: pull the stable `.component` thunk into its own
+  `$derived` — Svelte's `===` dedup keeps it stable across ticks.
+- **The contributor debounce starved by the state-delta stream.** Same
+  family of bug, worse. The contributor `$effect` tracked
+  `discovery.areas/persons/floors` — derived projections that
+  recompute on EVERY entity-state delta, which a live HA streams many
+  times a second. The 400ms debounce was reset forever;
+  `runContributors` (almost) never fired — `/emanations` was flaky,
+  painting only when it caught a rare quiet window. First fix
+  (track `pluginLoader.registry` instead) was ALSO wrong — `registry`'s
+  `$derived` reads the discovery snapshot for `visibleWhen`, so it
+  churns too. **Final trigger set: `discovery.booted` +
+  `discovery.lastRefreshAt` + `curationStore.tick`** — none move on
+  state deltas. Lesson: when an effect must run "on structural change,
+  not on live data", audit the FULL `$derived` dependency chain of
+  every signal you track — a derived that *looks* structural can
+  transitively read a high-churn source.
+- **The discovery↔contributor import cycle.** `discovery` exposes
+  `.plugins`; the contributor runner reads `discovery`. Broke the
+  cycle with `contributorStore.svelte.ts` — an importless module
+  holding just the `$state` stores; discovery imports the store, the
+  runner imports the store + discovery.
+- **`/local/<id>/` collision.** The contract sketch said plugin
+  assets serve at `/local/<id>/`, but the addon's nginx already
+  proxies `/local/` to HA Core. Moved to `/plugin-assets/<id>/`;
+  `pluginAssetUrl` abstracts the URL so it's not a contract break.
+
+### Process notes
+
+- From M6 on, verification moved to the Chrome MCP — screenshotting
+  the live addon, reading its console, driving its toggles. Two of
+  the P-track bugs above (route churn, contributor starvation) are
+  runtime-only — build + `svelte-check` are both green on them. Live
+  verification is not optional for this kind of work.
+- Addon deploys go via the HA WS `supervisor/api` `/addons/<slug>/
+  update` endpoint after a `/store/reload`, then a hard-gate verify
+  (`version`/`state`/`update_available`). The update call drops the
+  ingress WS mid-operation — it reports failure but the update
+  succeeds; always re-verify rather than trusting the call's return.
+
+### State at end of session
+
+- Addon **0.1.31** live on the real ProDesk HA (M6 canary).
+- Plugin system complete + verified; `@broadsheet/emanations` is the
+  working proof plugin.
+- Open: deferred cosmetics (white hover states on HA chrome,
+  aarch64-on-real-hardware); post-v0.1 the ghost-cloud + tmdb-tv
+  renderer ports against the now-proven contract; M7 (public release).

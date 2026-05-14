@@ -309,59 +309,58 @@ User curation can add to this map (pin a custom-domain entity to a page).
 
 ## Plugin system
 
-Plugins are NPM packages that **register pages, renderers, or
-integrations** at boot. The default broadsheet ships with NO plugins â€”
-slim, fast, works for everyone. Plugins activate when both:
+> **Built + shipped in v0.1** via the P0–P4 plugin-system track.
+> `RENDERER-CONTRACT.md` is the authoritative spec; the
+> `BroadsheetPlugin` interface in `packages/core/src/lib/plugins/`
+> is the machine-readable source of truth. This section is the
+> overview — read the contract doc for detail.
 
-1. The package is installed (or auto-detected via a registry)
-2. The user's HA has the data the plugin expects
+Plugins **register pages, renderers, settings panels, and discovery
+contributors**. The default broadsheet ships with the plugin *system*
+but every plugin **disabled** — slim, fast, works for everyone.
+
+A plugin is **active** when all hold:
+1. it's bundled into the image (the first-class trio is) — or
+   runtime-installed (v0.2);
+2. `broadsheet.json → plugins.<id>.enabled === true` (toggled in
+   `/settings/plugins`);
+3. its loader checks pass (contract-shape valid, no slug collision)
+   and — per page — its `visibleWhen(discovery)` returns true.
+
+### Bundling model (v0.1)
+
+The three first-class plugins are **`workspace:*` dependencies of
+`@broadsheet/core`**. `core/src/lib/plugins/registry.ts` statically
+imports them — it is the *only* bundling-aware module; everything
+downstream (loader, `[pluginSlug]` route, KebabNav, `useRenderer`,
+`/settings/plugins`) consumes a bundling-agnostic `BroadsheetPlugin[]`.
+Heavy code sits behind `() => import(...)` thunks so Vite code-splits
+it; a disabled plugin's chunks are present in the image but never
+fetched. **`enabled` gates registration, not bundling.**
+
+v0.2 extends `registry.ts` (and only `registry.ts`) with a runtime
+code path for third-party plugins. The first-class trio stays bundled.
 
 ### Plugin shape
 
-```ts
-// example: @broadsheet/emanations
-export const plugin: BroadsheetPlugin = {
-  id: 'emanations',
-  pages: [
-    {
-      slug: 'emanations',
-      label: 'Emanations',
-      requiresEntity: (e) => e.entity_id.startsWith('sensor.') && e.entity_id.endsWith('_committed_room'),
-      // Page renders when at least 2 _committed_room sensors found (multi-person)
-      visibleWhen: (discovery) => discovery.entities.filter(/* ... */).length >= 2,
-      // The component to render
-      component: () => import('./EmanationsPage.svelte')
-    }
-  ],
-  // Optional: register a renderer the user can reference from /
-  renderers: {
-    'multi-person-painting': () => import('./MultiPersonPainting.svelte')
-  }
-};
-```
-
-### Plugin loader
-
-```ts
-// src/lib/plugins.ts
-const plugins: BroadsheetPlugin[] = await Promise.all([
-  // Lazy import â€” only fetched if the user's broadsheet.json enables them
-  ...config.plugins.enabled.map((id) => import(`@broadsheet/${id}`).then(m => m.plugin))
-]);
-```
+See `RENDERER-CONTRACT.md` § "Plugin shape" for the full, frozen
+`BroadsheetPlugin` interface — `pages`, `renderers`, `settingsPanel`,
+`staticAssets`, `discoveryContributors`, lifecycle hooks. Two hard
+rules on a plugin's `index.ts`: no side effects at module-eval time,
+and `import type` from `@broadsheet/core` only (never a runtime
+import — `registry.ts` imports the plugin, so a back-import cycles).
 
 ### Three first-class plugins (extracted from harold-home)
 
-- **`@broadsheet/emanations`** â€” multi-person presence painting. Ships
-  the `room.html` + `room.js` + `stage.js` renderers, the painting-set
-  convention (`<slug>.png`, `<slug>-elena.png`, `<slug>-both.png`), the
-  away-pane CSS treatment.
-- **`@broadsheet/ghost-cloud`** â€” 24-hour radar event playback.
-  Three.js + Web Audio. Ships the `ghost-cloud.js` renderer + a
-  precompute script for HA-side data preparation.
-- **`@broadsheet/tmdb-tv`** â€” the TMDB-driven content rows on `/tv`.
-  Pull out into a plugin so people who don't have a TV (or don't want
-  the TMDB dependency) ship lighter.
+- **`@broadsheet/emanations`** — multi-person presence painting.
+  **Ported in full in v0.1 as the proof plugin** — page, renderer
+  (procedural default + painting-capable), settings panel, painting-
+  set discoveryContributor, static painting assets.
+- **`@broadsheet/ghost-cloud`** — 24-hour radar event playback.
+  Three.js + Web Audio. Contract-ready stub; renderer + precompute
+  port is post-v0.1.
+- **`@broadsheet/tmdb-tv`** — TMDB-driven content rows on `/tv`.
+  Contract-ready stub; renderer port is post-v0.1.
 
 ---
 
