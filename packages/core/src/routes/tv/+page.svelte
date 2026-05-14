@@ -80,17 +80,70 @@
 		else await callOn(primaryTv.id);
 	}
 
-	// Apps / sources — the primary TV's media_player exposes a
-	// `source_list` (its installed apps + inputs). Render a launch
-	// button per source; `select_source` switches the TV to it. No
-	// hardcoded streamer list — whatever the TV reports, we surface.
-	const tvSources = $derived(
+	// Apps / sources. A media_player only exposes `source_list` (its
+	// installed apps + inputs) while it's ON — so we cache the
+	// last-seen list per TV in localStorage. The launch buttons then
+	// stay put when the TV is off, and tapping one wakes the set
+	// before switching source. Still general — whatever the TV
+	// reports, no hardcoded streamer list.
+	const SOURCE_CACHE_PREFIX = 'broadsheet:tv-sources:';
+
+	function cachedSources(entityId: string): string[] {
+		if (typeof localStorage === 'undefined') return [];
+		try {
+			const raw = localStorage.getItem(SOURCE_CACHE_PREFIX + entityId);
+			return raw ? (JSON.parse(raw) as string[]) : [];
+		} catch {
+			return [];
+		}
+	}
+
+	const liveSources = $derived(
 		(primaryTv?.state?.attributes?.source_list as string[] | undefined) ?? []
 	);
 	const currentSource = $derived(primaryTv?.state?.attributes?.source as string | undefined);
+	const tvOn = $derived(
+		!!primaryTv &&
+			['on', 'playing', 'paused', 'idle'].includes(primaryTv.state?.state ?? '')
+	);
 
-	async function selectSource(source: string) {
+	// Persist the live list whenever the TV reports one, so the
+	// buttons survive the TV going off.
+	$effect(() => {
+		if (!primaryTv || liveSources.length === 0 || typeof localStorage === 'undefined') return;
+		try {
+			localStorage.setItem(SOURCE_CACHE_PREFIX + primaryTv.id, JSON.stringify(liveSources));
+		} catch {
+			/* quota — ignore */
+		}
+	});
+
+	// A small set of near-universal streamer apps — the tier-3
+	// fallback shown before the TV has ever been seen on, so the
+	// section ships with buttons out of the box rather than an empty
+	// note. The moment the TV reports its real source_list, that
+	// replaces this (and caches). Names that don't match the TV's own
+	// won't switch — but once it's on once, reality takes over.
+	const DEFAULT_SOURCES = ['Netflix', 'Disney+', 'Prime Video', 'YouTube', 'Apple TV'];
+
+	// Three tiers: the live list when the TV's on; the cached list
+	// when it's off but has been seen on; the default set otherwise.
+	const sourceMode = $derived.by(() => {
+		if (liveSources.length > 0) return { sources: liveSources, mode: 'live' as const };
+		const cached = primaryTv ? cachedSources(primaryTv.id) : [];
+		if (cached.length > 0) return { sources: cached, mode: 'cached' as const };
+		return { sources: DEFAULT_SOURCES, mode: 'default' as const };
+	});
+	const tvSources = $derived(sourceMode.sources);
+
+	async function launchSource(source: string) {
 		if (!primaryTv) return;
+		// select_source on a cold set is a no-op — wake it first, then
+		// give it a beat before switching.
+		if (!tvOn) {
+			await callOn(primaryTv.id);
+			await new Promise((r) => setTimeout(r, 2500));
+		}
 		await callService('media_player', 'select_source', { entity_id: primaryTv.id }, { source });
 	}
 
@@ -153,24 +206,24 @@
 
 	{#if primaryTv}
 		<OutLine label="Apps" />
-		{#if tvSources.length > 0}
-			<div class="sources">
-				{#each tvSources as source (source)}
-					<button
-						class="source-btn"
-						class:active={source === currentSource}
-						type="button"
-						onclick={() => selectSource(source)}
-					>
-						{source}
-					</button>
-				{/each}
-			</div>
-		{:else}
-			<!-- An off / standby TV reports no source_list — HA only
-			     has the app list while the set is on. Say so rather
-			     than vanishing the section. -->
-			<p class="sources-note"><em>Turn the TV on to see its apps.</em></p>
+		<div class="sources">
+			{#each tvSources as source (source)}
+				<button
+					class="source-btn"
+					class:active={tvOn && source === currentSource}
+					type="button"
+					onclick={() => launchSource(source)}
+				>
+					{source}
+				</button>
+			{/each}
+		</div>
+		{#if sourceMode.mode === 'default'}
+			<p class="sources-note">
+				<em>Common apps — your TV's own list loads the first time it's on.</em>
+			</p>
+		{:else if !tvOn}
+			<p class="sources-note"><em>TV is off — tapping an app wakes it first.</em></p>
 		{/if}
 	{/if}
 
