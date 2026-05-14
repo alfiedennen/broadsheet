@@ -67,6 +67,61 @@ export async function updateEntityArea(
 }
 
 /**
+ * Move a whole DEVICE to a different area in HA's registry.
+ *
+ * This is the "place a thing in a room" primitive. HA cascades it
+ * natively — every entity under the device that doesn't carry its own
+ * explicit `area_id` inherits the device's area. broadsheet's
+ * `resolveAreaId` already does the `entity.area_id → device.area_id`
+ * fallback, so the device's entities migrate as one.
+ *
+ * Pass `null` to clear the device's area (its area-less entities
+ * return to Unsorted).
+ *
+ * `device_registry_updated` is subscribed in discovery/registries.ts,
+ * so the change re-projects within the debounce window (~500ms).
+ *
+ * Same safety model as `updateEntityArea` — registry metadata, not
+ * hardware actuation; audit-logged, not readonly-gated.
+ */
+export async function updateDeviceArea(
+	deviceId: string,
+	areaId: string | null
+): Promise<ServiceCallResult> {
+	const conn = getConnection();
+	if (!conn) {
+		audit({
+			kind: 'auth-event',
+			note: `updateDeviceArea(${deviceId}): no connection`,
+			error: 'no active HA connection'
+		});
+		return { success: false, reason: 'not-connected', error: 'No active HA connection' };
+	}
+
+	audit({
+		kind: 'auth-event',
+		note: `updateDeviceArea: ${deviceId} → ${areaId ?? '(no area)'}`
+	});
+
+	try {
+		await conn.sendMessagePromise({
+			type: 'config/device_registry/update',
+			device_id: deviceId,
+			area_id: areaId
+		});
+		return { success: true };
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		audit({
+			kind: 'auth-event',
+			note: `updateDeviceArea: ${deviceId} → ${areaId ?? '(no area)'} FAILED`,
+			error: msg
+		});
+		return { success: false, reason: 'ha-error', error: msg };
+	}
+}
+
+/**
  * Rename an area in HA's registry. Different from broadsheet's
  * curation rename (which only affects broadsheet's display) —
  * this writes to HA itself and is visible to every HA frontend.

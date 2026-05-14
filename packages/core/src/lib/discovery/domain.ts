@@ -53,6 +53,10 @@ export interface DomainEntity {
 		name: string | null;
 		model: string | null;
 		manufacturer: string | null;
+		/** The device's own area_id in HA's registry (not the resolved
+		 *  entity area). Drives the "place a thing in a room" picker —
+		 *  knowing where the device currently sits. */
+		areaId: string | null;
 	} | null;
 	areaId: string | null; // resolved area_id (entity > device fallback)
 	labels: string[]; // label_ids carried from registry
@@ -240,7 +244,8 @@ export function projectDomain(input: {
 						id: device.id,
 						name: device.name_by_user ?? device.name,
 						model: device.model,
-						manufacturer: device.manufacturer
+						manufacturer: device.manufacturer,
+						areaId: device.area_id ?? null
 					}
 				: null,
 			areaId,

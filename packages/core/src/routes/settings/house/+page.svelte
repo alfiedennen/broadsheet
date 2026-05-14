@@ -27,7 +27,7 @@
 	} from '$lib/curation/store.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
-	import { updateEntityArea } from '$lib/ha/registry';
+	import { updateEntityArea, updateDeviceArea } from '$lib/ha/registry';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
@@ -52,6 +52,8 @@
 	let deviceRenameBuffer = $state<Record<string, string>>({});
 	/** Entity IDs whose Move-to-area picker is currently visible. */
 	let movePickerOpen = $state<Set<string>>(new Set());
+	/** Device group-keys whose Move-to-area picker is currently visible. */
+	let deviceMovePickerOpen = $state<Set<string>>(new Set());
 	/**
 	 * Device group keys (deviceId) that are currently expanded.
 	 * Multi-entity device groups default to collapsed â€” the header
@@ -214,6 +216,43 @@
 			const next = new Set(movePickerOpen);
 			next.delete(entity.id);
 			movePickerOpen = next;
+		} else {
+			showToast(`Move failed: ${result.error ?? result.reason}`, 'error');
+		}
+	}
+
+	/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ device move-picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+	// "Place a thing in a room." Setting a DEVICE's area_id in HA's
+	// registry makes every area-less entity under it inherit the area
+	// natively — broadsheet's resolveAreaId already has the
+	// entity→device area fallback, so the device's entities migrate as
+	// one. device_registry_updated re-projects within the debounce
+	// window. Keyed by the device-group key (not device id) so it
+	// matches expandedDevices etc.
+
+	function toggleDeviceMovePicker(groupKey: string) {
+		const next = new Set(deviceMovePickerOpen);
+		if (next.has(groupKey)) next.delete(groupKey);
+		else next.add(groupKey);
+		deviceMovePickerOpen = next;
+	}
+
+	async function moveDevice(
+		deviceId: string,
+		deviceName: string,
+		groupKey: string,
+		targetAreaId: string | null
+	) {
+		const targetName =
+			targetAreaId === null
+				? '(no area)'
+				: (movableAreas.find((a) => a.id === targetAreaId)?.name ?? targetAreaId);
+		const result = await updateDeviceArea(deviceId, targetAreaId);
+		if (result.success) {
+			showToast(`Moved ${deviceName} â†’ ${targetName} (entities follow)`, 'success');
+			const next = new Set(deviceMovePickerOpen);
+			next.delete(groupKey);
+			deviceMovePickerOpen = next;
 		} else {
 			showToast(`Move failed: ${result.error ?? result.reason}`, 'error');
 		}
@@ -572,6 +611,41 @@
 		</div>
 	{/snippet}
 
+	<!--
+		Device move-picker — "place a thing in a room". Mirrors the
+		entity move-picker, but one click moves the whole device:
+		updateDeviceArea writes the device's area_id to HA's registry,
+		HA cascades it to every area-less entity under the device, and
+		broadsheet re-projects on device_registry_updated. `dev` is the
+		device record; `groupKey` keys the open/close set.
+	-->
+	{#snippet deviceMovePicker(dev: NonNullable<DomainEntity['device']>, groupKey: string)}
+		<div class="move-picker device-move-picker">
+			<span class="move-label">Place device in</span>
+			<div class="move-options">
+				{#each movableAreas as area (area.id)}
+					<button
+						type="button"
+						class="move-option"
+						class:current={dev.area_id === area.id}
+						onclick={() => moveDevice(dev.id, deviceDisplayName(dev.id, dev.name), groupKey, area.id)}
+					>
+						{area.name}
+					</button>
+				{/each}
+				{#if dev.area_id}
+					<button
+						type="button"
+						class="move-option clear"
+						onclick={() => moveDevice(dev.id, deviceDisplayName(dev.id, dev.name), groupKey, null)}
+					>
+						(no area)
+					</button>
+				{/if}
+			</div>
+		</div>
+	{/snippet}
+
 	<ul class="area-list">
 		{#each sortedAreas as area (area.id)}
 			{@const expanded = expandedAreaId === area.id}
@@ -701,10 +775,14 @@
 															<button class="mini" type="button" onclick={() => cancelRenameDevice(dev.id)}>Cancel</button>
 														{:else}
 															<button class="mini" type="button" onclick={() => startRenameDevice(dev.id, dev.name)}>Rename device</button>
+															<button class="mini" type="button" onclick={() => toggleDeviceMovePicker(group.key)}>{deviceMovePickerOpen.has(group.key) ? 'Close move' : 'Move…'}</button>
 															<button class="mini" type="button" onclick={() => toggleDeviceHidden(dev.id, false, dDisplayName)}>Hide device</button>
 														{/if}
 													</div>
 												</div>
+												{#if deviceMovePickerOpen.has(group.key) && !dRenaming}
+													{@render deviceMovePicker(dev, group.key)}
+												{/if}
 												{#if deviceExpanded && !dRenaming}
 													<div class="device-entities">
 														{#each group.entities as entity (entity.id)}
@@ -808,12 +886,18 @@
 												<button class="mini" type="button" onclick={() => startRenameDevice(dev.id, dev.name)}>
 													Rename device
 												</button>
+												<button class="mini" type="button" onclick={() => toggleDeviceMovePicker(group.key)}>
+													{deviceMovePickerOpen.has(group.key) ? 'Close move' : 'Move…'}
+												</button>
 												<button class="mini" type="button" onclick={() => toggleDeviceHidden(dev.id, dHidden, dDisplayName)}>
 													{dHidden ? 'Show device' : 'Hide device'}
 												</button>
 											{/if}
 										</div>
 									</div>
+									{#if deviceMovePickerOpen.has(group.key) && !dRenaming}
+										{@render deviceMovePicker(dev, group.key)}
+									{/if}
 									{#if deviceExpanded && !dRenaming}
 										<div class="device-entities">
 											{#each group.entities as entity (entity.id)}
