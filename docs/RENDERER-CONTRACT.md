@@ -196,8 +196,8 @@ out across the plugin-system phases:
 | **P0** — contract freeze | `BroadsheetPlugin` + all contract types, the discovery domain types (`DomainArea`, `DomainEntity`, `DomainFloor`, `DomainPerson`, `PageSlug`), `State`, `RESERVED_ROUTE_SLUGS`, `VERSION` |
 | **P1** — loader + routing | `discovery` singleton, UI primitives `PageShell` / `Hero` / `Eyebrow` / `OutLine` |
 | **P2** — settings/plugins + renderers | `useRenderer` |
-| **P3** — contributors + assets | `pluginAssetUrl` |
-| **P4** — settings panels | `useCurationField`, `SettingsRow` |
+| **P3** — static-asset pipeline | `pluginAssetUrl` |
+| **P4** — settings panels + discovery contributors | `useCurationField`, `SettingsRow` + the `discoveryContributor` runtime — all landing with emanations as their proving consumer (no runtime ships without something exercising it) |
 
 ---
 
@@ -369,16 +369,21 @@ with the proof plugin's real config):
 A plugin ships static assets (paintings, JS modules, shaders, JSON,
 fonts) by setting `staticAssets` to a directory relative to its
 package root. The add-on build stages those directories into the
-image and nginx serves them at `/local/<plugin-id>/*`:
+image at `www/plugin-assets/<plugin-id>/`, and nginx serves them at
+`/plugin-assets/<plugin-id>/*`:
 
 ```
 @broadsheet/ghost-cloud/
 ├── package.json
 ├── src/
-└── static/                       →  /local/ghost-cloud/*
-    ├── ghost-cloud.js             →  /local/ghost-cloud/ghost-cloud.js
-    └── shaders/water.frag         →  /local/ghost-cloud/shaders/water.frag
+└── static/                       →  /plugin-assets/ghost-cloud/*
+    ├── ghost-cloud.js             →  /plugin-assets/ghost-cloud/ghost-cloud.js
+    └── shaders/water.frag         →  /plugin-assets/ghost-cloud/shaders/water.frag
 ```
+
+> **Not `/local/<plugin-id>/`.** The add-on's nginx already owns
+> `/local/` — it proxies to HA Core's own www folder. Plugin assets
+> get the dedicated `/plugin-assets/` namespace so they can't collide.
 
 Plugin code references its own assets via `pluginAssetUrl` (P3),
 which wraps path resolution so it works under HA Ingress AND direct
@@ -387,6 +392,7 @@ serving without the plugin knowing about ingress prefixes:
 ```ts
 import { pluginAssetUrl } from '@broadsheet/core';
 const fragShaderUrl = pluginAssetUrl('ghost-cloud', 'shaders/water.frag');
+// → "<ingress-prefix>/plugin-assets/ghost-cloud/shaders/water.frag"
 ```
 
 ---

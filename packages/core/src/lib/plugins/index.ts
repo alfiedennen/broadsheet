@@ -10,3 +10,4 @@ export { RESERVED_ROUTE_SLUGS } from './types';
 export { BUNDLED_PLUGINS } from './registry';
 export { pluginLoader, bootPlugins, type ActivePluginPage } from './loader.svelte';
 export { useRenderer, rendererRegistry } from './renderers.svelte';
+export { pluginAssetUrl } from './assets';

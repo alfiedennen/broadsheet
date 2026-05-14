@@ -11,11 +11,17 @@
 	 * whole contract path: bundled separate package → registry →
 	 * loader → [pluginSlug] route → rendered inside an error boundary.
 	 */
-	import { PageShell, Hero, Eyebrow, OutLine, discovery } from '@broadsheet/core';
+	import { PageShell, Hero, Eyebrow, OutLine, discovery, pluginAssetUrl } from '@broadsheet/core';
 
 	const peopleWithSensor = $derived(
 		discovery.persons.filter((p) => p.suggestedPresenceSensor !== null)
 	);
+
+	// Proves the P3 static-asset pipeline end to end: this SVG ships
+	// in packages/emanations/static/, is staged into the add-on image
+	// at www/plugin-assets/emanations/, served by nginx, and resolved
+	// here through pluginAssetUrl — ingress-prefix-correct.
+	const markUrl = pluginAssetUrl('emanations', 'mark.svg');
 </script>
 
 <svelte:head>
@@ -37,22 +43,41 @@
 	</Hero>
 
 	<OutLine label="Plugin contract" />
-	<dl class="facts">
-		<dt>Package</dt>
-		<dd><code>@broadsheet/emanations</code></dd>
-		<dt>Delivery</dt>
-		<dd>bundled · lazy-chunked · curation-gated</dd>
-		<dt>People with a presence sensor</dt>
-		<dd>{peopleWithSensor.length}</dd>
-	</dl>
+	<div class="contract">
+		<img class="mark" src={markUrl} alt="" width="120" height="120" />
+		<dl class="facts">
+			<dt>Package</dt>
+			<dd><code>@broadsheet/emanations</code></dd>
+			<dt>Delivery</dt>
+			<dd>bundled · lazy-chunked · curation-gated</dd>
+			<dt>Static asset</dt>
+			<dd><code>{markUrl}</code></dd>
+			<dt>People with a presence sensor</dt>
+			<dd>{peopleWithSensor.length}</dd>
+		</dl>
+	</div>
 </PageShell>
 
 <style>
+	.contract {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-6);
+		flex-wrap: wrap;
+	}
+
+	.mark {
+		flex: 0 0 auto;
+		display: block;
+	}
+
 	.facts {
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: var(--space-2) var(--space-6);
 		margin: 0;
+		flex: 1;
+		min-width: 16rem;
 	}
 
 	.facts dt {

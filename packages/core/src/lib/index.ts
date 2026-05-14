@@ -13,8 +13,10 @@
  *  - P1 (loader + routing) — `discovery` singleton, UI primitives
  *    (`PageShell`, `Hero`, `Eyebrow`, `OutLine`).
  *  - P2 (settings + renderers) — `useRenderer`.
- *  - P3 (contributors + assets) — `pluginAssetUrl`.
- *  - P4 (settings panels) — `useCurationField`, `SettingsRow`.
+ *  - P3 (static-asset pipeline) — `pluginAssetUrl`.
+ *  - P4 (settings panels + discovery contributors) — `useCurationField`,
+ *    `SettingsRow`, and the discoveryContributor runtime, all landing
+ *    with emanations as their proving consumer.
  */
 
 export const VERSION = '0.1.0';
@@ -57,3 +59,8 @@ export { default as OutLine } from './components/OutLine.svelte';
 // plugin is active, else null — so a core page can opportunistically
 // upgrade to a plugin renderer with its own fallback.
 export { useRenderer } from './plugins/renderers.svelte';
+
+/* ── Plugin static-asset URL resolver (P3) ───────────────────────── */
+// `pluginAssetUrl(id, path)` resolves a plugin's bundled static asset
+// to a URL that works under HA Ingress and direct serving alike.
+export { pluginAssetUrl } from './plugins/assets';

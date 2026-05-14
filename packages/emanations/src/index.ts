@@ -43,5 +43,12 @@ export const plugin: BroadsheetPlugin = {
 	// is active. P2 stub; P4 ports the real axonometric painting.
 	renderers: {
 		'multi-person-painting': () => import('./renderers/MultiPersonPainting.svelte')
-	}
+	},
+
+	// Static assets shipped with the plugin. The add-on build stages
+	// this directory into the image at www/plugin-assets/emanations/;
+	// nginx serves it at /plugin-assets/emanations/*. Plugin code
+	// references it via pluginAssetUrl('emanations', '<path>'). P3
+	// ships a placeholder mark.svg; P4 ships the real painting set.
+	staticAssets: 'static/'
 };
