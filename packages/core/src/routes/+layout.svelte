@@ -30,9 +30,19 @@
 		// 2. Wire audit log → reactive tick so UI dl/audit lists re-render
 		wireAuditReactivity();
 
-		// 3. Initialise safety state from env + URL
+		// 3. Initialise safety state.
+		// In ADDON mode the user installed broadsheet to control their
+		// house — writes are allowed by default; broadsheet is only
+		// read-only if the add-on's `read_only` option was explicitly
+		// set (run.sh injects it as window.__BROADSHEET_ENV__.readOnly).
+		// In dev/standalone the PUBLIC_BROADSHEET_READONLY build-time env
+		// var governs, defaulting safe (= read-only) so a dev-server bug
+		// can't toggle a real house. `lock.*` stays hard-banned in both.
+		const addonEnv = typeof window !== 'undefined' ? window.__BROADSHEET_ENV__ : undefined;
 		initSafety({
-			readonly: env.PUBLIC_BROADSHEET_READONLY !== 'false'
+			readonly: addonEnv
+				? addonEnv.readOnly === true
+				: env.PUBLIC_BROADSHEET_READONLY !== 'false'
 		});
 
 		// 3. Detect auth mode + try to connect

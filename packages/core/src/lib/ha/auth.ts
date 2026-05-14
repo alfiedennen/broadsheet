@@ -70,6 +70,14 @@ interface BroadsheetEnv {
 	tmdbKey?: string | null;
 	curationEndpoint?: string;
 	pluginsEnabled?: string[];
+	/**
+	 * Add-on `read_only` option. When broadsheet runs as the HA add-on
+	 * the user installed it to control their house, so writes are
+	 * allowed by default — this is only `true` if the user explicitly
+	 * set the add-on's `read_only` option to make it a viewer.
+	 * (`lock.*` stays hard-banned regardless — see ha/actions.ts.)
+	 */
+	readOnly?: boolean;
 }
 
 declare global {
