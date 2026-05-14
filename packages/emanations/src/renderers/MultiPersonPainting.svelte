@@ -13,12 +13,16 @@
 	 * reusable as a Lovelace strategy in v0.2).
 	 *
 	 * P2 stub: deliberately VISIBLE — a present, saturated field with
-	 * each person rendered as a soft "emanation" orb, so toggling
-	 * emanations on/off in /settings/plugins produces an unmistakable
-	 * change on `/`. It also actually consumes the `persons` prop, so
-	 * it reads as "the multi-person renderer", not just a gradient.
-	 * P4 replaces this with the real axonometric multi-person painting
-	 * ported from harold-home.
+	 * each person rendered as a soft hue-spread orb labelled with
+	 * their name, so toggling emanations on/off in /settings/plugins
+	 * produces an unmistakable change on `/`. It actually consumes the
+	 * `persons` prop, so it reads as "the multi-person renderer", not
+	 * just a gradient. P4 replaces this with the real axonometric
+	 * multi-person painting ported from harold-home.
+	 *
+	 * Layout note: the blurred orb and the crisp name are SIBLINGS
+	 * inside `.person` — `filter: blur` applies to a whole subtree, so
+	 * the name can't live inside the orb or it blurs too.
 	 */
 	import type { DomainPerson } from '@broadsheet/core';
 
@@ -29,22 +33,27 @@
 	// tracked, which is enough to prove the swap.
 	let { persons = [] }: { persons?: DomainPerson[] } = $props();
 
-	// A warm hue per person, spread around the wheel — deterministic
-	// from index so the layout is stable.
+	// A warm-anchored hue per person, spread around the wheel.
 	function hueFor(i: number): number {
 		return (28 + i * 67) % 360;
+	}
+
+	// Horizontal placement, kept inside 30%–70% so orbs never clip
+	// the viewport edge and frame (not cover) the centred manifest.
+	function personX(i: number, n: number): number {
+		if (n <= 1) return 50;
+		return 30 + (i * 40) / (n - 1);
 	}
 </script>
 
 <div class="emanation" aria-hidden="true">
 	<div class="field"></div>
 	{#each persons as person, i (person.id)}
-		{@const hue = hueFor(i)}
-		{@const x = persons.length === 1 ? 50 : 22 + (i * 56) / Math.max(1, persons.length - 1)}
 		<div
-			class="orb"
-			style="--hue: {hue}; --x: {x}%; --delay: {i * 1.7}s;"
+			class="person"
+			style="--hue: {hueFor(i)}; --x: {personX(i, persons.length)}%; --delay: {i * 1.7}s;"
 		>
+			<div class="orb"></div>
 			<span class="orb-name">{person.name}</span>
 		</div>
 	{/each}
@@ -80,22 +89,15 @@
 		}
 	}
 
-	/* One soft orb per person — clearly visible, hue-spread. */
-	.orb {
+	/* One person = one positioned cell that gently floats. The orb
+	   (blurred) and the name (crisp) are siblings inside it. */
+	.person {
 		position: absolute;
 		top: 50%;
 		left: var(--x);
-		width: 46vmin;
-		height: 46vmin;
+		width: 40vmin;
+		height: 40vmin;
 		transform: translate(-50%, -50%);
-		border-radius: 50%;
-		background: radial-gradient(
-			circle,
-			hsl(var(--hue) 58% 52% / 0.62),
-			hsl(var(--hue) 52% 32% / 0.28) 45%,
-			transparent 70%
-		);
-		filter: blur(8px);
 		display: grid;
 		place-items: center;
 		animation: float 16s ease-in-out infinite alternate;
@@ -111,17 +113,33 @@
 		}
 	}
 
+	.orb {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		background: radial-gradient(
+			circle,
+			hsl(var(--hue) 58% 52% / 0.62),
+			hsl(var(--hue) 52% 32% / 0.28) 45%,
+			transparent 70%
+		);
+		filter: blur(10px);
+	}
+
+	/* Sibling of .orb, NOT a child — so the orb's blur doesn't touch it. */
 	.orb-name {
+		position: relative;
+		z-index: 1;
 		font-family: var(--font-display);
 		font-style: italic;
-		font-size: 1.4rem;
-		color: hsl(0 0% 100% / 0.7);
-		text-shadow: 0 2px 14px hsl(0 0% 0% / 0.55);
+		font-size: 1.5rem;
+		color: hsl(0 0% 100% / 0.78);
+		text-shadow: 0 2px 14px hsl(0 0% 0% / 0.6);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.field,
-		.orb {
+		.person {
 			animation: none;
 		}
 	}
