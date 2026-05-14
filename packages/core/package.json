@@ -4,6 +4,14 @@
   "private": true,
   "description": "broadsheet — editorial frontend for Home Assistant (the SPA itself)",
   "type": "module",
+  "//exports": "Plugin packages import the contract types from '@broadsheet/core'. Plugins are bundled THROUGH core's own Vite build (core → registry.ts → plugin index.ts), so pointing at TS source is correct — there is no separate publish step. Plugins import-type only; the types erase at compile.",
+  "exports": {
+    ".": {
+      "types": "./src/lib/index.ts",
+      "svelte": "./src/lib/index.ts",
+      "default": "./src/lib/index.ts"
+    }
+  },
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 5173",
     "build": "vite build",
