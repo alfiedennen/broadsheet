@@ -15,6 +15,7 @@
 	 * sees the affordance + understands the safety floor.
 	 */
 
+	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import type { DomainArea, DomainEntity } from '$lib/discovery';
 	import { callService, getHardBannedDomains } from '$lib/ha/actions';
@@ -149,8 +150,15 @@
 		<div class="cameras">
 			{#each allCameras as cam (cam.id)}
 				<figure class="camera">
+					<!--
+						base-prefixed so the request rides broadsheet's nginx
+						/api/ proxy (which bearer-injects the SUPERVISOR_TOKEN).
+						A bare /api/camera_proxy/… resolves to origin root —
+						HA's own frontend — which 403s camera_proxy without a
+						signed token.
+					-->
 					<img
-						src="/api/camera_proxy/{cam.id}"
+						src="{base}/api/camera_proxy/{cam.id}"
 						alt={cam.name}
 						loading="lazy"
 					/>
