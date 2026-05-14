@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { base } from '$app/paths';
 	import { env } from '$env/dynamic/public';
 
 	import { initSafety } from '$lib/stores/safety.svelte';
@@ -41,9 +42,12 @@
 		if (mode === 'none') {
 			// No credentials — redirect to setup unless already there.
 			// trailingSlash: 'always' is set in svelte.config.js, so paths
-			// always end with '/' — only one form to check.
-			if (page.url.pathname !== '/setup/') {
-				await goto('/setup');
+			// always end with '/' — only one form to check. `base` is
+			// prefixed because under HA Ingress the app is served from
+			// /api/hassio_ingress/<token>/ — goto() does NOT auto-prepend
+			// base, and page.url.pathname INCLUDES it.
+			if (page.url.pathname !== `${base}/setup/`) {
+				await goto(`${base}/setup`);
 			}
 			booted = true;
 			return;
@@ -51,7 +55,7 @@
 
 		const creds = getAuthCredentials();
 		if (!creds) {
-			await goto('/setup');
+			await goto(`${base}/setup`);
 			booted = true;
 			return;
 		}

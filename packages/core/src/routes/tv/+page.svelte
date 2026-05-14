@@ -13,6 +13,7 @@
 	 *   4. Content slot (empty in v0.1 core)
 	 */
 
+	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import type { DomainEntity } from '$lib/discovery';
 	import { callService, callOn, callOff } from '$lib/ha/actions';
@@ -144,7 +145,7 @@
 		<p class="slot-dek">
 			TMDB-driven "New" and "Trending" rows arrive via the
 			<code>@broadsheet/tmdb-tv</code> plugin (v0.1.x). Add your TMDB API key
-			in <a href="/settings/integrations/">Settings → Integrations</a> to enable.
+			in <a href="{base}/settings/integrations/">Settings → Integrations</a> to enable.
 		</p>
 	</div>
 

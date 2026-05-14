@@ -8,6 +8,7 @@
 	 *  2. Section cards — declarative entry points to each sub-page
 	 */
 
+	import { base } from '$app/paths';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
@@ -83,7 +84,7 @@
 	<ul class="sections">
 		{#each sections as s (s.slug)}
 			<li>
-				<a class="section-card" href="/settings/{s.slug}/">
+				<a class="section-card" href="{base}/settings/{s.slug}/">
 					<div class="section-head">
 						<h3 class="section-name">{s.label}</h3>
 						<span class="section-count">{s.count()}</span>

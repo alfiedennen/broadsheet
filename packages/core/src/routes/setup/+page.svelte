@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { env } from '$env/dynamic/public';
 	import { saveLLAT, isValidHaUrl, looksLikeLLAT, normaliseUrl } from '$lib/ha/auth';
 	import { connect } from '$lib/ha/client';
@@ -29,7 +30,7 @@
 		try {
 			saveLLAT(url, token);
 			await connect({ mode: 'llat', url: normaliseUrl(url), token });
-			await goto('/');
+			await goto(`${base}/`);
 		} catch (err) {
 			submitError = err instanceof Error ? err.message : String(err);
 			submitting = false;

@@ -8,6 +8,7 @@
 	 */
 
 	import { page } from '$app/state';
+	import { base } from '$app/paths';
 
 	let { children } = $props();
 
@@ -18,20 +19,27 @@
 		{ slug: 'voice', label: 'Voice' }
 	];
 
+	// Strip `base` before the /settings/ regex — under HA Ingress the
+	// pathname is /api/hassio_ingress/<token>/settings/house/, so the
+	// regex must run against the base-less remainder.
 	const currentSlug = $derived(
-		(page.url.pathname.replace(/^\/settings\/?/, '').replace(/\/$/, '') || '').toLowerCase()
+		(page.url.pathname
+			.slice(base.length)
+			.replace(/^\/settings\/?/, '')
+			.replace(/\/$/, '') || '')
+			.toLowerCase()
 	);
 </script>
 
 <div class="settings-shell">
 	<header class="settings-header">
-		<a class="back" href="/">← Home</a>
+		<a class="back" href="{base}/">← Home</a>
 		<nav class="tabs" aria-label="Settings sections">
 			{#each tabs as tab (tab.slug)}
 				<a
 					class="tab"
 					class:active={currentSlug === tab.slug}
-					href={tab.slug ? `/settings/${tab.slug}/` : `/settings/`}
+					href={tab.slug ? `${base}/settings/${tab.slug}/` : `${base}/settings/`}
 				>
 					{tab.label}
 				</a>

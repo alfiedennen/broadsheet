@@ -12,6 +12,7 @@
 
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { base } from '$app/paths';
 	import { PAGES, NAV_ORDER, type PageSlug } from '$lib/discovery';
 
 	let open = $state(false);
@@ -34,15 +35,30 @@
 
 	const currentPath = $derived(page.url.pathname);
 
+	// All hrefs are prefixed with SvelteKit's `base`. Under HA Ingress
+	// the app is served from /api/hassio_ingress/<token>/, so a
+	// root-absolute href like "/lights/" would point outside `base` —
+	// SvelteKit wouldn't intercept the click, the browser would do a
+	// full-page nav to origin-root /lights/, and HA would 404 it.
+	// `base` is "" in dev/standalone, so this stays correct there too.
 	const items = $derived([
 		...NAV_ORDER.map((slug: PageSlug) => ({
-			href: `/${slug}/`,
+			href: `${base}/${slug}/`,
 			label: PAGES[slug].label,
-			active: currentPath === `/${slug}/`
+			active: currentPath === `${base}/${slug}/`
 		})),
-		{ href: '/wall/', label: 'Wall', active: currentPath === '/wall/' },
-		{ href: '/settings/', label: 'Settings', active: currentPath.startsWith('/settings') },
-		{ href: '/setup/', label: 'Forget token', active: false, kind: 'destructive' as const }
+		{ href: `${base}/wall/`, label: 'Wall', active: currentPath === `${base}/wall/` },
+		{
+			href: `${base}/settings/`,
+			label: 'Settings',
+			active: currentPath.startsWith(`${base}/settings`)
+		},
+		{
+			href: `${base}/setup/`,
+			label: 'Forget token',
+			active: false,
+			kind: 'destructive' as const
+		}
 	]);
 </script>
 
@@ -72,7 +88,7 @@
 
 		<ul class="sheet-list">
 			<li>
-				<a href="/" class:active={currentPath === '/'} onclick={close}>
+				<a href="{base}/" class:active={currentPath === `${base}/`} onclick={close}>
 					<span class="num">№ 01</span>
 					<span class="lbl">The moment</span>
 				</a>

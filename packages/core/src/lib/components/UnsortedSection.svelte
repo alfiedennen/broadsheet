@@ -11,6 +11,7 @@
 	 * user can see and resolve, not a hidden tax on every render.
 	 */
 
+	import { base } from '$app/paths';
 	import type { DomainEntity } from '$lib/discovery';
 	import OutLine from './OutLine.svelte';
 
@@ -34,7 +35,7 @@
 				<strong>{entities.length} {kind}</strong> couldn't be auto-grouped into a room.
 				{#if hint}<span class="hint">{hint}</span>{/if}
 			</p>
-			<a class="cta" href="/settings/house/">Assign rooms in Settings →</a>
+			<a class="cta" href="{base}/settings/house/">Assign rooms in Settings →</a>
 		</header>
 
 		<ul class="unsorted-list">
