@@ -41,6 +41,12 @@ configuration required to feel complete on first paint.
 - **Responsive**: phone, desktop, wall tablet â€” three width axes
 - **PWA**: manifest, icons, iOS apple-touch-icon, theme-color
 - **Three responsive axes**: width, height, hover-vs-touch
+- **broadsheet HA theme**: an HA theme file the add-on drops into
+  `/config/themes/` on first boot, restyling HA's own chrome + native
+  config pages into the editorial register. The add-on *offers* it;
+  the user opts in via their HA profile. This is the v0.1 half of the
+  replacement vision â€” see `REPLACEMENT-VISION.md`. (Generalises
+  Harold Road's existing `themes/harold-road.yaml` recipe.)
 
 ## What's NOT in v0.1
 
@@ -52,8 +58,16 @@ configuration required to feel complete on first paint.
 - **`@broadsheet/tmdb-tv` plugin** (TMDB content rows on `/tv`) â€” same
 - **Lovelace strategy facade** (the v0.2 channel for using broadsheet
   renderers inside HA's own dashboards)
-- **Theme inheritance from HA** (broadsheet's editorial register is the
-  point in v0.1; toggleable HA-theme overlay deferred)
+- **Theme inheritance from HA** â€” i.e. broadsheet *adopting HA's*
+  theme tokens. broadsheet's editorial register is the point in v0.1;
+  a toggleable HA-theme overlay is deferred. (Note: this is the
+  opposite direction from the *broadsheet HA theme* in the IN list
+  above, which pushes broadsheet's register onto HA. Both can't be
+  confused â€” one is broadsheet wearing HA's clothes, the other is HA
+  wearing broadsheet's.)
+- **broadsheet as the outer shell** (HA's chrome never seen, HA config
+  pages embedded inside broadsheet) â€” the structural half of the
+  replacement vision, committed to v0.2. See `REPLACEMENT-VISION.md`.
 - **i18n beyond English** (templated strings shipped, but no other
   languages bundled)
 - **Apple Health bridge for `/body`** (Health Connect / Pixel only in v0.1)

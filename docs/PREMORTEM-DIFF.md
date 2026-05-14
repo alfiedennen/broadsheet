@@ -42,6 +42,14 @@ that didn't, and the new commitments the research surfaced.
    in 2026.1-2026.3** â€” including overwriting user configs. **broadsheet
    should sit alongside HA's home dashboard, not replace it.** Sidebar
    panel + Ingress is the safe slot.
+   > **Follow-up (2026-05-14)**: this decided the *distribution slot*
+   > but not the *user experience*. The Ingress-panel slot means
+   > broadsheet is permanently boxed inside HA's chrome â€” in tension
+   > with the "true replacement" user need surfaced after M5
+   > verification. Resolved into a two-part plan: v0.1 themes HA's
+   > chrome to match broadsheet's register; v0.2 inverts the iframe so
+   > broadsheet *is* the shell and HA's config pages embed inside it.
+   > See `REPLACEMENT-VISION.md`.
 5. **Strategies API (2026.5+) opens a third distribution channel** â€”
    broadsheet's renderers as Lovelace strategy + view, embeddable
    inside HA's own dashboards. **Defer to v0.2 but design for it now**
