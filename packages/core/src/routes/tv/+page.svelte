@@ -8,9 +8,11 @@
 	 *
 	 * Composition:
 	 *   1. Hero — "Living Room TV: off" prose
-	 *   2. Remote pad — D-pad + power + volume for the primary TV
-	 *   3. App launcher — common app shortcuts (if remote supports it)
-	 *   4. Content slot (empty in v0.1 core)
+	 *   2. Power + Remote pad — D-pad + volume for the primary TV
+	 *   3. Apps — one launch button per entry in the TV's source_list
+	 *      (media_player.select_source). General: whatever apps/inputs
+	 *      the TV exposes, no hardcoded streamer list.
+	 *   4. Content slot — the @broadsheet/tmdb-tv plugin's rows
 	 */
 
 	import { base } from '$app/paths';
@@ -78,6 +80,20 @@
 		else await callOn(primaryTv.id);
 	}
 
+	// Apps / sources — the primary TV's media_player exposes a
+	// `source_list` (its installed apps + inputs). Render a launch
+	// button per source; `select_source` switches the TV to it. No
+	// hardcoded streamer list — whatever the TV reports, we surface.
+	const tvSources = $derived(
+		(primaryTv?.state?.attributes?.source_list as string[] | undefined) ?? []
+	);
+	const currentSource = $derived(primaryTv?.state?.attributes?.source as string | undefined);
+
+	async function selectSource(source: string) {
+		if (!primaryTv) return;
+		await callService('media_player', 'select_source', { entity_id: primaryTv.id }, { source });
+	}
+
 	const dpadKeys: { key: RemoteKey; label: string; pos: string }[] = [
 		{ key: 'UP', label: '↑', pos: 'up' },
 		{ key: 'LEFT', label: '←', pos: 'left' },
@@ -132,6 +148,22 @@
 				<button class="aux-key" type="button" onclick={() => sendKey('MUTE')}>Mute</button>
 				<button class="aux-key" type="button" onclick={() => sendKey('VOLUME_UP')}>Vol +</button>
 			</div>
+		</div>
+	{/if}
+
+	{#if tvSources.length > 0}
+		<OutLine label="Apps" />
+		<div class="sources">
+			{#each tvSources as source (source)}
+				<button
+					class="source-btn"
+					class:active={source === currentSource}
+					type="button"
+					onclick={() => selectSource(source)}
+				>
+					{source}
+				</button>
+			{/each}
 		</div>
 	{/if}
 
@@ -279,6 +311,37 @@
 	.aux-key:hover {
 		border-color: var(--accent);
 		color: var(--accent);
+	}
+
+	.sources {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+
+	.source-btn {
+		padding: var(--space-2) var(--space-4);
+		font-family: var(--font-mono);
+		font-size: var(--text-caption);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-pill);
+		min-height: 44px;
+		transition: border-color var(--ease-quick), color var(--ease-quick), background var(--ease-quick);
+	}
+
+	.source-btn:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.source-btn.active {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-glow);
 	}
 
 	.media-list {
