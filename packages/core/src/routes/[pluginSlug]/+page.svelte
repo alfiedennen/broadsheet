@@ -22,16 +22,31 @@
 
 	const slug = $derived(page.params.pluginSlug ?? '');
 	const activePage = $derived(pluginLoader.pageBySlug(slug));
+
+	// The lazy-component thunk, pulled into its own $derived.
+	//
+	// `activePage` is rebuilt on EVERY discovery tick — the loader's
+	// derived chain (#snapshot → activePluginPages → pageBySlug)
+	// produces fresh wrapper objects whenever HA pushes a state delta,
+	// which is constantly. But `.component` is a stable function
+	// reference from the plugin's module-level page definition, so
+	// this $derived dedupes on === and stays stable across ticks.
+	//
+	// Awaiting `activePage.component()` directly would hand {#await} a
+	// brand-new promise every tick — it would restart the import
+	// forever and never settle ("Loading…" with no error). Awaiting
+	// the stable thunk's call settles once.
+	const componentThunk = $derived(activePage?.component ?? null);
 </script>
 
 <svelte:head>
 	<title>{activePage ? `${activePage.label} · broadsheet` : 'Not found · broadsheet'}</title>
 </svelte:head>
 
-{#if activePage}
+{#if activePage && componentThunk}
 	{#key activePage.slug}
 		<svelte:boundary>
-			{#await activePage.component()}
+			{#await componentThunk()}
 				<div class="plugin-loading">Loading {activePage.label}…</div>
 			{:then mod}
 				{@const PluginPage = mod.default}
