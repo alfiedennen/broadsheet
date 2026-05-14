@@ -16,7 +16,8 @@
 		{ slug: '', label: 'Overview' },
 		{ slug: 'house', label: 'House' },
 		{ slug: 'people', label: 'People' },
-		{ slug: 'voice', label: 'Voice' }
+		{ slug: 'voice', label: 'Voice' },
+		{ slug: 'plugins', label: 'Plugins' }
 	];
 
 	// Strip `base` before the /settings/ regex — under HA Ingress the

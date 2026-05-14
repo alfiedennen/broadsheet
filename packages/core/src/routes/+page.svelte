@@ -16,6 +16,14 @@
 	import { connection } from '$lib/stores/connection.svelte';
 	import { curationStore } from '$lib/curation/store.svelte';
 	import ProceduralPainting from '$lib/components/ProceduralPainting.svelte';
+	import { useRenderer } from '$lib/plugins/renderers.svelte';
+
+	// Opportunistic upgrade: when @broadsheet/emanations is active, its
+	// `multi-person-painting` renderer takes the visual centre;
+	// otherwise core's procedural gradient holds. core never
+	// hard-depends on the plugin — `painting.current` is just null
+	// when it's off, and the {:else} branch covers it.
+	const painting = useRenderer('multi-person-painting');
 
 	// Build the per-person override map from curation
 	const personOverrides = $derived(
@@ -70,7 +78,12 @@
 </svelte:head>
 
 <div class="moment">
-	<ProceduralPainting seed={paintingSeed} mood="warm" />
+	{#if painting.current}
+		{@const Painting = painting.current}
+		<Painting persons={discovery.persons} />
+	{:else}
+		<ProceduralPainting seed={paintingSeed} mood="warm" />
+	{/if}
 
 	<div class="vignette" aria-hidden="true"></div>
 

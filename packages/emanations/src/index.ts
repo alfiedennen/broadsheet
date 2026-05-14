@@ -36,5 +36,12 @@ export const plugin: BroadsheetPlugin = {
 				discovery.persons.filter((p) => p.suggestedPresenceSensor !== null).length >= 2,
 			component: () => import('./pages/EmanationsPage.svelte')
 		}
-	]
+	],
+
+	// A renderer core pages can opt into via useRenderer(). core's `/`
+	// upgrades its ProceduralPainting fallback to this when emanations
+	// is active. P2 stub; P4 ports the real axonometric painting.
+	renderers: {
+		'multi-person-painting': () => import('./renderers/MultiPersonPainting.svelte')
+	}
 };

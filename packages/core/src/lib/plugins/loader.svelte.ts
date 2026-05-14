@@ -24,7 +24,8 @@ import type {
 	BroadsheetPlugin,
 	PluginPage,
 	RegisteredPlugin,
-	PluginDiscoverySnapshot
+	PluginDiscoverySnapshot,
+	LazyComponent
 } from './types';
 import { RESERVED_ROUTE_SLUGS } from './types';
 import { BUNDLED_PLUGINS } from './registry';
@@ -199,6 +200,23 @@ class PluginLoader {
 	/** Resolve a slug to its active page, or null. Used by the route. */
 	pageBySlug(slug: string): ActivePluginPage | null {
 		return this.activePluginPages.find((p) => p.slug === slug) ?? null;
+	}
+
+	/**
+	 * Resolve a renderer id to its lazy thunk, scanning the active
+	 * plugins (first match wins). Returns null if no active plugin
+	 * provides it — including when the providing plugin is disabled or
+	 * load-errored. Reactive: reads `this.registry`, so callers in a
+	 * reactive context re-evaluate when a plugin's status changes.
+	 * Consumed by the renderer registry behind `useRenderer`.
+	 */
+	rendererThunk(id: string): LazyComponent | null {
+		for (const { plugin, status } of this.registry) {
+			if (status === 'load-error' || status === 'disabled') continue;
+			const thunk = plugin.renderers?.[id];
+			if (thunk) return thunk;
+		}
+		return null;
 	}
 }
 

@@ -42,6 +42,17 @@
 			label: 'Voice',
 			tagline: 'Override the editorial strings broadsheet uses.',
 			count: () => `${Object.keys(curationStore.current.voice).length} overrides`
+		},
+		{
+			slug: 'plugins',
+			label: 'Plugins',
+			tagline: 'What ships in the box. Opt in, opt out, see why.',
+			count: () => {
+				const enabled = Object.values(curationStore.current.plugins).filter(
+					(p) => p.enabled
+				).length;
+				return `${enabled} enabled`;
+			}
 		}
 	];
 </script>

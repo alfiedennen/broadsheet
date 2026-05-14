@@ -195,8 +195,9 @@ out across the plugin-system phases:
 |---|---|
 | **P0** — contract freeze | `BroadsheetPlugin` + all contract types, the discovery domain types (`DomainArea`, `DomainEntity`, `DomainFloor`, `DomainPerson`, `PageSlug`), `State`, `RESERVED_ROUTE_SLUGS`, `VERSION` |
 | **P1** — loader + routing | `discovery` singleton, UI primitives `PageShell` / `Hero` / `Eyebrow` / `OutLine` |
-| **P2** — settings + renderers | `useRenderer`, `useCurationField`, `SettingsRow` |
+| **P2** — settings/plugins + renderers | `useRenderer` |
 | **P3** — contributors + assets | `pluginAssetUrl` |
+| **P4** — settings panels | `useCurationField`, `SettingsRow` |
 
 ---
 
@@ -254,11 +255,14 @@ Renderer IDs are kebab-case + descriptive (`multi-person-painting`,
 <!-- core /+page.svelte -->
 <script lang="ts">
   import { useRenderer } from '@broadsheet/core';
-  // Returns the plugin's renderer when its plugin is active, null otherwise.
-  const Painting = useRenderer('multi-person-painting');
+  // `.current` is the plugin's renderer when its plugin is active,
+  // null otherwise. A getter, not a bare value — a Svelte 5 function
+  // can't return a reactive primitive.
+  const painting = useRenderer('multi-person-painting');
 </script>
 
-{#if Painting}
+{#if painting.current}
+  {@const Painting = painting.current}
   <Painting persons={discovery.persons} />
 {:else}
   <ProceduralPainting />  <!-- core fallback -->
@@ -343,7 +347,8 @@ plugin `errored` — it never crashes core.
 
 Plugins needing config register a `settingsPanel`. Its component is
 shown at `/settings/plugins/<plugin-id>/config` when the plugin is
-enabled, and binds to curation via `useCurationField` (P2):
+enabled, and binds to curation via `useCurationField` (P4 — landing
+with the proof plugin's real config):
 
 ```svelte
 <script lang="ts">

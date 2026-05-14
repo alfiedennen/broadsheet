@@ -207,6 +207,21 @@ export async function setVoiceString(stringId: string, value: string): Promise<b
 	});
 }
 
+/* ─────────────── plugin mutators ─────────────── */
+
+/**
+ * Enable / disable a plugin. Writes `plugins.<id>.enabled` — the
+ * single flag the plugin loader gates registration on. Preserves any
+ * existing `config` blob for the plugin.
+ */
+export async function setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean> {
+	return update((c) => {
+		const existing = c.plugins[pluginId] ?? { enabled: false, config: {} };
+		c.plugins[pluginId] = { ...existing, enabled };
+		return c;
+	});
+}
+
 /* ─────────────── reset ─────────────── */
 
 /** Wipe all curation back to defaults. Persists immediately. */

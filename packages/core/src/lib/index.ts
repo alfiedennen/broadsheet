@@ -12,9 +12,9 @@
  *    discovery domain types the contract references. ← we are here
  *  - P1 (loader + routing) — `discovery` singleton, UI primitives
  *    (`PageShell`, `Hero`, `Eyebrow`, `OutLine`).
- *  - P2 (settings + renderers) — `useRenderer`, `useCurationField`,
- *    `SettingsRow`.
+ *  - P2 (settings + renderers) — `useRenderer`.
  *  - P3 (contributors + assets) — `pluginAssetUrl`.
+ *  - P4 (settings panels) — `useCurationField`, `SettingsRow`.
  */
 
 export const VERSION = '0.1.0';
@@ -51,3 +51,9 @@ export { default as PageShell } from './components/PageShell.svelte';
 export { default as Hero } from './components/Hero.svelte';
 export { default as Eyebrow } from './components/Eyebrow.svelte';
 export { default as OutLine } from './components/OutLine.svelte';
+
+/* ── Renderer hook for plugin-aware core pages (P2) ──────────────── */
+// `useRenderer(id)` returns a plugin's renderer component when its
+// plugin is active, else null — so a core page can opportunistically
+// upgrade to a plugin renderer with its own fallback.
+export { useRenderer } from './plugins/renderers.svelte';
