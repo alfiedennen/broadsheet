@@ -1,8 +1,8 @@
-# broadsheet â€” architecture plan
+# broadsheet — architecture plan
 
 The transition from `harold-home` (curated, opinionated about the specific
 13-room shape we have) to `broadsheet` (generic, adapts to whatever HA
-tells it). Written as a planning document, not aspirational marketing â€”
+tells it). Written as a planning document, not aspirational marketing —
 this is what the actual extraction work will be.
 
 > **Distribution decision (committed 2026-05-13)**: v0.1 ships as a
@@ -19,23 +19,23 @@ this is what the actual extraction work will be.
 Three layers, in order of authority:
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  LAYER 3 â€” User curation (broadsheet.json)                   â”‚
-â”‚  Hide / pin / rename / reorder / page-pin overrides.         â”‚
-â”‚  Persisted to localStorage (PWA) or data volume (Docker).    â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                            â–² overrides
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  LAYER 2 â€” Domain model (`derived from layer 1`)             â”‚
-â”‚  Areas â†’ entities-grouped-by-domain. People, scenes, scripts.â”‚
-â”‚  Pure functions of registries + state. Reactive via Svelte. â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                            â–² derives
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  LAYER 1 â€” HA discovery (raw)                                â”‚
-â”‚  area_registry, device_registry, entity_registry, states.    â”‚
-â”‚  Pulled at boot via WS, kept fresh via state_changed events. â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌──────────────────────────────────────────────────────────────┐
+│  LAYER 3 — User curation (broadsheet.json)                   │
+│  Hide / pin / rename / reorder / page-pin overrides.         │
+│  Persisted to localStorage (PWA) or data volume (Docker).    │
+└──────────────────────────────────────────────────────────────┘
+                            ▲ overrides
+┌──────────────────────────────────────────────────────────────┐
+│  LAYER 2 — Domain model (`derived from layer 1`)             │
+│  Areas → entities-grouped-by-domain. People, scenes, scripts.│
+│  Pure functions of registries + state. Reactive via Svelte. │
+└──────────────────────────────────────────────────────────────┘
+                            ▲ derives
+┌──────────────────────────────────────────────────────────────┐
+│  LAYER 1 — HA discovery (raw)                                │
+│  area_registry, device_registry, entity_registry, states.    │
+│  Pulled at boot via WS, kept fresh via state_changed events. │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 Each layer is **pure** with respect to the one below: layer 2 is a
@@ -44,7 +44,7 @@ override of layer 2. Replay-safe, testable, no hidden state.
 
 ---
 
-## Layer 1 â€” HA discovery
+## Layer 1 — HA discovery
 
 ### What we pull
 
@@ -86,15 +86,15 @@ class DiscoveryStore {
 }
 ```
 
-Same `$state` runes pattern as harold-home's existing store â€” additive,
+Same `$state` runes pattern as harold-home's existing store — additive,
 not a rewrite.
 
 ---
 
-## Layer 2 â€” Domain model
+## Layer 2 — Domain model
 
 A **pure** projection of layer 1 into the shapes the pages need. Not
-stored â€” derived via `$derived`. Re-runs automatically when layer 1
+stored — derived via `$derived`. Re-runs automatically when layer 1
 changes.
 
 ### The `Area` shape
@@ -113,7 +113,7 @@ interface Area {
   cameras:   Entity[];   // domain=camera
   media:     Entity[];   // domain=media_player
   remotes:   Entity[];   // domain=remote
-  sensors:   Entity[];   // misc â€” temperature, humidity, lux, etc.
+  sensors:   Entity[];   // misc — temperature, humidity, lux, etc.
   // Computed
   hasLighting:   boolean;
   hasClimate:    boolean;
@@ -139,13 +139,13 @@ interface Person {
 ### The grouping pipeline
 
 ```
-raw entity registry  â”€â”
-raw device registry  â”€â”¼â†’  groupByArea()  â†’  Area[]
-raw area registry    â”€â”˜
-                          â†“
-                      domain-filter â†’ Area with .lights / .climates / etc populated
-                          â†“
-                      apply user curation (layer 3) â†’ final Area[] for rendering
+raw entity registry  ─┐
+raw device registry  ─┼→  groupByArea()  →  Area[]
+raw area registry    ─┘
+                          ↓
+                      domain-filter → Area with .lights / .climates / etc populated
+                          ↓
+                      apply user curation (layer 3) → final Area[] for rendering
 ```
 
 ### The "Unsorted" bucket
@@ -156,12 +156,12 @@ a synthetic `Area { id: '__unsorted__', name: 'Unsorted', ... }`. The
 relevant page (`/lights`, `/heat`, etc.) renders this section last, with
 inline "assign to area" affordance via the Settings UI.
 
-This is the discovery system's **honesty escape hatch** â€” instead of
+This is the discovery system's **honesty escape hatch** — instead of
 silently dropping unassignable entities, we show them and prompt.
 
 ---
 
-## Layer 3 â€” User curation
+## Layer 3 — User curation
 
 ### Schema
 
@@ -189,14 +189,14 @@ silently dropping unassignable entities, we show them and prompt.
     // overrides per entity (keyed by HA entity_id)
     "switch.office_plug": {
       "hidden": true,             // protect from accidental tap
-      "warningLabel": "desk compute â€” DO NOT toggle"
+      "warningLabel": "desk compute — DO NOT toggle"
     },
     "light.0xa4c1381f9e9c73b2": {
       "rename": "Hallway Spot 1"  // override HA's hex friendly name
     }
   },
   "pagePins": {
-    // entity-id â†’ page-slug, force an entity onto a non-default page
+    // entity-id → page-slug, force an entity onto a non-default page
     "switch.living_room_floor_lamp": "lights"
   },
   "voice": {
@@ -228,11 +228,11 @@ the SPA read the same canonical curation file via the sidecar API.
 
 ### Editing
 
-- **In-app Settings UI** (kebab nav â†’ Settings) â€” visual editor that
+- **In-app Settings UI** (kebab nav → Settings) — visual editor that
   reads + writes the same JSON
-- **File** â€” the JSON is exposed in the data volume; advanced users
+- **File** — the JSON is exposed in the data volume; advanced users
   edit directly
-- **No YAML** â€” JSON throughout for in-app round-tripping
+- **No YAML** — JSON throughout for in-app round-tripping
 
 ---
 
@@ -253,7 +253,7 @@ Each page is a Svelte component that:
   import Hero from '$lib/components/Hero.svelte';
   import RoomReveal from '$lib/components/RoomReveal.svelte';
 
-  // Discovery filter â€” which areas does this page render?
+  // Discovery filter — which areas does this page render?
   const lightingAreas = $derived(
     discovery.areas.filter((a) => a.hasLighting)
   );
@@ -261,7 +261,7 @@ Each page is a Svelte component that:
   const pinned = $derived(discovery.pinnedTo('lights'));
   const unsorted = $derived(discovery.unsortedFor('lighting'));
 
-  // Prose state â€” rolls up which areas are on
+  // Prose state — rolls up which areas are on
   const proseState = $derived.by(() => /* ... */);
 </script>
 
@@ -287,10 +287,10 @@ Each page is a Svelte component that:
 </PageShell>
 ```
 
-The page **never knows about specific room IDs**. Add an area to HA â†’
-appears here. Remove an area â†’ disappears. No code change.
+The page **never knows about specific room IDs**. Add an area to HA →
+appears here. Remove an area → disappears. No code change.
 
-### Domain â†’ page map (the routing table)
+### Domain → page map (the routing table)
 
 ```ts
 // src/lib/discovery/page-map.ts
@@ -368,104 +368,104 @@ import — `registry.ts` imports the plugin, so a back-import cycles).
 
 ```
 broadsheet/
-â”œâ”€â”€ README.md                          â† public-facing, marketing-ish
-â”œâ”€â”€ package.json                       â† @broadsheet/core
-â”œâ”€â”€ apps/
-â”‚   â””â”€â”€ addon/                         â† HA add-on packaging (v0.1)
-â”‚       â”œâ”€â”€ Dockerfile
-â”‚       â”œâ”€â”€ config.yaml                â† HA add-on manifest
-â”‚       â”œâ”€â”€ run.sh                     â† entrypoint: read supervisor token, start nginx
-â”‚       â”œâ”€â”€ nginx.conf.tpl             â† templated reverse-proxy config
-â”‚       â””â”€â”€ sidecar.py                 â† tiny aiohttp service for curation reads/writes
-â”‚   #  â””â”€â”€ docker/                     â† v0.2+ â€” deferred until demand justifies it
-â”‚
-â”œâ”€â”€ packages/
-â”‚   â”œâ”€â”€ core/                          â† the SPA itself (most of harold-home/src)
-â”‚   â”‚   â”œâ”€â”€ src/
-â”‚   â”‚   â”‚   â”œâ”€â”€ app.css                â† design tokens (the four-font system)
-â”‚   â”‚   â”‚   â”œâ”€â”€ app.html
-â”‚   â”‚   â”‚   â”œâ”€â”€ lib/
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ ha/
-â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ client.ts      â† WebSocket + heartbeat (kept verbatim)
-â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ store.svelte.ts
-â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ actions.ts
-â”‚   â”‚   â”‚   â”‚   â”‚   â””â”€â”€ types.ts
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ discovery/
-â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ registries.ts    â† layer 1: pull + subscribe to registries
-â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ domain.ts        â† layer 2: project to Area / Person / etc
-â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ curation.ts      â† layer 3: apply broadsheet.json overrides
-â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ page-map.ts      â† domain â†’ page routing table
-â”‚   â”‚   â”‚   â”‚   â”‚   â””â”€â”€ heuristics.ts    â† presence-sensor picking, lighting-switch detection
-â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ plugins.ts           â† plugin loader
-â”‚   â”‚   â”‚   â”‚   â””â”€â”€ components/
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ PageShell.svelte â† width modes (default / narrow / bleed)
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ Hero.svelte      â† magazine-spread on wide
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ Eyebrow.svelte
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ OutLine.svelte
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ KebabNav.svelte
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ RoomReveal.svelte    â† per-area light/climate reveal
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ PinnedSection.svelte â† user-pinned entities
-â”‚   â”‚   â”‚   â”‚       â”œâ”€â”€ UnsortedSection.svelte
-â”‚   â”‚   â”‚   â”‚       â””â”€â”€ Settings/        â† in-app curation UI
-â”‚   â”‚   â”‚   â”‚           â”œâ”€â”€ HousePanel.svelte
-â”‚   â”‚   â”‚   â”‚           â”œâ”€â”€ PeoplePanel.svelte
-â”‚   â”‚   â”‚   â”‚           â”œâ”€â”€ VoicePanel.svelte
-â”‚   â”‚   â”‚   â”‚           â””â”€â”€ PluginsPanel.svelte
-â”‚   â”‚   â”‚   â””â”€â”€ routes/
-â”‚   â”‚   â”‚       â”œâ”€â”€ +layout.svelte
-â”‚   â”‚   â”‚       â”œâ”€â”€ +page.svelte        â† landing
-â”‚   â”‚   â”‚       â”œâ”€â”€ lights/+page.svelte
-â”‚   â”‚   â”‚       â”œâ”€â”€ heat/+page.svelte
-â”‚   â”‚   â”‚       â”œâ”€â”€ door/+page.svelte
-â”‚   â”‚   â”‚       â”œâ”€â”€ tv/+page.svelte
-â”‚   â”‚   â”‚       â”œâ”€â”€ body/+page.svelte
-â”‚   â”‚   â”‚       â””â”€â”€ settings/+page.svelte
-â”‚   â”‚   â”œâ”€â”€ svelte.config.js
-â”‚   â”‚   â””â”€â”€ vite.config.ts
-â”‚   â”‚
-â”‚   â”œâ”€â”€ emanations/                    â† @broadsheet/emanations plugin
-â”‚   â”‚   â”œâ”€â”€ package.json
-â”‚   â”‚   â”œâ”€â”€ src/index.ts               â† plugin definition
-â”‚   â”‚   â”œâ”€â”€ src/EmanationsPage.svelte
-â”‚   â”‚   â”œâ”€â”€ src/MultiPersonPainting.svelte
-â”‚   â”‚   â””â”€â”€ static/                    â† renderer files (room.html / room.js / stage.js)
-â”‚   â”‚
-â”‚   â”œâ”€â”€ ghost-cloud/                   â† @broadsheet/ghost-cloud plugin
-â”‚   â”‚   â”œâ”€â”€ package.json
-â”‚   â”‚   â”œâ”€â”€ src/index.ts
-â”‚   â”‚   â”œâ”€â”€ src/LongTakePage.svelte
-â”‚   â”‚   â”œâ”€â”€ static/                    â† office.html / ghost-cloud.js
-â”‚   â”‚   â””â”€â”€ precompute/                â† Python script for HA-side data prep
-â”‚   â”‚
-â”‚   â””â”€â”€ tmdb-tv/                       â† @broadsheet/tmdb-tv plugin
-â”‚       â”œâ”€â”€ package.json
-â”‚       â”œâ”€â”€ src/index.ts
-â”‚       â””â”€â”€ src/TvContentSection.svelte
-â”‚
-â”œâ”€â”€ examples/
-â”‚   â””â”€â”€ broadsheet.json.example        â† reference curation file, fully commented
-â”‚   #  nginx / caddy / traefik examples deferred to v0.2 (Docker path)
-â”‚
-â””â”€â”€ docs/
-    â”œâ”€â”€ ARCHITECTURE.md                â† this document, generalised
-    â”œâ”€â”€ PLUGINS.md                     â† write-your-own
-    â”œâ”€â”€ DEPLOYMENT.md
-    â””â”€â”€ DESIGN-LANGUAGE.md             â† the four-font / register / token system
+├── README.md                          ← public-facing, marketing-ish
+├── package.json                       ← @broadsheet/core
+├── apps/
+│   └── addon/                         ← HA add-on packaging (v0.1)
+│       ├── Dockerfile
+│       ├── config.yaml                ← HA add-on manifest
+│       ├── run.sh                     ← entrypoint: read supervisor token, start nginx
+│       ├── nginx.conf.tpl             ← templated reverse-proxy config
+│       └── sidecar.py                 ← tiny aiohttp service for curation reads/writes
+│   #  └── docker/                     ← v0.2+ — deferred until demand justifies it
+│
+├── packages/
+│   ├── core/                          ← the SPA itself (most of harold-home/src)
+│   │   ├── src/
+│   │   │   ├── app.css                ← design tokens (the four-font system)
+│   │   │   ├── app.html
+│   │   │   ├── lib/
+│   │   │   │   ├── ha/
+│   │   │   │   │   ├── client.ts      ← WebSocket + heartbeat (kept verbatim)
+│   │   │   │   │   ├── store.svelte.ts
+│   │   │   │   │   ├── actions.ts
+│   │   │   │   │   └── types.ts
+│   │   │   │   ├── discovery/
+│   │   │   │   │   ├── registries.ts    ← layer 1: pull + subscribe to registries
+│   │   │   │   │   ├── domain.ts        ← layer 2: project to Area / Person / etc
+│   │   │   │   │   ├── curation.ts      ← layer 3: apply broadsheet.json overrides
+│   │   │   │   │   ├── page-map.ts      ← domain → page routing table
+│   │   │   │   │   └── heuristics.ts    ← presence-sensor picking, lighting-switch detection
+│   │   │   │   ├── plugins.ts           ← plugin loader
+│   │   │   │   └── components/
+│   │   │   │       ├── PageShell.svelte ← width modes (default / narrow / bleed)
+│   │   │   │       ├── Hero.svelte      ← magazine-spread on wide
+│   │   │   │       ├── Eyebrow.svelte
+│   │   │   │       ├── OutLine.svelte
+│   │   │   │       ├── KebabNav.svelte
+│   │   │   │       ├── RoomReveal.svelte    ← per-area light/climate reveal
+│   │   │   │       ├── PinnedSection.svelte ← user-pinned entities
+│   │   │   │       ├── UnsortedSection.svelte
+│   │   │   │       └── Settings/        ← in-app curation UI
+│   │   │   │           ├── HousePanel.svelte
+│   │   │   │           ├── PeoplePanel.svelte
+│   │   │   │           ├── VoicePanel.svelte
+│   │   │   │           └── PluginsPanel.svelte
+│   │   │   └── routes/
+│   │   │       ├── +layout.svelte
+│   │   │       ├── +page.svelte        ← landing
+│   │   │       ├── lights/+page.svelte
+│   │   │       ├── heat/+page.svelte
+│   │   │       ├── door/+page.svelte
+│   │   │       ├── tv/+page.svelte
+│   │   │       ├── body/+page.svelte
+│   │   │       └── settings/+page.svelte
+│   │   ├── svelte.config.js
+│   │   └── vite.config.ts
+│   │
+│   ├── emanations/                    ← @broadsheet/emanations plugin
+│   │   ├── package.json
+│   │   ├── src/index.ts               ← plugin definition
+│   │   ├── src/EmanationsPage.svelte
+│   │   ├── src/MultiPersonPainting.svelte
+│   │   └── static/                    ← renderer files (room.html / room.js / stage.js)
+│   │
+│   ├── ghost-cloud/                   ← @broadsheet/ghost-cloud plugin
+│   │   ├── package.json
+│   │   ├── src/index.ts
+│   │   ├── src/LongTakePage.svelte
+│   │   ├── static/                    ← office.html / ghost-cloud.js
+│   │   └── precompute/                ← Python script for HA-side data prep
+│   │
+│   └── tmdb-tv/                       ← @broadsheet/tmdb-tv plugin
+│       ├── package.json
+│       ├── src/index.ts
+│       └── src/TvContentSection.svelte
+│
+├── examples/
+│   └── broadsheet.json.example        ← reference curation file, fully commented
+│   #  nginx / caddy / traefik examples deferred to v0.2 (Docker path)
+│
+└── docs/
+    ├── ARCHITECTURE.md                ← this document, generalised
+    ├── PLUGINS.md                     ← write-your-own
+    ├── DEPLOYMENT.md
+    └── DESIGN-LANGUAGE.md             ← the four-font / register / token system
 ```
 
-Workspace via `pnpm` (or npm workspaces) â€” `@broadsheet/core` consumes
+Workspace via `pnpm` (or npm workspaces) — `@broadsheet/core` consumes
 plugins as optional peer-deps; the Docker image bakes in the trio above
 by default.
 
 ---
 
-## Migration path: harold-home â†’ broadsheet
+## Migration path: harold-home → broadsheet
 
 Not "rewrite from scratch." Most of harold-home's code is already
 shape; the curation lives mostly in `house.json` + a few
 hard-coded entity references. Concrete extraction order:
 
-### Stage 1 â€” Build the discovery layer (in-place in harold-home)
+### Stage 1 — Build the discovery layer (in-place in harold-home)
 
 1. Add `src/lib/discovery/` directory, all four files
 2. Wire `DiscoveryStore` alongside the existing `entityStore` (don't
@@ -478,48 +478,48 @@ hard-coded entity references. Concrete extraction order:
 **Outcome of stage 1**: harold-home works exactly as today, but
 internally the discovery layer is proven against our real install.
 
-### Stage 2 â€” Convert pages to discovery-first
+### Stage 2 — Convert pages to discovery-first
 
 Page by page, swap `lightingRooms()` (house.json filter) for
 `discovery.areas.filter(a => a.hasLighting)`. The harold-home
 `house.json` continues to provide the curation overrides via the new
 layer 3.
 
-Edit `house.json` â†’ produce a `broadsheet.json` from it via a one-time
+Edit `house.json` → produce a `broadsheet.json` from it via a one-time
 migration script. They become the same shape.
 
-### Stage 3 â€” Extract plugins
+### Stage 3 — Extract plugins
 
-Move `static/immaterials/` â†’ `packages/emanations/`.
-Move `static/exposure/` â†’ `packages/ghost-cloud/`.
-Move `src/lib/tmdb.ts` + the `/tv` content section â†’ `packages/tmdb-tv/`.
+Move `static/immaterials/` → `packages/emanations/`.
+Move `static/exposure/` → `packages/ghost-cloud/`.
+Move `src/lib/tmdb.ts` + the `/tv` content section → `packages/tmdb-tv/`.
 
 Each plugin gets its own `package.json` + index.ts that registers via
 the plugin contract.
 
-`@broadsheet/core` no longer depends on these directly â€” the
+`@broadsheet/core` no longer depends on these directly — the
 harold-home install adds them as workspace deps.
 
-### Stage 4 â€” Build Settings UI
+### Stage 4 — Build Settings UI
 
 The visual editor over `broadsheet.json`. Replace the file-only flow
 with in-app management. The file remains the persistence layer.
 
-### Stage 5 â€” Strip Harold Road specifics
+### Stage 5 — Strip Harold Road specifics
 
 The voice strings, the painting set, the address references, the
-Harold-Road-only entity IDs â†’ all becomes example data, none ships in
+Harold-Road-only entity IDs → all becomes example data, none ships in
 core.
 
-### Stage 6 â€” Build the HA add-on
+### Stage 6 — Build the HA add-on
 
 A Dockerfile that bundles `@broadsheet/core` + nginx + the tiny
 sidecar service. nginx proxies `/api/*` and `/local/*` to
 `http://supervisor/core/` with `Authorization: Bearer ${SUPERVISOR_TOKEN}`
-injected as a request header â€” the SPA never sees a token, never
+injected as a request header — the SPA never sees a token, never
 pastes one. Full mock at `ADDON-MOCK.md`.
 
-### Stage 7 â€” First public release
+### Stage 7 — First public release
 
 `v0.1.0` of `broadsheet`, shipped as an HA add-on via custom Supervisor
 repository. README is the doc we drafted (with v0.1's add-on-only
@@ -528,23 +528,23 @@ positioning). GitHub repo + GHCR-hosted multi-arch images +
 community feedback. Docker / standalone path deferred to v0.2 gated on
 issue-volume demand signal.
 
-harold-home itself becomes a "thin downstream" of broadsheet â€” just
+harold-home itself becomes a "thin downstream" of broadsheet — just
 the personal `broadsheet.json` + paintings + custom Eyebrow voice.
 
 ---
 
 ## What this commits us to
 
-- **A monorepo** (pnpm workspaces or similar) â€” bigger build matrix
-- **Maintained release cadence** â€” at least one substantive update per
+- **A monorepo** (pnpm workspaces or similar) — bigger build matrix
+- **Maintained release cadence** — at least one substantive update per
   quarter, more if PRs land
-- **Public Discord or Discussions** â€” the ha-fusion experience shows the
+- **Public Discord or Discussions** — the ha-fusion experience shows the
   audience expects responsiveness; if we go silent for 12 months,
   someone forks us
-- **Versioned plugin contract** â€” once plugins are a thing, breaking
+- **Versioned plugin contract** — once plugins are a thing, breaking
   the API hurts users; semver discipline matters
-- **CI** â€” lint + build + headless test against a known-shape mock HA
-- **One-line install** â€” the HA add-on path has to actually work end-to-end
+- **CI** — lint + build + headless test against a known-shape mock HA
+- **One-line install** — the HA add-on path has to actually work end-to-end
   on a clean HA install, not just on our box
 
 This is a real project, not a weekend dump. The audience exists; the
@@ -555,14 +555,14 @@ doing if we're committed to maintaining it.
 
 ## Estimated effort
 
-- Stage 1 (discovery layer): **2â€“3 days** focused
-- Stage 2 (page conversion): **1â€“2 days** per page Ã— 6 pages = **~1 week**
-- Stage 3 (plugin extraction): **2â€“3 days** per plugin Ã— 3 = **~1 week**
+- Stage 1 (discovery layer): **2–3 days** focused
+- Stage 2 (page conversion): **1–2 days** per page × 6 pages = **~1 week**
+- Stage 3 (plugin extraction): **2–3 days** per plugin × 3 = **~1 week**
 - Stage 4 (Settings UI): **1 week**
 - Stage 5 (strip personal): **2 days**
-- Stage 6 (HA add-on): **2â€“3 days**
+- Stage 6 (HA add-on): **2–3 days**
 - Stage 7 (release prep, README polish, screenshots, docs): **3 days**
 
-**Total: ~5â€“6 weeks of focused work** to a credible v0.1.0.
+**Total: ~5–6 weeks of focused work** to a credible v0.1.0.
 
 Phased over evenings + weekends: realistically **3 months** elapsed.

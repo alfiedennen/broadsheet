@@ -1,4 +1,4 @@
-# broadsheet â€” discovery contract (Layer 1)
+# broadsheet — discovery contract (Layer 1)
 
 The most load-bearing spec in the architecture. Layer 1 is the source
 of truth for everything Layer 2 derives and everything Layer 3
@@ -22,7 +22,7 @@ Read alongside:
 
 We do **not** roll our own WebSocket client. We use the canonical
 `home-assistant-js-websocket` library (the same one HA's own frontend
-uses â€” MIT, ~30KB gzipped).
+uses — MIT, ~30KB gzipped).
 
 Why:
 - Implements `subscribe_entities` (compressed delta protocol) correctly,
@@ -33,7 +33,7 @@ Why:
 
 What we wrap around it:
 - Heartbeat layer (30s ping / 10s pong-timeout / force-close on
-  zombie) â€” the library's reconnect handles network drops, but TCP
+  zombie) — the library's reconnect handles network drops, but TCP
   zombies (HA processes alive but unresponsive) need our application-
   level liveness check. We learned this in harold-home.
 - Audit log wrapper for all `call_service` invocations
@@ -51,10 +51,10 @@ In strict order, on every connect (initial + reconnect):
 // src/lib/discovery/registries.ts
 
 async function bootDiscovery(connection: Connection) {
-  // 1. Auth handshake â€” handled by library based on env (Supervisor
+  // 1. Auth handshake — handled by library based on env (Supervisor
   //    token in add-on, LLAT in dev/Docker).
 
-  // 2. Pull all six registries in parallel â€” these are stable
+  // 2. Pull all six registries in parallel — these are stable
   //    snapshots, not subscriptions.
   const [
     floors,
@@ -107,7 +107,7 @@ async function bootDiscovery(connection: Connection) {
 - **Not** calling `config/entity_registry/list` synchronously on first
   paint. `list_for_display` is faster; the full list arrives async.
 - **Not** subscribing to `service_registered` / `service_removed`. We
-  don't need to know about HA's available services dynamically â€” we
+  don't need to know about HA's available services dynamically — we
   call known services and handle errors when they 404.
 
 ---
@@ -115,7 +115,7 @@ async function bootDiscovery(connection: Connection) {
 ## TypeScript types
 
 The shape Layer 2 consumes. These should mirror HA's own types where
-possible â€” copy from
+possible — copy from
 `home-assistant/frontend/src/data/{area,floor,label,entity,device}_registry.ts`
 into `packages/core/src/lib/ha/types.ts` directly.
 
@@ -177,7 +177,7 @@ export interface Entity {
   translation_key: string | null;
   options: Record<string, any>;
   labels: string[];
-  categories: Record<string, string>;  // categoryId â†’ entity classification
+  categories: Record<string, string>;  // categoryId → entity classification
 }
 
 export interface Label {
@@ -273,7 +273,7 @@ export interface DomainArea {
   cameras:   DomainEntity[];
   media:     DomainEntity[];
   remotes:   DomainEntity[];
-  sensors:   DomainEntity[];   // misc â€” temperature, humidity, lux
+  sensors:   DomainEntity[];   // misc — temperature, humidity, lux
 
   // Computed flags (drive page filtering)
   hasLighting:   boolean;
@@ -336,7 +336,7 @@ export const discovery = {
 ## Naming composition rules
 
 Entity friendly names compose differently based on `has_entity_name`.
-The projection in Layer 2 must apply these correctly â€” `state.attributes.friendly_name`
+The projection in Layer 2 must apply these correctly — `state.attributes.friendly_name`
 is **untrustworthy** for layout decisions because it's translation-swapped.
 
 ```ts
@@ -348,7 +348,7 @@ function composeEntityName(entity: Entity, device: Device | null): string {
 
   if (entity.has_entity_name) {
     if (entity.name === null) {
-      // Entity IS the device's main feature â†’ friendly = device name
+      // Entity IS the device's main feature → friendly = device name
       return device?.name_by_user ?? device?.name ?? entity.entity_id;
     } else {
       // Composed: "<Device> <Entity.name>"
@@ -358,7 +358,7 @@ function composeEntityName(entity: Entity, device: Device | null): string {
   }
 
   // Legacy: friendly_name from integration, with state.attributes
-  // fallback (best effort â€” translations may swap this)
+  // fallback (best effort — translations may swap this)
   return (
     entity.name
     ?? state.attributes?.friendly_name
@@ -373,7 +373,7 @@ then prompts the user to rename.
 
 ---
 
-## Entity â†’ Area resolution
+## Entity → Area resolution
 
 Two-path fallback: entity's own `area_id` overrides device's `area_id`,
 but if entity's is null, fall back to device's. Many integrations
@@ -436,7 +436,7 @@ entity)" tag and require enabling in HA itself.
 ## Heuristics
 
 Where automatic decisions happen. All heuristics produce overridable
-suggestions â€” the user can pin / hide / move via Settings.
+suggestions — the user can pin / hide / move via Settings.
 
 ### Lighting-switch detection
 
@@ -459,7 +459,7 @@ function isLightingSwitch(entity: Entity, device: Device | null, area: Area | nu
 }
 ```
 
-User curation can pin or unpin via `/settings/house â†’ entity â†’ page`.
+User curation can pin or unpin via `/settings/house → entity → page`.
 
 ### Presence sensor picking
 
@@ -473,7 +473,7 @@ function rankPresenceSensors(person: Person, allEntities: Entity[]): RankedSenso
   const committed = allEntities.find(e =>
     e.entity_id === `sensor.${person.name.toLowerCase()}_committed_room`
   );
-  if (committed) candidates.push({ entity: committed, tier: 1, badge: 'â˜… best', reason: 'server-side fusion' });
+  if (committed) candidates.push({ entity: committed, tier: 1, badge: '★ best', reason: 'server-side fusion' });
 
   // Tier 2: BLE device trackers (more reliable than GPS for in-house)
   for (const trackerId of person.device_trackers) {
@@ -492,7 +492,7 @@ function rankPresenceSensors(person: Person, allEntities: Entity[]): RankedSenso
           entity: e,
           tier: 3,
           badge: 'gps',
-          reason: isIos ? 'iOS â€” Companion App may suspend GPS' : 'Android GPS',
+          reason: isIos ? 'iOS — Companion App may suspend GPS' : 'Android GPS',
           warning: isIos,
         });
       }
@@ -506,7 +506,7 @@ function rankPresenceSensors(person: Person, allEntities: Entity[]): RankedSenso
       entity: personEntity,
       tier: 4,
       badge: 'aggregate',
-      reason: 'aggregates all trackers â€” can lie if any stuck',
+      reason: 'aggregates all trackers — can lie if any stuck',
       warning: true,
     });
   }
@@ -516,7 +516,7 @@ function rankPresenceSensors(person: Person, allEntities: Entity[]): RankedSenso
 ```
 
 The Settings UI shows the ranked list with reasons; the top non-warning
-candidate gets the `â˜… best` badge. User picks; their pick is
+candidate gets the `★ best` badge. User picks; their pick is
 persisted in curation.
 
 ### TV detection
@@ -553,10 +553,10 @@ function isHealthConnect(entity: Entity): boolean {
 States and transitions:
 
 ```
-idle â†’ connecting â†’ connected
-                       â†“ (network drop or pong timeout)
-                   reconnecting â†’ connected (loop)
-                       â†“ (5+ failed reconnects in 60s)
+idle → connecting → connected
+                       ↓ (network drop or pong timeout)
+                   reconnecting → connected (loop)
+                       ↓ (5+ failed reconnects in 60s)
                    fatal (user must intervene)
 ```
 
@@ -597,8 +597,8 @@ class HAClient {
   private sendPing() {
     if (!this.connection) return;
     this.pongTimeout = setTimeout(() => {
-      console.warn('[broadsheet] zombie WS detected â€” force-closing');
-      this.connection?.close();  // triggers onDisconnect â†’ reconnect
+      console.warn('[broadsheet] zombie WS detected — force-closing');
+      this.connection?.close();  // triggers onDisconnect → reconnect
     }, 10_000);
     this.connection.ping().then(() => {
       if (this.pongTimeout) clearTimeout(this.pongTimeout);
@@ -625,8 +625,8 @@ class HAClient {
 ### What surfaces to the user
 
 - **idle**: setup screen
-- **connecting**: small "connectingâ€¦" indicator in the chrome
-- **connected**: nothing â€” the UI just works
+- **connecting**: small "connecting…" indicator in the chrome
+- **connected**: nothing — the UI just works
 - **reconnecting**: "Reconnecting to the house" banner. Non-blocking,
   pages still render with stale state.
 - **fatal**: full-screen error with diagnose button (runs the
@@ -687,7 +687,7 @@ error. Better to fail loud than render half a house.
 
 After reconnect, `subscribe_entities` replays the cache. There's a
 window where our `states` map has stale data until the replay completes.
-The library handles this â€” we trust it. If we observe drift in
+The library handles this — we trust it. If we observe drift in
 practice, log + investigate.
 
 ---
@@ -717,12 +717,12 @@ discovery.status       // 'idle' | 'connecting' | ...
 discovery.lastError
 
 // Forbidden:
-import { discoveryStore } from '$lib/discovery/store';   // âŒ internal
-import { connection } from '$lib/ha/client';              // âŒ internal
+import { discoveryStore } from '$lib/discovery/store';   // ❌ internal
+import { connection } from '$lib/ha/client';              // ❌ internal
 ```
 
 This separation lets us swap the underlying client (`home-assistant-js-websocket`
-â†’ something else, hypothetically) without touching any page code.
+→ something else, hypothetically) without touching any page code.
 
 ---
 

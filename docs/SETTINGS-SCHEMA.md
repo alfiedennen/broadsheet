@@ -1,7 +1,7 @@
-# broadsheet â€” settings schema (`broadsheet.json`)
+# broadsheet — settings schema (`broadsheet.json`)
 
 The canonical shape of the curation file. This is Layer 3 (per
-`ARCHITECTURE.md`) â€” overrides applied to the discovered
+`ARCHITECTURE.md`) — overrides applied to the discovered
 domain model.
 
 The file lives at `/data/broadsheet.json` inside the add-on container,
@@ -144,7 +144,7 @@ Per-entity overrides. Keyed by HA's `entity_id`.
 "entities": {
   "switch.office_plug": {
     "hidden": true,
-    "warningLabel": "desk compute â€” DO NOT toggle",
+    "warningLabel": "desk compute — DO NOT toggle",
     "rename": null,
     "iconOverride": null,
     "unhide": false
@@ -209,7 +209,7 @@ Fields (all optional):
 ## `pagePins`
 
 Force-pin specific entities to specific pages, regardless of their
-domain or area. Map of entity_id â†’ page slug.
+domain or area. Map of entity_id → page slug.
 
 ```json
 "pagePins": {
@@ -395,7 +395,7 @@ Each plugin's `config` shape is defined by the plugin itself (see
 // src/lib/curation/migrate.ts
 
 const MIGRATIONS: Record<number, (input: any) => any> = {
-  // v1 â†’ v2 (hypothetical example)
+  // v1 → v2 (hypothetical example)
   1: (v1) => ({
     ...v1,
     version: 2,
@@ -449,7 +449,7 @@ migration fails, the sidecar:
    writes to `/data/broadsheet.json`, returns 200
 5. On 200: SPA shows "Saved" toast (1s)
 6. On 400/500: SPA reverts the optimistic update + shows error toast
-   ("Couldn't save â€” try again?")
+   ("Couldn't save — try again?")
 
 The PUT body is the entire JSON, not a patch. The file is small
 (<100KB even for hundreds of entities) so this is fine and avoids
@@ -486,7 +486,7 @@ async def put_curation(request):
 ```
 
 Deeper validation (per-key shape) happens in the SPA before writing.
-The sidecar trusts the SPA on inner shapes â€” it just enforces the
+The sidecar trusts the SPA on inner shapes — it just enforces the
 top-level contract. Defence-in-depth: if a user hand-edits the file
 into an invalid inner shape, the SPA refuses to load it and surfaces
 a "config invalid, edit to fix" message in `/settings/about` instead
@@ -496,16 +496,16 @@ of crashing.
 
 ## File-fallback editing
 
-Power users can edit `/data/broadsheet.json` directly â€” that's the
+Power users can edit `/data/broadsheet.json` directly — that's the
 file's whole point. The discipline:
 
 1. SPA reads on every load. Restart not needed for changes (the
-   sidecar can serve fresh reads on every PUT â€” but to pick up
+   sidecar can serve fresh reads on every PUT — but to pick up
    external file changes the SPA needs a refresh.)
 2. Manual edits should preserve the schema (the structure above).
 3. The sidecar never touches a file it didn't write itself except on
    read; manual edits between writes are preserved.
-4. The Settings UI is "thin client over the file" â€” it always wins
+4. The Settings UI is "thin client over the file" — it always wins
    on writes (last-write-wins), but it also always reads fresh.
 
 If users edit the file while the SPA is open, their changes are
@@ -515,7 +515,7 @@ pick up your changes, then make any UI changes after that."
 
 ---
 
-## Defaults â€” what an empty `broadsheet.json` looks like
+## Defaults — what an empty `broadsheet.json` looks like
 
 Created on first add-on boot if none exists:
 
@@ -558,7 +558,7 @@ sensible defaults immediately on first paint.
 - Heavy curation (200+ entities, 50+ overrides): ~80-150KB
 - HA's `addon_config` snapshots are gzipped + included in HA backups
 - No size cap hard-coded, but warn at >500KB ("your curation is
-  unusual â€” open an issue if this is intentional")
+  unusual — open an issue if this is intentional")
 
 Backups:
 - HA's snapshot system covers `/data/` automatically
@@ -584,6 +584,6 @@ It does NOT contain:
 
 When generating support bundles for bug reports, the sidecar
 scrubs the TMDB key and replaces person/sensor IDs with anonymised
-tokens (`person.alfie_dennen` â†’ `person.user_a`). Voice strings stay
-unmodified â€” the user has to choose to redact them if they're
+tokens (`person.alfie_dennen` → `person.user_a`). Voice strings stay
+unmodified — the user has to choose to redact them if they're
 sensitive.

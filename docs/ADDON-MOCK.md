@@ -1,4 +1,4 @@
-# broadsheet â€” HA add-on mock
+# broadsheet — HA add-on mock
 
 The "install in 2 minutes" claim is the gating requirement to compete
 with ha-fusion. This document mocks the actual files + flow end-to-end
@@ -18,12 +18,12 @@ Supervisor:
 - Handles updates, logs, options UI, autostart, ingress
 
 The user experience is:
-1. **Add the add-on repository URL** in HA â†’ Settings â†’ Add-ons â†’
-   3-dot menu â†’ Repositories â†’ paste `https://github.com/<TBD>/broadsheet`
+1. **Add the add-on repository URL** in HA → Settings → Add-ons →
+   3-dot menu → Repositories → paste `https://github.com/<TBD>/broadsheet`
 2. **Find broadsheet in the add-on store**, click it, click **Install**
 3. Wait 30s for the container to build/pull
 4. Click **Start**
-5. Click **Open Web UI** â†’ broadsheet loads, already authenticated
+5. Click **Open Web UI** → broadsheet loads, already authenticated
 
 Steps 1-3 are HA's UI. Step 4-5 is what our mock has to make work.
 
@@ -32,20 +32,20 @@ Steps 1-3 are HA's UI. Step 4-5 is what our mock has to make work.
 ## File layout for the add-on repo
 
 ```
-addon/                          â† separate repo from broadsheet/core
-â”œâ”€â”€ repository.yaml                        â† repo-level metadata
-â”œâ”€â”€ README.md                              â† shown in HA's add-on store
-â”œâ”€â”€ broadsheet/                            â† the actual add-on directory
-â”‚   â”œâ”€â”€ config.yaml                        â† manifest
-â”‚   â”œâ”€â”€ Dockerfile                         â† container build
-â”‚   â”œâ”€â”€ run.sh                             â† entrypoint (the auto-auth flow)
-â”‚   â”œâ”€â”€ nginx.conf                         â† reverse-proxy + static serving
-â”‚   â”œâ”€â”€ icon.png                           â† shown in store
-â”‚   â”œâ”€â”€ logo.png
-â”‚   â””â”€â”€ translations/
-â”‚       â””â”€â”€ en.yaml                        â† UI labels for the options panel
-â””â”€â”€ .github/workflows/
-    â””â”€â”€ builder.yaml                       â† multi-arch image build on tag
+addon/                          ← separate repo from broadsheet/core
+├── repository.yaml                        ← repo-level metadata
+├── README.md                              ← shown in HA's add-on store
+├── broadsheet/                            ← the actual add-on directory
+│   ├── config.yaml                        ← manifest
+│   ├── Dockerfile                         ← container build
+│   ├── run.sh                             ← entrypoint (the auto-auth flow)
+│   ├── nginx.conf                         ← reverse-proxy + static serving
+│   ├── icon.png                           ← shown in store
+│   ├── logo.png
+│   └── translations/
+│       └── en.yaml                        ← UI labels for the options panel
+└── .github/workflows/
+    └── builder.yaml                       ← multi-arch image build on tag
 ```
 
 ---
@@ -62,7 +62,7 @@ Minimal. Just tells HA "this URL is an add-on repository, here's a name."
 
 ---
 
-## `broadsheet/config.yaml` â€” the add-on manifest
+## `broadsheet/config.yaml` — the add-on manifest
 
 ```yaml
 name: broadsheet
@@ -82,13 +82,13 @@ arch:
 startup: services
 boot: auto
 
-# Web UI â€” what HA links from the add-on page
+# Web UI — what HA links from the add-on page
 webui: http://[HOST]:[PORT:80]
 ingress: true              # serve via HA's authenticated ingress proxy
 ingress_port: 8099         # internal port broadsheet listens on inside the container
 ingress_stream: true       # WebSocket support through the ingress proxy
 
-# Sidebar entry â€” show in HA's left nav, no clicking through to the add-on page
+# Sidebar entry — show in HA's left nav, no clicking through to the add-on page
 panel_icon: mdi:home-heart
 panel_title: harold home
 panel_admin: false         # any HA user can access
@@ -123,21 +123,21 @@ schema:
 
 **Key decisions captured here**:
 
-- **`ingress: true`** â€” broadsheet is served via HA's *ingress proxy*,
+- **`ingress: true`** — broadsheet is served via HA's *ingress proxy*,
   not as a separate port on the network. This means:
-  - No CORS issues â€” the SPA is at `https://homeassistant.local:8123/api/hassio_ingress/<token>/...`
+  - No CORS issues — the SPA is at `https://homeassistant.local:8123/api/hassio_ingress/<token>/...`
   - Auth is HA's own (the user is logged into HA already)
   - The Supervisor handles the auth handshake; we just receive the
     request authenticated
-- **`panel_icon` + `panel_title`** â€” broadsheet appears as a sidebar
+- **`panel_icon` + `panel_title`** — broadsheet appears as a sidebar
   entry in HA's main UI. One click from anywhere.
-- **`map: [addon_config:rw]`** â€” `/data/` inside the container maps to
+- **`map: [addon_config:rw]`** — `/data/` inside the container maps to
   `/addons/broadsheet/` on the HA host, persistent across container
   restarts. Where `broadsheet.json` lives.
-- **`hassio_api` + `homeassistant_api` true** â€” gives us access to
+- **`hassio_api` + `homeassistant_api` true** — gives us access to
   Supervisor API (`http://supervisor/`) and HA Core API
   (`http://supervisor/core/api/`) without explicit token paste
-- **Options schema** â€” auto-generates the form HA shows in the add-on's
+- **Options schema** — auto-generates the form HA shows in the add-on's
   Configuration tab. Users edit YAML there OR via a friendly dropdown
   UI HA renders for free.
 
@@ -149,19 +149,19 @@ schema:
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# BUILD_FROM is HA's hass-base image â€” comes with bashio, jq, tempio,
+# BUILD_FROM is HA's hass-base image — comes with bashio, jq, tempio,
 # and all the supervisor-aware tooling.
 
 # Install nginx + node (for any runtime chunks; mostly nginx serves static)
 RUN apk add --no-cache nginx
 
-# Copy the prebuilt SPA. We DON'T build inside the container â€” the build
+# Copy the prebuilt SPA. We DON'T build inside the container — the build
 # happens in CI (multi-arch matrix on tag), the Docker image bakes the
 # build/ output. Keeps the runtime image small (~30MB).
 COPY rootfs/ /
 COPY www/    /usr/share/broadsheet/www/
 
-# Default plugins shipped in the image â€” toggleable via options
+# Default plugins shipped in the image — toggleable via options
 COPY plugins/emanations  /usr/share/broadsheet/plugins/emanations/
 COPY plugins/ghost-cloud /usr/share/broadsheet/plugins/ghost-cloud/
 COPY plugins/tmdb-tv     /usr/share/broadsheet/plugins/tmdb-tv/
@@ -177,14 +177,14 @@ supervisor-talk-tooling come for free.
 
 ---
 
-## `run.sh` â€” the entrypoint + auto-auth flow
+## `run.sh` — the entrypoint + auto-auth flow
 
 ```sh
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
 set -e
 
-# â”€â”€ Read add-on options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Read add-on options ─────────────────────────────────────────────
 LOG_LEVEL=$(bashio::config 'log_level')
 CURATION_PATH=$(bashio::config 'curation_path')
 TMDB_KEY=$(bashio::config 'tmdb_api_key')
@@ -194,10 +194,10 @@ bashio::log.info "broadsheet starting up..."
 bashio::log.info "  curation: ${CURATION_PATH}"
 bashio::log.info "  region:   ${REGION}"
 
-# â”€â”€ Ensure curation directory exists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Ensure curation directory exists ────────────────────────────────
 mkdir -p "$(dirname "${CURATION_PATH}")"
 if [ ! -f "${CURATION_PATH}" ]; then
-    bashio::log.info "First boot â€” creating empty curation at ${CURATION_PATH}"
+    bashio::log.info "First boot — creating empty curation at ${CURATION_PATH}"
     cat > "${CURATION_PATH}" <<EOF
 {
   "version": 1,
@@ -215,14 +215,14 @@ if [ ! -f "${CURATION_PATH}" ]; then
 EOF
 fi
 
-# â”€â”€ Discover ingress URL (broadsheet runs at this path INSIDE HA's UI) â”€â”€
+# ── Discover ingress URL (broadsheet runs at this path INSIDE HA's UI) ──
 # Supervisor exposes the assigned ingress entry via env vars when ingress is
 # enabled. broadsheet's WebSocket connections go to the supervisor proxy,
 # which authenticates them with the user's HA session cookie.
 INGRESS_ENTRY=$(bashio::addon.ingress_entry)
 bashio::log.info "  ingress: ${INGRESS_ENTRY}"
 
-# â”€â”€ Configure the SPA's runtime env â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Configure the SPA's runtime env ─────────────────────────────────
 # At build time we DIDN'T bake VITE_HA_TOKEN. At runtime we generate
 # a small JS file the SPA picks up before it boots. This avoids the
 # "stale token in image" problem entirely.
@@ -234,7 +234,7 @@ cat > /usr/share/broadsheet/www/runtime-env.js <<EOF
 window.__BROADSHEET_ENV__ = {
   // Same-origin: WS connects to the SAME hostname/port the SPA was
   // loaded from, which is HA's ingress endpoint. Supervisor authenticates
-  // via the existing HA session cookie â€” NO token paste required.
+  // via the existing HA session cookie — NO token paste required.
   ingressEntry: "${INGRESS_ENTRY}",
   region: "${REGION}",
   tmdbKey: "${TMDB_KEY}",
@@ -243,19 +243,19 @@ window.__BROADSHEET_ENV__ = {
 };
 EOF
 
-# â”€â”€ Render nginx config from template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# tempio is HA's templating engine â€” substitutes env vars into a config file
+# ── Render nginx config from template ───────────────────────────────
+# tempio is HA's templating engine — substitutes env vars into a config file
 tempio -conf /etc/nginx/nginx.conf.tpl -out /etc/nginx/nginx.conf
 
-# â”€â”€ Start a tiny sidecar API for /api/broadsheet/curation reads/writes â”€â”€
+# ── Start a tiny sidecar API for /api/broadsheet/curation reads/writes ──
 # The SPA can POST to /api/broadsheet/curation to update broadsheet.json.
-# Tiny Python + aiohttp â€” keeps the curation file as the source of truth.
+# Tiny Python + aiohttp — keeps the curation file as the source of truth.
 python3 /usr/share/broadsheet/sidecar.py \
     --curation-path "${CURATION_PATH}" \
     --bind 127.0.0.1:8100 &
 SIDECAR_PID=$!
 
-# â”€â”€ Start nginx in the foreground â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Start nginx in the foreground ───────────────────────────────────
 bashio::log.info "broadsheet ready at ingress entry ${INGRESS_ENTRY}"
 exec nginx -g "daemon off;"
 ```
@@ -264,16 +264,16 @@ exec nginx -g "daemon off;"
 
 There are TWO paths depending on install method:
 
-**Add-on install (ingress mode)** â€” the easy path:
+**Add-on install (ingress mode)** — the easy path:
 - Browser is already logged into HA
 - HA's ingress proxy at `/api/hassio_ingress/<token>/...` forwards to the
   add-on with the user's session AUTOMATICALLY authenticated
 - Our SPA's WS connection at `wss://<ha-host>/api/websocket` carries the
-  same session cookie â†’ HA accepts â†’ NO token paste, NO LLAT, NO setup form
-- The first-load UX: open from HA sidebar â†’ painting renders, lights work,
+  same session cookie → HA accepts → NO token paste, NO LLAT, NO setup form
+- The first-load UX: open from HA sidebar → painting renders, lights work,
   zero clicks, zero pastes
 
-**Docker / standalone install** â€” the harder path:
+**Docker / standalone install** — the harder path:
 - No HA session in the browser
 - User must paste an LLAT in the setup form (today's harold-home flow)
 - OR use OAuth (HA supports it; we'd implement the redirect dance)
@@ -284,7 +284,7 @@ Docker path is "two minutes + paste a token". Be honest about that.
 
 ---
 
-## `nginx.conf.tpl` â€” the served config
+## `nginx.conf.tpl` — the served config
 
 ```nginx
 worker_processes 1;
@@ -311,18 +311,18 @@ http {
         root /usr/share/broadsheet/www;
         index index.html;
 
-        # SPA fallback â€” any unknown path serves index.html
+        # SPA fallback — any unknown path serves index.html
         location / {
             try_files $uri $uri/ /index.html;
         }
 
-        # â”€â”€ Curation API â€” sidecar Python service â”€â”€
+        # ── Curation API — sidecar Python service ──
         location /api/broadsheet/ {
             proxy_pass http://127.0.0.1:8100/;
             proxy_set_header Host $host;
         }
 
-        # â”€â”€ HA proxy â€” Supervisor's HA Core endpoint â”€â”€
+        # ── HA proxy — Supervisor's HA Core endpoint ──
         # This is the magic line. The Supervisor exposes HA Core at
         # http://supervisor/core/ from inside the add-on container,
         # AUTHENTICATED via the SUPERVISOR_TOKEN env var that's
@@ -338,7 +338,7 @@ http {
             proxy_buffering off;
         }
 
-        # â”€â”€ HA static /local/* â€” paintings, plugin assets, etc. â”€â”€
+        # ── HA static /local/* — paintings, plugin assets, etc. ──
         location /local/ {
             proxy_pass http://supervisor/core/local/;
             proxy_set_header Authorization "Bearer ${SUPERVISOR_TOKEN}";
@@ -360,7 +360,7 @@ Open Web UI, you're in. Zero credentials handled by the user.
 
 ---
 
-## The sidecar â€” `sidecar.py`
+## The sidecar — `sidecar.py`
 
 ```python
 #!/usr/bin/env python3
@@ -408,12 +408,12 @@ if __name__ == '__main__':
 ~30 lines. Reads + writes the curation file. Bound to localhost so
 only nginx can reach it. The SPA's Settings UI POSTs here.
 
-Could also be Node, Go, anything â€” Python because `hass-base` already
+Could also be Node, Go, anything — Python because `hass-base` already
 has it.
 
 ---
 
-## CI â€” `.github/workflows/builder.yaml`
+## CI — `.github/workflows/builder.yaml`
 
 ```yaml
 name: Build add-on
@@ -461,7 +461,7 @@ Tested mentally against HA's actual flow:
 | Step | Time | What happens |
 |---|---|---|
 | Add repository URL | ~5s | HA fetches the repo, parses `repository.yaml` |
-| Click broadsheet â†’ Install | ~30s | Image pull from GHCR (depends on bandwidth) |
+| Click broadsheet → Install | ~30s | Image pull from GHCR (depends on bandwidth) |
 | Click Start | ~3s | Container boot, run.sh executes, nginx starts |
 | Click Open Web UI | ~1s | Browser navigates to HA's ingress URL |
 | SPA loads + WebSocket connects | ~2s | First paint with live state |
@@ -484,7 +484,7 @@ Tested mentally against HA's actual flow:
   outside the add-on context.
 - **Config schema discipline**: every option we expose in `config.yaml`
   is forever (or migrated). Plugin enable/disable as a list is fine
-  for v0.1; per-plugin config gets messy fast â€” design carefully.
+  for v0.1; per-plugin config gets messy fast — design carefully.
 - **Documentation for the Docker path**: people who install via Docker
   Compose don't have ingress + Supervisor. They paste a token. That
   flow needs its own README section + ideally OAuth in v0.2.
@@ -514,6 +514,6 @@ Tested mentally against HA's actual flow:
   That might be the right default (slim install) or the wrong one
   (people miss the killer demo). Test with first-time users.
 - **Backups**: HA backs up add-on config (the `addon_config` map). So
-  `broadsheet.json` is in the user's HA snapshot. Good â€” they don't
+  `broadsheet.json` is in the user's HA snapshot. Good — they don't
   lose curation across HA restores. Make sure paintings volume is
   also in the backup map.

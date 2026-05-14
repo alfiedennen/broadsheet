@@ -1,4 +1,4 @@
-# broadsheet â€” development environments
+# broadsheet — development environments
 
 How to build and test broadsheet without breaking the production house.
 
@@ -7,7 +7,7 @@ tablet, the phone PWA, the front door automation, the heating, the
 presence mesh, and Harold. A bug in broadsheet that fires a stray
 service call against production is lights flicking on at 3am or the
 front door auto-unlocking when it shouldn't. Everything below is
-designed so that *can't happen by default* â€” writes require explicit,
+designed so that *can't happen by default* — writes require explicit,
 ephemeral unlock.
 
 ---
@@ -15,26 +15,26 @@ ephemeral unlock.
 ## Three environments
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  ENV 3 â€” Production canary                                       â”‚
-â”‚  Production HA OS (192.168.1.11) with broadsheet add-on          â”‚
-â”‚  installed alongside harold-home, sidebar entry "Broadsheet".    â”‚
-â”‚  Runs in parallel for â‰¥7 days before the wall tablet migrates.   â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                              â–² promotes to
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  ENV 2 â€” Add-on integration                                      â”‚
-â”‚  HA OS in VirtualBox on the Windows dev machine.                 â”‚
-â”‚  Hostname `test.local`. Snapshotted clean state.      â”‚
-â”‚  Tests packaging, Supervisor token flow, ingress, multi-arch.    â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                              â–² promotes to
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  ENV 1 â€” Local SvelteKit dev                                     â”‚
-â”‚  pnpm dev at localhost:5173.                                     â”‚
-â”‚  WebSocket points at production HA, READ-ONLY by default.        â”‚
-â”‚  Settings file at ./dev.json, never touches HA.       â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌──────────────────────────────────────────────────────────────────┐
+│  ENV 3 — Production canary                                       │
+│  Production HA OS (192.168.1.11) with broadsheet add-on          │
+│  installed alongside harold-home, sidebar entry "Broadsheet".    │
+│  Runs in parallel for ≥7 days before the wall tablet migrates.   │
+└──────────────────────────────────────────────────────────────────┘
+                              ▲ promotes to
+┌──────────────────────────────────────────────────────────────────┐
+│  ENV 2 — Add-on integration                                      │
+│  HA OS in VirtualBox on the Windows dev machine.                 │
+│  Hostname `test.local`. Snapshotted clean state.      │
+│  Tests packaging, Supervisor token flow, ingress, multi-arch.    │
+└──────────────────────────────────────────────────────────────────┘
+                              ▲ promotes to
+┌──────────────────────────────────────────────────────────────────┐
+│  ENV 1 — Local SvelteKit dev                                     │
+│  pnpm dev at localhost:5173.                                     │
+│  WebSocket points at production HA, READ-ONLY by default.        │
+│  Settings file at ./dev.json, never touches HA.       │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 95% of dev time is in Env 1. Env 2 fires up when we touch the add-on
@@ -43,7 +43,7 @@ add-on builds clean against Env 2 and we want real-life soak.
 
 ---
 
-## Env 1 â€” Local SvelteKit dev (read-only against production)
+## Env 1 — Local SvelteKit dev (read-only against production)
 
 The fast inner loop. Reads from production HA over WebSocket so
 discovery testing happens against your actual house shape; writes are
@@ -91,7 +91,7 @@ short-circuit to a console log + audit-log entry.
 
 **2. Explicit ephemeral unlock for write testing.** When you genuinely
 need to toggle a real light from dev, append `?allow-writes=true` to
-the URL. The flag is *not* persisted in localStorage â€” it goes away on
+the URL. The flag is *not* persisted in localStorage — it goes away on
 refresh, so you can't accidentally leave it on for a week.
 
 ```ts
@@ -151,7 +151,7 @@ the path that fired them.
 
 ---
 
-## Env 2 â€” HA OS in VirtualBox (add-on integration)
+## Env 2 — HA OS in VirtualBox (add-on integration)
 
 For testing the add-on lifecycle: build, install, ingress, Supervisor
 token injection, sidecar API, snapshot/restore, upgrade flow. Lives on
@@ -164,20 +164,20 @@ the Windows dev machine so the ProDesk stays untouched.
    (pick the OVA build, not generic-x86-64)
 2. Unzip to `D:\HAOS-test\` (or similar)
 3. New VM in VirtualBox:
-   - **Type**: Linux â†’ Other Linux (64-bit)
+   - **Type**: Linux → Other Linux (64-bit)
    - **CPU**: 2 cores
    - **RAM**: 4GB
-   - **EFI**: enabled (System â†’ Motherboard â†’ Enable EFI). Without
+   - **EFI**: enabled (System → Motherboard → Enable EFI). Without
      EFI, HA OS refuses to boot.
    - **Storage**: attach the `.vdi` as the SATA disk
-   - **Network**: Bridged adapter â†’ gets its own IP on your LAN
+   - **Network**: Bridged adapter → gets its own IP on your LAN
 4. Start VM, wait ~5 min for HA's first-boot provisioning
 5. Find the IP from VirtualBox network info or your router's DHCP table
 6. Browse to `http://<that-IP>:8123`, create owner account
-7. **Critical first step**: Settings â†’ System â†’ Network â†’ Hostname â†’
+7. **Critical first step**: Settings → System → Network → Hostname →
    `test`. Otherwise mDNS collides with production HA at
    `homeassistant.local` and one of them silently wins.
-8. **Snapshot immediately** in VirtualBox UI â€” this is your "clean
+8. **Snapshot immediately** in VirtualBox UI — this is your "clean
    state" to roll back to between add-on test cycles.
 
 ### Add-on dev workflow
@@ -185,27 +185,27 @@ the Windows dev machine so the ProDesk stays untouched.
 The `addon` repo (separate from `broadsheet/core`) lives
 at `D:\Visual Studio Code Projects\addon\`. To test changes:
 
-1. Build the SPA in `broadsheet/`: `pnpm build` â†’ static output in `build/`
+1. Build the SPA in `broadsheet/`: `pnpm build` → static output in `build/`
 2. Copy `build/*` into `addon/broadsheet/www/`
 3. Push the addon repo to a test branch on GitHub (or use a local file
    URL during early dev)
 4. In `test.local:8123`:
-   - Settings â†’ Add-ons â†’ â‹® â†’ Repositories â†’ add the test branch URL
-   - Find broadsheet in store â†’ Install (~30s)
-   - Start â†’ Open Web UI
-5. Iterate. Each rebuild needs an Uninstall â†’ Reinstall cycle (or
+   - Settings → Add-ons → ⋮ → Repositories → add the test branch URL
+   - Find broadsheet in store → Install (~30s)
+   - Start → Open Web UI
+5. Iterate. Each rebuild needs an Uninstall → Reinstall cycle (or
    `ha addons rebuild` via SSH for faster cycles).
-6. To reset between major changes: VirtualBox â†’ restore snapshot.
+6. To reset between major changes: VirtualBox → restore snapshot.
 
 ### What Env 2 specifically tests
 
 - `repository.yaml` parses correctly
 - `config.yaml` schema validates
-- Multi-arch build matrix (initially just amd64 â€” aarch64 later via
+- Multi-arch build matrix (initially just amd64 — aarch64 later via
   QEMU on CI)
 - `SUPERVISOR_TOKEN` injection works end-to-end (the SPA's WS connects
   successfully without ever pasting a token)
-- Ingress URL routing â€” the `X-Ingress-Path` quirk doesn't break
+- Ingress URL routing — the `X-Ingress-Path` quirk doesn't break
   navigation
 - Sidecar curation API survives container restarts
 - `addon_config` map persists `broadsheet.json` across `ha addons
@@ -228,7 +228,7 @@ not in use to free everything.
 
 ---
 
-## Env 3 â€” Production canary (side-by-side install)
+## Env 3 — Production canary (side-by-side install)
 
 Once the add-on builds clean and behaves in Env 2, install it in
 production HA OS. **Critical**: it lives alongside harold-home, not
@@ -238,8 +238,8 @@ replacing it.
 
 1. **Snapshot production HA OS in Proxmox before anything else.** Two
    minutes, one command via the Proxmox UI. Guaranteed rollback.
-2. In production HA â†’ Settings â†’ Add-ons â†’ â‹® â†’ Repositories â†’ add the
-   addon repository (private repo at this point â€” switch to
+2. In production HA → Settings → Add-ons → ⋮ → Repositories → add the
+   addon repository (private repo at this point — switch to
    public for v0.1.0 release)
 3. Install broadsheet, Start, Open Web UI
 4. Verify it appears in the sidebar as "Broadsheet" (icon
@@ -248,9 +248,9 @@ replacing it.
    broadsheet yet. They keep going to harold-home.
 6. Verify side-by-side coexistence:
    - harold-home still works at `harold.local`
-   - broadsheet works at `homeassistant.local:8123 â†’ Broadsheet sidebar`
+   - broadsheet works at `homeassistant.local:8123 → Broadsheet sidebar`
    - Both can be open simultaneously without WebSocket conflicts
-7. Run broadsheet through real life for â‰¥7 days, watching for:
+7. Run broadsheet through real life for ≥7 days, watching for:
    - Service calls that fire correctly
    - State updates that arrive in real-time
    - Reconnect behaviour during HA restarts
@@ -262,15 +262,15 @@ replacing it.
 
 ### What can go wrong in Env 3
 
-- **Add-on container crash loop** â†’ HA Supervisor restarts it; if it
+- **Add-on container crash loop** → HA Supervisor restarts it; if it
   loops, the sidebar entry just shows a 502. Doesn't affect HA itself.
-- **Broadsheet hammering the WebSocket** â†’ could in theory affect HA
+- **Broadsheet hammering the WebSocket** → could in theory affect HA
   responsiveness. Watch HA's CPU + recorder lag during the soak. If
   observed, add subscription debouncing.
-- **Sidecar Python service segfault** â†’ curation reads/writes return
+- **Sidecar Python service segfault** → curation reads/writes return
   500; SPA shows a "couldn't save" toast. Curation file unchanged on
   disk. Restart the add-on to recover.
-- **Bug fires real service call** â†’ hopefully caught in Env 1's
+- **Bug fires real service call** → hopefully caught in Env 1's
   read-only mode, but if it slips: harold-home's existing automations
   + Harold's monitoring will surface anomalies. Production data is
   always one Proxmox snapshot away from rollback.
@@ -287,8 +287,8 @@ canary phase ends.
 
 ### Separate LLAT for dev
 
-Generate a dedicated long-lived access token in HA â†’ Profile â†’
-Long-Lived Access Tokens â†’ Create Token â†’ name it
+Generate a dedicated long-lived access token in HA → Profile →
+Long-Lived Access Tokens → Create Token → name it
 `dev-<machine>`. Use this only in Env 1's `.env.development`.
 If something behaves weirdly, revoke this token without affecting any
 other integration (harold-agent, hub-api, the wall tablet, etc.).
@@ -304,7 +304,7 @@ build/
 node_modules/
 ```
 
-The audit log can contain entity friendly names that leak house layout â€”
+The audit log can contain entity friendly names that leak house layout —
 keep it out of the repo.
 
 ### Never test on the front door lock
@@ -328,7 +328,7 @@ Once broadsheet is installed in production, before every
 The WebSocket heartbeat (30s ping / 10s pong-timeout / force-close on
 zombie) that we built into harold-home's client.ts must be in
 broadsheet's client too. Without it, a ProDesk restart leaves the SPA
-in a silent zombie state â€” same bug we already burned a session on
+in a silent zombie state — same bug we already burned a session on
 in harold-home.
 
 ---
@@ -338,14 +338,14 @@ in harold-home.
 1. Stand up VM 110 in VirtualBox (HA OS, fresh, snapshot immediately)
 2. Generate the dev LLAT in production HA
 3. Scaffold `broadsheet/` in `D:\Visual Studio Code Projects\` as a
-   fresh repo (NOT a fork of harold-home â€” clean room, copy code in
+   fresh repo (NOT a fork of harold-home — clean room, copy code in
    deliberately as we extract it)
 4. Get the readonly + dry-run + audit-log wrappers in place *before*
    the discovery layer goes in
 5. Then start on Layer 1 (registry + entity discovery) against
    production HA, read-only
 6. First Env 2 test happens after Layer 1 + minimal Layer 2 are
-   working â€” that's when add-on packaging starts to matter
+   working — that's when add-on packaging starts to matter
 
 That order means by the time we're capable of breaking things, the
 safety rails are already there.

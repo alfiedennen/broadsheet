@@ -1,4 +1,4 @@
-# broadsheet â€” pre-mortem diff
+# broadsheet — pre-mortem diff
 
 What deep HA surface research changes about our architecture, Settings
 UI, and add-on plans. Read alongside:
@@ -14,7 +14,7 @@ that didn't, and the new commitments the research surfaced.
 > referencing "two distribution profiles", "Docker path OAuth in v0.1",
 > or "ship LLAT as v0.1 fallback" are no longer in scope. v0.1 ships
 > as an HA add-on **only** (Supervisor token auto-injection at the
-> nginx layer â€” zero credentials handled by the user). The Docker /
+> nginx layer — zero credentials handled by the user). The Docker /
 > standalone path is deferred to v0.2 gated on issue-volume demand
 > signal. Findings about ingress, `X-Ingress-Path`, `paths.base`,
 > Floors, Labels, `subscribe_entities`, and the `home-assistant-js-websocket`
@@ -23,7 +23,7 @@ that didn't, and the new commitments the research surfaced.
 
 ---
 
-## TL;DR â€” five things change
+## TL;DR — five things change
 
 1. **Use `subscribe_entities`, not `get_states` + `state_changed`.** The
    compressed delta protocol exists, the JS library implements it
@@ -39,18 +39,18 @@ that didn't, and the new commitments the research surfaced.
    (add-on with relative URLs + ingress-aware, standalone with absolute
    URLs + LLAT/OAuth). Don't try to ship one build that's both.
 4. **HA itself has been aggressively claiming the "home dashboard" slot
-   in 2026.1-2026.3** â€” including overwriting user configs. **broadsheet
+   in 2026.1-2026.3** — including overwriting user configs. **broadsheet
    should sit alongside HA's home dashboard, not replace it.** Sidebar
    panel + Ingress is the safe slot.
    > **Follow-up (2026-05-14)**: this decided the *distribution slot*
    > but not the *user experience*. The Ingress-panel slot means
-   > broadsheet is permanently boxed inside HA's chrome â€” in tension
+   > broadsheet is permanently boxed inside HA's chrome — in tension
    > with the "true replacement" user need surfaced after M5
    > verification. Resolved into a two-part plan: v0.1 themes HA's
    > chrome to match broadsheet's register; v0.2 inverts the iframe so
    > broadsheet *is* the shell and HA's config pages embed inside it.
    > See `REPLACEMENT-VISION.md`.
-5. **Strategies API (2026.5+) opens a third distribution channel** â€”
+5. **Strategies API (2026.5+) opens a third distribution channel** —
    broadsheet's renderers as Lovelace strategy + view, embeddable
    inside HA's own dashboards. **Defer to v0.2 but design for it now**
    (the renderer plugin contract should be reusable as both broadsheet
@@ -58,34 +58,34 @@ that didn't, and the new commitments the research surfaced.
 
 ---
 
-## Architecture diff â€” `ARCHITECTURE.md`
+## Architecture diff — `ARCHITECTURE.md`
 
-### Layer 1 (HA discovery) â€” significant additions
+### Layer 1 (HA discovery) — significant additions
 
 **What we drafted**: pull `area_registry`, `device_registry`,
 `entity_registry`. Subscribe to `state_changed`, `*_registry_updated`.
 
 **What we missed**:
 
-- **`config/floor_registry/list`** + `floor_registry_updated` â€” HA 2024.4+,
+- **`config/floor_registry/list`** + `floor_registry_updated` — HA 2024.4+,
   has `floor_id`, `level`, `aliases`. Areas group into floors.
-- **`config/label_registry/list`** + `label_registry_updated` â€” orthogonal
+- **`config/label_registry/list`** + `label_registry_updated` — orthogonal
   tags on areas / devices / entities / automations. Has color + icon.
   Voice depends on these.
-- **`config/category_registry/list`** + `category_registry_updated` â€”
+- **`config/category_registry/list`** + `category_registry_updated` —
   table-specific groupings (HA 2024.4). Distinct from labels.
-- **`config/entity_registry/list_for_display`** â€” lighter than the full
+- **`config/entity_registry/list_for_display`** — lighter than the full
   list, designed for fast UI cold-boot. **Use this on first paint, the
   full list lazily after.**
 - **`subscribe_entities`** instead of `get_states` + `state_changed`. The
   former returns compressed deltas (`{a: added, c: changed, r: removed}`
   with diffs in `+`/`-` keys, single-character compressed entity-state
   fields). The library handles cache + reconnect-resubscribe.
-- **`extract_from_target`** â€” given a target spec (device/area/label/
+- **`extract_from_target`** — given a target spec (device/area/label/
   entity), returns the resolved entity_ids. Crucial when broadsheet's
   Settings UI lets users pin "everything labelled `christmas`" to a
-  page â€” we don't have to compute the resolution ourselves.
-- **`render_template`** â€” subscribe-style template eval. If broadsheet
+  page — we don't have to compute the resolution ourselves.
+- **`render_template`** — subscribe-style template eval. If broadsheet
   ever shows computed prose ("3 lights on, 2 in the living room"), use
   this instead of computing client-side over the entity store.
 
@@ -94,18 +94,18 @@ with the full list above. Layer 1 store gets `floors`, `labels`,
 `categories` as parallel reactive arrays alongside `areas`, `devices`,
 `entities`.
 
-### Layer 2 (Domain model) â€” Floor + Label as first-class
+### Layer 2 (Domain model) — Floor + Label as first-class
 
 **What we drafted**: `Area` shape with entities pre-grouped by domain.
 
 **What we missed**:
 
 - **`Floor`** is the natural parent of `Area` for multi-storey houses.
-  `Floor â†’ Area â†’ Entity` is the canonical hierarchy.
+  `Floor → Area → Entity` is the canonical hierarchy.
 - **`Label`** is orthogonal to area. An entity can be in `area: Office`
   AND `labels: ['critical', 'work-time-only']`. Pages can filter by
   label as well as area.
-- **Entity â†’ Area resolution has TWO paths** â€” entity's own `area_id`
+- **Entity → Area resolution has TWO paths** — entity's own `area_id`
   overrides device's `area_id`, but if entity's is null, fall back to
   device's. Many integrations don't set entity area, so device area is
   the common case. **Our projection function must check both.**
@@ -113,32 +113,32 @@ with the full list above. Layer 1 store gets `floors`, `labels`,
   - `has_entity_name=True` AND `name="Pendant"`: friendly = `"<Device.name> Pendant"` (e.g. `"Office Light Pendant"`)
   - `has_entity_name=True` AND `name=None`: entity IS the device's main feature, friendly = `Device.name`
   - `has_entity_name=False`: legacy, friendly = whatever the integration set
-  - **Don't trust `state.attributes.friendly_name` for layout decisions** â€” translations swap it. Compose from registry.
+  - **Don't trust `state.attributes.friendly_name` for layout decisions** — translations swap it. Compose from registry.
 
 **Action**: revise the `Area` interface to include `floor: Floor | null`
 and `labels: Label[]`. Add a parallel `Floor` interface with `areas:
-Area[]`. Update the projection pipeline doc to walk `floor â†’ area â†’
-device â†’ entity` with the area-fallback rule explicit.
+Area[]`. Update the projection pipeline doc to walk `floor → area →
+device → entity` with the area-fallback rule explicit.
 
-### Layer 3 (Curation) â€” schema versioning matters
+### Layer 3 (Curation) — schema versioning matters
 
 **What we drafted**: `broadsheet.json v1` with hide/pin/rename/etc.
 
 **What we missed**:
 
-- **HA renames are common.** User renames an area `office â†’ studio` in
-  HA â€” our `broadsheet.json` keys by `area_id` (stable, good) but our
+- **HA renames are common.** User renames an area `office → studio` in
+  HA — our `broadsheet.json` keys by `area_id` (stable, good) but our
   `pagePins` reference stale labels in voice strings. Surface a
   reconcile prompt.
 - **`hidden_by` (HA-side) is information, not just state.** Three values:
-  `INTEGRATION` (the integration thinks this is internal â€” good default
+  `INTEGRATION` (the integration thinks this is internal — good default
   to hide), `USER` (user explicitly hid in HA), `null` (visible).
   Layer 2 should default-hide `hidden_by != null`; Layer 3 can
   un-hide via `entities.<id>.unhide: true`.
-- **`disabled_by` is harder** â€” disabled entities are NOT in
+- **`disabled_by` is harder** — disabled entities are NOT in
   `subscribe_entities`. We see them in registry but get no state. Skip
   them entirely.
-- **`entity_category: 'config' | 'diagnostic' | null`** â€” primary surfaces
+- **`entity_category: 'config' | 'diagnostic' | null`** — primary surfaces
   default to `null` only. CONFIG/DIAGNOSTIC go on a `/diagnostics` page
   or behind a "show technical entities" toggle.
 
@@ -147,7 +147,7 @@ already drafted, good). Add explicit handling for `hidden_by` /
 `disabled_by` / `entity_category` to Layer 2 with corresponding Layer 3
 overrides.
 
-### Renderer plugin contract â€” future-proof for Lovelace strategies
+### Renderer plugin contract — future-proof for Lovelace strategies
 
 **What we drafted**: plugins register pages + renderers in broadsheet.
 
@@ -169,9 +169,9 @@ shape so it can be extended to Lovelace surfaces in v0.2.
 
 ---
 
-## Settings UI diff â€” `SETTINGS-UI.md`
+## Settings UI diff — `SETTINGS-UI.md`
 
-### `/settings/house` â€” restructure around Floor â†’ Area
+### `/settings/house` — restructure around Floor → Area
 
 **What we drafted**: flat list of Areas with entities grouped by domain.
 
@@ -180,23 +180,23 @@ Areas without a floor get an "Unassigned floor" bucket.
 
 ```
 Floors (2)
-  âŒœ Ground floor      6 areas
-    âŒœ Office          13 entities
-    âŒœ Living Room      9 entities
+  ⌜ Ground floor      6 areas
+    ⌜ Office          13 entities
+    ⌜ Living Room      9 entities
     ...
-  âŒœ Upstairs          5 areas
-    âŒœ Bedroom          3 entities
-    âŒœ Bathroom         1 entity
+  ⌜ Upstairs          5 areas
+    ⌜ Bedroom          3 entities
+    ⌜ Bathroom         1 entity
     ...
-  âŒœ Unassigned        1 area
-    âŒœ Cellar           0 entities
+  ⌜ Unassigned        1 area
+    ⌜ Cellar           0 entities
 ```
 
 When `floor_count == 1` (single-storey or houses without floor
-configured), collapse the Floor wrapper and show Areas at top â€” same as
+configured), collapse the Floor wrapper and show Areas at top — same as
 today's mockup.
 
-### Add `/settings/labels` â€” new screen
+### Add `/settings/labels` — new screen
 
 **What we drafted**: nothing about Labels.
 
@@ -204,7 +204,7 @@ today's mockup.
 
 - List all labels with their color/icon
 - For each: show count of entities, areas with that label
-- "Pin label X to page Y" â€” the equivalent of pin-by-area but pin-by-label
+- "Pin label X to page Y" — the equivalent of pin-by-area but pin-by-label
 - "Hide all entities with label X by default"
 
 This unlocks "all christmas lights off" / "show me only critical
@@ -220,23 +220,23 @@ register is the point); on if a user explicitly wants their HA
 blue/orange/whatever to bleed through.
 
 Read via `frontend/get_themes` WS command on boot. Apply as
-CSS variables `--ha-primary-color`, etc. â€” broadsheet's components
+CSS variables `--ha-primary-color`, etc. — broadsheet's components
 fall back to HA vars when its own aren't set.
 
-### Settings persistence path â€” split add-on vs Docker
+### Settings persistence path — split add-on vs Docker
 
-**What we drafted**: PWA â†’ localStorage; Docker / add-on â†’ `/data/broadsheet.json`.
+**What we drafted**: PWA → localStorage; Docker / add-on → `/data/broadsheet.json`.
 
 **What changes**: add-on's `/data/` is in HA's snapshot system
 automatically. Confirmed correct. **Add a step**: also write paintings
-to `/data/paintings/` so they're backed up. **Don't** use `/share/` â€”
+to `/data/paintings/` so they're backed up. **Don't** use `/share/` —
 that's cross-add-on visible.
 
 For Docker (no Supervisor): we still write to a mounted volume but the
 USER is responsible for backing it up. Document that in the Docker
 section.
 
-### Alert classes â€” add three more
+### Alert classes — add three more
 
 **What we drafted**: 7 alert classes.
 
@@ -245,12 +245,12 @@ section.
 | New trigger | Alert |
 |---|---|
 | User just renamed an area in HA | "Area `<old>` was renamed to `<new>`. Reconcile your curation?" |
-| â‰¥1 entity has `hidden_by: integration` AND user has explicitly un-hidden it | "X entities the integration hid are now showing â€” usually intentional, but verify." |
-| HA's auto-Home dashboard installed by 2026.x â€” and broadsheet detects it | "HA installed its new Home dashboard. broadsheet still works alongside; you may want to set broadsheet as your default landing." |
+| ≥1 entity has `hidden_by: integration` AND user has explicitly un-hidden it | "X entities the integration hid are now showing — usually intentional, but verify." |
+| HA's auto-Home dashboard installed by 2026.x — and broadsheet detects it | "HA installed its new Home dashboard. broadsheet still works alongside; you may want to set broadsheet as your default landing." |
 
 ---
 
-## Add-on diff â€” `ADDON-MOCK.md`
+## Add-on diff — `ADDON-MOCK.md`
 
 ### `config.yaml` corrections
 
@@ -279,7 +279,7 @@ we have); the panel_admin restriction limits which HA users can OPEN
 the broadsheet panel. Default to `true` (admin-only); broadsheet config
 can lower it later.
 
-### `paths.base` + `X-Ingress-Path` â€” the real risk
+### `paths.base` + `X-Ingress-Path` — the real risk
 
 **What we drafted**: nothing about SvelteKit routing under the
 ingress proxy.
@@ -293,7 +293,7 @@ where `<token>` rotates per session. Both:
   in the entrypoint (or set it via env var written by `run.sh`).
 - **WebSocket URL**: when the SPA constructs `ws://<host>/api/websocket`,
   if it uses `location.host` it gets the HA host correctly, but the
-  `<token>/...` ingress prefix WON'T be there (WS bypasses ingress â€”
+  `<token>/...` ingress prefix WON'T be there (WS bypasses ingress —
   Supervisor routes it directly). Need to use the SUPERVISOR_TOKEN
   Bearer in nginx's proxy_pass for `/api/websocket` like our drafted
   config does. **Confirmed correct in our nginx.conf.tpl.**
@@ -303,7 +303,7 @@ The cleanest: serve at relative paths from nginx's root, let HA's
 ingress proxy prepend its token-path transparently, **never bake an
 absolute base into SvelteKit's build.**
 
-### Auth â€” multi-path planning
+### Auth — multi-path planning
 
 **What we drafted**: add-on path = Supervisor token magic, Docker path
 = LLAT paste, OAuth as v0.2.
@@ -329,9 +329,9 @@ Add-ons are distributed via custom Supervisor add-on repositories
 into HA's own frontend (Mushroom, custom cards).
 
 So the two channels are:
-- **HACS Frontend**: as-Lovelace-strategy (v0.2 â€” the plugins
+- **HACS Frontend**: as-Lovelace-strategy (v0.2 — the plugins
   could be JS modules registered with `window.customStrategies`)
-- **Custom add-on repository**: as-add-on (v0.1 â€” Supervisor)
+- **Custom add-on repository**: as-add-on (v0.1 — Supervisor)
 
 Update the README's install section to reflect this correctly.
 
@@ -358,7 +358,7 @@ Things we have to add to our plan:
    - OR build a separate add-on bundle with `paths.base` baked from the
      env at startup (rebuild-on-change is fine for an add-on container)
    - OR serve everything at relative paths and trust nginx to prepend
-     the prefix transparently (cleanest if it works â€” verify)
+     the prefix transparently (cleanest if it works — verify)
 
 3. **Add-on update flow**: when broadsheet ships v0.2, what migration
    does the user's curation file need? Schema-version bumps need a
@@ -386,7 +386,7 @@ Things we have to add to our plan:
 4. **Not shipping our own theme inheritance from HA in v1.** The "is
    broadsheet's editorial register or HA's blue the truth" question is
    a v1 distraction. Default to broadsheet; toggle to inherit later.
-5. **Not building OAuth for the add-on path** â€” Supervisor token
+5. **Not building OAuth for the add-on path** — Supervisor token
    handles it. Only the Docker path needs OAuth.
 
 ---
@@ -402,12 +402,12 @@ Defer until we have at least 2 real users (us + 1 friend) trialling:
 2. **Curation = hide-list (default-show) or show-list (default-hide)?**
    Probably hide-list for new HA installs, show-list for power users
    with 500+ entities. Test both with two real users.
-3. **Area rename in HA â†’ silent migrate or reconcile prompt?** Probably
+3. **Area rename in HA → silent migrate or reconcile prompt?** Probably
    prompt the first time, learn the user's preference.
 4. **Floors as nav primary (`/upstairs/lights`) or area-as-primary
    (`/lights`)?** Auto-detect from `floor_count` and switch nav layout?
    Test with users in 1-floor and multi-floor houses.
-5. **Plugin renderer crash â†’ degraded chip or empty card?** Probably
+5. **Plugin renderer crash → degraded chip or empty card?** Probably
    degraded chip, but validate before locking the plugin contract.
 
 ---
@@ -417,20 +417,20 @@ Defer until we have at least 2 real users (us + 1 friend) trialling:
 The research's most valuable concrete output. Before writing any
 broadsheet code, read in this order:
 
-1. **`home-assistant/frontend/src/panels/lovelace/strategies/areas/`** â€”
+1. **`home-assistant/frontend/src/panels/lovelace/strategies/areas/`** —
    working blueprint for "auto-discover from registries, project per-
    area, render". Particularly `areas-dashboard-strategy.ts` and
    `area-view-strategy.ts`. Steal heuristics directly.
 2. **`home-assistant/home-assistant-js-websocket/lib/entities.ts` +
-   `connection.ts` + `auth.ts`** â€” the canonical WS client. Decide:
+   `connection.ts` + `auth.ts`** — the canonical WS client. Decide:
    adopt or copy.
 3. **`developers.home-assistant.io/docs/frontend/custom-ui/custom-strategy/`**
-   â€” to design the v0.2 Lovelace-strategy facade now.
+   — to design the v0.2 Lovelace-strategy facade now.
 4. **`developers.home-assistant.io/docs/add-ons/presentation/`** + the
-   Ingress section of the supervisor proxy docs â€” `X-Ingress-Path`
+   Ingress section of the supervisor proxy docs — `X-Ingress-Path`
    truth. Read with a SvelteKit `paths.base` doc tab open.
 5. **`home-assistant/frontend/src/data/{area,floor,label,entity,device}_registry.ts`**
-   â€” TypeScript types straight from the source. Copy into broadsheet's
+   — TypeScript types straight from the source. Copy into broadsheet's
    `domain/types.ts`.
 
 ---
@@ -444,16 +444,16 @@ Diff additions:
 
 | New work | Effort |
 |---|---|
-| Adopt `home-assistant-js-websocket` library + rewrite client.ts | -Â½ day (it's less code than we have) |
+| Adopt `home-assistant-js-websocket` library + rewrite client.ts | -½ day (it's less code than we have) |
 | Floor + Label registry pull + projection | +1 day |
-| Floor-aware Settings UI restructure | +Â½ day |
+| Floor-aware Settings UI restructure | +½ day |
 | Ingress `paths.base` solution + verification | +1 day |
-| OAuth in Docker path (using lib) | +Â½ day |
-| Theme inheritance toggle (read HA theme on boot) | +Â½ day |
-| Schema-version migrator for `broadsheet.json` | +Â½ day |
+| OAuth in Docker path (using lib) | +½ day |
+| Theme inheritance toggle (read HA theme on boot) | +½ day |
+| Schema-version migrator for `broadsheet.json` | +½ day |
 | Alert system for HA collisions + area renames | +1 day |
 
-**Net: ~+4 days.** Doesn't change the overall estimate meaningfully â€”
+**Net: ~+4 days.** Doesn't change the overall estimate meaningfully —
 ~5-6 weeks focused stays right. Most of these are bounded refinements
 to layers we already designed.
 
@@ -466,7 +466,7 @@ Higher than before. The research confirmed the **shape** is right
 distribution) and surfaced specific corrections rather than
 fundamental rethinks. No "we'd have to throw it all out" moments.
 
-The biggest single lift from the research isn't a feature â€” it's the
+The biggest single lift from the research isn't a feature — it's the
 **`home-assistant/frontend/src/panels/lovelace/strategies/areas/`**
 read. HA's own auto-area-dashboard strategy has solved many of the
 heuristic problems we'd have hit (which entities go where, how to
