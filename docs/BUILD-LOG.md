@@ -2070,3 +2070,102 @@ field gates it → the renderer paints.
 - Post-v0.1: the ghost-cloud (The Long Take) + tmdb-tv renderer ports
   against the now-proven contract.
 - M7: public release prep (incl. the aarch64 hardware gate above).
+
+---
+
+## 2026-05-14 (later) — the plugin trio completed + M7 prep
+
+The two remaining first-class plugins ported, `/tv` finished, and the
+M7 public-release prep started. Addon 0.1.31 → 0.1.36.
+
+### The Long Take — `@broadsheet/ghost-cloud` (0.1.32)
+
+Ported harold-home's v22 radar time-tube renderer against the proven
+contract. A page-only plugin — no `useRenderer`, no settings panel.
+
+- **Iframe model.** `ghost-cloud.js` (the ~46 KB Three.js renderer)
+  + a `view.html` harness ship as plugin static assets; the
+  `/long-take` page is a thin Svelte wrapper that iframes
+  `pluginAssetUrl('ghost-cloud','view.html')?r=<room>`. The v22
+  renderer is ported verbatim — the ONLY change is `DATA_URL`
+  (harold-home's 3-way path branching → one plugin-asset-relative
+  `./data/<room>.json`).
+- **Three.js vendored, not CDN'd.** harold-home CDN-loads Three r169
+  via importmap; an offline-capable add-on can't. Vendored
+  `three.module.js` + the 6 imported addons + their transitive deps
+  (cherry-picked from `examples/jsm/`, ~1.4 MB — `examples/jsm/`
+  whole is 14 MB). Import graph verified closed.
+- **Demo data, not a precompute service.** harold-home's data comes
+  from a MariaDB-reading systemd service — broadsheet can't inherit
+  that. Decision: v0.1 ships **bundled demo data** (one captured day
+  per room, ~1.9 MB, scp'd from the real HA), so the plugin works for
+  any user with zero hardware/setup. The live-radar-pull path is an
+  explicit deferred follow-on. The discoveryContributor reads the
+  bundled room manifest.
+
+### tmdb-tv — `@broadsheet/tmdb-tv` (0.1.33→0.1.34)
+
+The third plugin, and the leanest contract-surface combination: a
+renderer + a settings panel, nothing else (no page, no static assets,
+no contributor).
+
+- Ported harold-home's `tmdb.ts` — the one structural change: a
+  `createTmdbClient(token, region)` factory, because the token is
+  user-supplied (`curation.integrations.tmdb.apiKey`) not bundle-baked.
+- `PosterRow.svelte` re-tokenised to broadsheet's design system,
+  browse-only.
+- `ContentRows.svelte` is the renderer core's `/tv` slots in via
+  `useRenderer('tmdb-content-rows')` — three states: no-key CTA /
+  loading / Trending + New rows. Settings panel binds the API key +
+  region via `useCurationField`.
+
+### `/tv` Apps launcher (0.1.34→0.1.36)
+
+`/tv`'s own header comment promised an "app launcher" never built.
+Added it — and learned the shape over two iterations:
+
+- A `media_player` only exposes `source_list` while it's ON. v1 hid
+  the section when the TV was off; v2 showed a "turn the TV on" note —
+  still not "streamer buttons". **Final: 3-tier sourcing** — live
+  `source_list` (TV on) → a per-TV-entity localStorage cache (TV off
+  but seen-on) → a small default streamer set (never seen on). So the
+  buttons are ALWAYS present. Tapping wakes the TV first (select_source
+  on a cold set is a no-op), then switches. The moment the TV reports
+  its real list, that replaces the default and caches.
+- Lesson: "ship with X" means X is there out of the box — a
+  correct-but-absent feature reads as unbuilt. The general-purpose
+  instinct (read `source_list`) was right but incomplete; the cache +
+  default tiers make it both general AND always-present.
+
+### M7 prep started
+
+- Promoted `PUBLIC-README-DRAFT.md` → `README.md` — resolved the
+  `<TBD>` URLs, corrected the stale status (Settings UI IS built; the
+  plugins are bundled + curation-gated, not "install if"), added the
+  amd64-supported / aarch64-experimental note.
+- Added `CONTRIBUTING.md` (dev setup + doc reading order + the
+  plugin-authoring pointer, moved off the README) and
+  `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, adopted by
+  reference) and `CHANGELOG.md` (v0.1.0 release notes).
+- **aarch64 gate decided**: v0.1 ships amd64-supported, aarch64
+  marked experimental in the README + changelog — unblocks the
+  release; the first Pi install becomes the de-facto aarch64 test.
+
+### State at end of session
+
+- Addon **0.1.36** live on the real ProDesk HA.
+- All three first-class plugins ported + verified live; `/tv`
+  complete (remote + always-present Apps launcher + content rows).
+- M7 prep: README / CONTRIBUTING / CODE_OF_CONDUCT / CHANGELOG done.
+
+### M7 — remaining release gates
+
+- **Screenshots** for the README — the live captures show the real
+  Harold-Road setup (names, presence, room layout); needs a call on
+  real-setup-vs-sanitised before they go in a public repo.
+- **Repo visibility** — flip `broadsheet` + `broadsheet-addon` public
+  (maintainer action). When `broadsheet` is public, the addon CI's
+  `BROADSHEET_SOURCE_PAT` can be dropped.
+- **Tag v0.1.0** on both repos (after the above).
+- **GitHub Discussions** enabled + the soft launch (maintainer
+  actions).
