@@ -2395,3 +2395,35 @@ cp1252→UTF-8 round-trip classification (genuine chars fail the
 round-trip → left untouched, so it was safe on the one file mixing old
 mojibake with fresh edits). 1 source file + 8 docs; verified every
 distinct mapping; zero mojibake remains. Shipped as 0.1.38, verified.
+
+### Alerts-framing fix + the stale-app-shell bug (0.1.39, 0.1.40)
+
+The alerts fix shipped as 0.1.39 and verified live: the over-counting
+"278 couldn't be auto-grouped" alert now correctly **suppresses
+itself** (zero device-backed entities are unsorted on the real
+install — the whole 278 was place-less helpers/automations), and the
+"hidden" alert reads an accurate **69** instead of the bogus 1363.
+
+Then dogfooding caught a sharp one: *the canary's ingress URL showed a
+different app than the sidebar-panel URL*. Root cause — the add-on's
+`nginx.conf.tpl` sent **no `Cache-Control` on anything**. No service
+worker; just unmanaged nginx defaults → browsers heuristically cached
+the whole app (shell + content-hashed `_app/immutable/*` chunks) as a
+frozen snapshot and never re-checked. A browser that first loaded an
+early build kept showing it across every add-on update; a fresh
+browser saw current. **Methodology lesson**: the verification browser's
+cache state is not the user's — "verified live" against one cache
+proves nothing about another. Fixed in 0.1.40:
+
+- `index.html` (`location /`) → `Cache-Control: no-cache` — always
+  revalidate the shell; nginx 304s when unchanged, so it stays cheap.
+- `/_app/immutable/` → `public, max-age=31536000, immutable` — these
+  are content-hashed, the filename *is* the version.
+- `/_app/` (version.json, env.js — not hashed) → `no-cache`.
+
+Verified post-deploy via the browser's own fetch context: `index.html`
++ `version.json` return `no-cache`, immutable chunks return the
+far-future header, and a reload correctly pulled the new build's entry
+hash. **One-time cost**: an already-stale browser needs a single hard
+refresh to escape its current heuristic cache; from then on it
+self-heals on every load.
