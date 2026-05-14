@@ -114,18 +114,27 @@ async function runContributors(): Promise<void> {
 
 /**
  * Boot the contributor runner. Idempotent. Sets up an `$effect.root`
- * that re-runs contributors (debounced) whenever discovery registries
- * or the active-plugin set change — covering both "at boot" and "on
- * registry updates" from the contract with one mechanism.
+ * that re-runs contributors (debounced) at boot and on registry
+ * updates — the two triggers the contract specifies.
+ *
+ * CRITICAL: track STRUCTURAL signals only, never `discovery.areas` /
+ * `.persons` / `.floors`. Those are derived projections that recompute
+ * on every entity-state delta — and a live HA streams deltas many
+ * times a second, which would reset the debounce forever so
+ * `runContributors` never fires. `lastRefreshAt` changes only on a
+ * registry refresh; `booted` flips once at boot; `registry` changes
+ * when a plugin's status changes. `runContributors` still READS the
+ * area/person arrays to build its snapshot — but that read happens in
+ * a `setTimeout` callback, outside this effect's tracking scope, so it
+ * doesn't re-arm the trigger.
  */
 export function bootContributors(): void {
 	if (_rootCleanup) return;
 	_rootCleanup = $effect.root(() => {
 		$effect(() => {
-			// Reactive deps — read so the effect re-runs on change.
-			void discovery.areas;
-			void discovery.persons;
-			void discovery.floors;
+			// Structural deps only — see the CRITICAL note above.
+			void discovery.booted;
+			void discovery.lastRefreshAt;
 			void pluginLoader.registry;
 			if (_debounce) clearTimeout(_debounce);
 			_debounce = setTimeout(() => {
