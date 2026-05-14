@@ -2048,6 +2048,25 @@ field gates it → the renderer paints.
 - Addon **0.1.31** live on the real ProDesk HA (M6 canary).
 - Plugin system complete + verified; `@broadsheet/emanations` is the
   working proof plugin.
-- Open: deferred cosmetics (white hover states on HA chrome,
-  aarch64-on-real-hardware); post-v0.1 the ghost-cloud + tmdb-tv
-  renderer ports against the now-proven contract; M7 (public release).
+
+### Deferred items — cleaned
+
+- **White hover states on HA chrome — RESOLVED.** The
+  `ha-color-fill-neutral-*` family in `theme/broadsheet.yaml` fixes
+  it; verified live via Chrome MCP — sidebar items and config-page
+  list rows both hover to a dark warm `#2a261e`, not white. The
+  earlier "still white" report predated those tokens landing.
+- **aarch64 — known gap, not a bug.** The multi-arch CI matrix builds
+  amd64 + aarch64 every release and pushes both to GHCR; aarch64 has
+  built clean throughout. But it has NEVER run on real ARM hardware —
+  the only HA hosts here (ProDesk + the VirtualBox env) are amd64.
+  This is an explicit **M7 gate**: before public release, the aarch64
+  image must be installed + smoke-tested on a real ARM HA host (a Pi
+  or equivalent), or v0.1 ships amd64-only with the aarch64 image
+  marked experimental. Nothing actionable without the hardware.
+
+### Still open
+
+- Post-v0.1: the ghost-cloud (The Long Take) + tmdb-tv renderer ports
+  against the now-proven contract.
+- M7: public release prep (incl. the aarch64 hardware gate above).
