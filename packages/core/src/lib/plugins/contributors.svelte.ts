@@ -20,6 +20,7 @@
 import { base } from '$app/paths';
 import { discovery } from '$lib/discovery';
 import { audit } from '$lib/ha/audit';
+import { curationStore } from '$lib/curation/store.svelte';
 import { pluginLoader } from './loader.svelte';
 import { pluginContributions, contributorErrors } from './contributorStore.svelte';
 import type { PluginDiscoverySnapshot } from './types';
@@ -114,28 +115,35 @@ async function runContributors(): Promise<void> {
 
 /**
  * Boot the contributor runner. Idempotent. Sets up an `$effect.root`
- * that re-runs contributors (debounced) at boot and on registry
- * updates — the two triggers the contract specifies.
+ * that re-runs contributors (debounced) at boot, on registry updates,
+ * and when the curation changes (a plugin enabled / disabled).
  *
- * CRITICAL: track STRUCTURAL signals only, never `discovery.areas` /
- * `.persons` / `.floors`. Those are derived projections that recompute
- * on every entity-state delta — and a live HA streams deltas many
- * times a second, which would reset the debounce forever so
- * `runContributors` never fires. `lastRefreshAt` changes only on a
- * registry refresh; `booted` flips once at boot; `registry` changes
- * when a plugin's status changes. `runContributors` still READS the
- * area/person arrays to build its snapshot — but that read happens in
- * a `setTimeout` callback, outside this effect's tracking scope, so it
- * doesn't re-arm the trigger.
+ * CRITICAL: track only signals that DON'T churn on entity-state
+ * deltas. A live HA streams state deltas many times a second; any
+ * dep that recomputes on those would reset the 400ms debounce
+ * forever and `runContributors` would (almost) never fire.
+ *  - `discovery.areas` / `.persons` / `.floors` — derived projections
+ *    that recompute on every state delta. NEVER track these here.
+ *  - `pluginLoader.registry` — its `$derived` reads the discovery
+ *    snapshot for `visibleWhen`, so it ALSO churns on state deltas.
+ *    NOT safe to track either.
+ *  - `discovery.booted` — flips once at boot. ✓
+ *  - `discovery.lastRefreshAt` — changes on a registry refresh only. ✓
+ *  - `curationStore.tick` — increments on a curation mutation (which
+ *    is how a plugin gets enabled/disabled). Doesn't move on state
+ *    deltas. ✓
+ * `runContributors` still READS the area/person arrays + the plugin
+ * registry to do its work — but in a `setTimeout` callback, outside
+ * this effect's tracking scope, so those reads don't re-arm it.
  */
 export function bootContributors(): void {
 	if (_rootCleanup) return;
 	_rootCleanup = $effect.root(() => {
 		$effect(() => {
-			// Structural deps only — see the CRITICAL note above.
+			// Non-churning structural deps only — see the CRITICAL note.
 			void discovery.booted;
 			void discovery.lastRefreshAt;
-			void pluginLoader.registry;
+			void curationStore.tick;
 			if (_debounce) clearTimeout(_debounce);
 			_debounce = setTimeout(() => {
 				void runContributors();
