@@ -516,7 +516,12 @@ function buildArea(
 			locks.push(dom);
 		} else if (id.startsWith('binary_sensor.') && isDoorOrWindowContact(e, state)) {
 			contacts.push(dom);
-		} else if (id.startsWith('camera.')) {
+		} else if (id.startsWith('camera.') || id.startsWith('image.')) {
+			// `image.*` entities are displayable snapshots too — many
+			// battery/P2P cameras expose a working `image.*` still while
+			// their `camera.*` sibling 500s on camera_proxy. Bucket both
+			// as cameras; the page reads `entity_picture` so the right
+			// proxy path (camera_proxy vs image_proxy) is used per entity.
 			cameras.push(dom);
 		} else if (id.startsWith('media_player.')) {
 			if (isTV(e, state, rec.name)) tvs.push(dom);

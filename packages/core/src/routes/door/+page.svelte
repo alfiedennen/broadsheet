@@ -63,6 +63,20 @@
 		};
 	}
 
+	// HA's `entity_picture` attribute is the canonical "how do I render
+	// this entity's image" pointer — it already carries the correct
+	// proxy path (`/api/camera_proxy/…` for camera.*, `/api/image_proxy/…`
+	// for image.*) plus a fresh access token. Prefer it; fall back to
+	// camera_proxy only for camera.* entities that don't expose one.
+	// base-prefixed so the request rides broadsheet's nginx /api/ proxy
+	// (bearer-injects the SUPERVISOR_TOKEN) rather than hitting origin
+	// root — HA's own frontend — which 403s these without a signed token.
+	function cameraSrc(cam: DomainEntity): string {
+		const pic = cam.state?.attributes?.entity_picture as string | undefined;
+		if (pic) return `${base}${pic}`;
+		return `${base}/api/camera_proxy/${cam.id}`;
+	}
+
 	function describeContact(c: DomainEntity): string {
 		const s = c.state?.state;
 		if (s === 'on') return 'open';
@@ -166,15 +180,8 @@
 							<span>No snapshot</span>
 						</div>
 					{:else}
-						<!--
-							base-prefixed so the request rides broadsheet's nginx
-							/api/ proxy (which bearer-injects the SUPERVISOR_TOKEN).
-							A bare /api/camera_proxy/… resolves to origin root —
-							HA's own frontend — which 403s camera_proxy without a
-							signed token.
-						-->
 						<img
-							src="{base}/api/camera_proxy/{cam.id}"
+							src={cameraSrc(cam)}
 							alt={cam.name}
 							loading="lazy"
 							onerror={() => markCameraFailed(cam.id)}
