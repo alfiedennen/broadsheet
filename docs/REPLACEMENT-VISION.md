@@ -10,6 +10,13 @@ not marketing.
 > doc exists because M5 verification surfaced that the
 > broadsheet↔HA-shell relationship had been decided as a *distribution
 > slot* (`PREMORTEM-DIFF.md` point 4) but never as a *user experience*.
+>
+> **Refined (2026-05-14, evening)**: the v0.2 section now carries the
+> governing *brittleness firewall* rule, the three-tier surface model,
+> and a new *Extensibility* section (the custom-pages builder, the
+> Lovelace importer + its v0.9 coverage gate, and why hosting
+> third-party custom cards is ruled out). See `BUILD-LOG.md` 2026-05-14
+> (evening) for the design conversation behind it.
 
 ---
 
@@ -133,6 +140,40 @@ ejected back into HA's UI; the editor opens *within* broadsheet.
 That is the literal definition of the user story: **all of HA's
 control, none of HA's chrome.**
 
+### The governing rule — the brittleness firewall
+
+There is one rule that keeps v0.2 from *being* the brittle overlay this
+whole doc exists to avoid:
+
+> broadsheet only ever consumes the stable contract — the WS/REST API,
+> the theme system, Ingress. It never reaches into HA's rendered DOM.
+
+The WS API (states, services, registries, config, logbook, history,
+energy) is versioned and stable. HA's frontend DOM — Lit components,
+shadow DOM, panel internals — is not. Anything buildable on the API
+gets a native broadsheet surface; anything that can't becomes a
+**doorway** — a broadsheet-register index page that frames the handoff
+(navigating the parent HA frame in panel mode, a link/tab when
+standalone), never a wrap. A doorway is an honest seam, stable across
+HA releases because it is just navigation.
+
+### The three-tier surface model
+
+"The pages broadsheet does not rebuild" is not one bucket — it is two,
+and the split is *how stable the surface is, and whether it is read or
+write*:
+
+| Tier | What | How |
+|---|---|---|
+| **Native surfaces** | the 8 editorial pages | fully owned, read+write over the WS API |
+| **Natively-rendered data** | logbook, history, energy, the device/entity/area registries, system health, backup list | broadsheet renders them in-register — not "recreating the wheel", just rendering the same stable API data it already consumes |
+| **Doorways to editors** | the automation/script editor, integration config-flow wizards, the add-on store, Z2M/ZHA panels | broadsheet does *not* restyle these — their information architecture is the opposite of editorial. A broadsheet-register index page lists them; the edit action hands off to HA's own editor, themed but not wrapped |
+
+Styling carries chrome + data. It cannot carry the genuine editors —
+for those the choice is rebuild (a fool's errand, rejected) or doorway.
+Dogfooding the 8 surfaces is what ranks the middle tier: which nooks
+are actually reached for.
+
 ### Delivery surface
 
 This is the **standalone / PWA path** already pencilled for v0.2
@@ -175,6 +216,57 @@ removes the user's ability to reach the underlying truth.
 
 ---
 
+## Extensibility — user content in the broadsheet paradigm
+
+The replacement vision includes a second user story: *users can add
+whatever they want, and it is styled and accessible in the broadsheet
+paradigm.* That resolves into three distinct mechanisms — not two:
+
+1. **Custom-pages builder** — the user pins their own entities/areas
+   into named pages that render in-register automatically. The curation
+   model (Layer 3) generalised from "override the discovered pages" to
+   "author new ones." Confirmed for v0.2; lands early, because the
+   importer below needs it as a destination.
+2. **Lovelace importer** — an on-ramp, not a separate channel: it
+   parses an existing Lovelace view, maps each *built-in* card type to
+   a broadsheet-register rendering, and emits a custom page that lands
+   in (1). What doesn't map is dropped with an honest "N cards couldn't
+   be imported" notice — the same honesty pattern `/settings` uses for
+   ungrouped entities. A one-time import, not a live link: once
+   imported, broadsheet curation is the source of truth.
+3. **Plugin contract** — the supported path for anything needing custom
+   code. A **rewrite** contract, not a wrap contract, by design
+   (`RENDERER-CONTRACT.md`).
+
+**Ruled out: hosting third-party custom cards** (the compiled JS web
+components distributed via HACS). There is no transpile path from a
+compiled web component to a broadsheet-register Svelte component, and
+*running* one means impersonating HA's `hass` frontend contract — which
+is the brittle overlay back through the side door: it breaks on every
+HA frontend release and renders in the card's own style, not
+broadsheet's. The plugin contract — a deliberate rewrite — is the
+answer for bespoke rendering. There is no auto-conversion, and that is
+correct.
+
+### The v0.9 importer gate
+
+The Lovelace importer carries a measurable acceptance criterion for the
+**v0.9 production milestone**: *~80% of cards-in-the-wild render
+in-register, frequency-weighted.* Measured by running the importer over
+a corpus of real Lovelace configs (Harold Road's own, harold-home's old
+dashboards, community examples) and counting covered vs dropped cards,
+weighted by how often each card type appears in the corpus. The metric
+is deliberately "render in register" — not "card types covered", not
+"whole dashboards import clean" — because that is the one that reflects
+actual user experience. Frequency-weighting also ranks *which* built-in
+card types to map first.
+
+v0.9 is read as the feature-complete pre-1.0 production milestone; the
+importer gate is one of its acceptance criteria, not the only one.
+v0.2–v0.8 are the incremental build-up.
+
+---
+
 ## Summary
 
 | Need | v0.1 | v0.2 |
@@ -182,6 +274,7 @@ removes the user's ability to reach the underlying truth.
 | HA chrome is consistent with broadsheet | ✅ theme | ✅ (theme still applies to embedded pages) |
 | HA chrome is never seen | ❌ | ✅ broadsheet is the shell |
 | All HA control reachable | ✅ (via HA's own chrome) | ✅ (embedded in broadsheet) |
+| User content rendered in-register | ❌ | ✅ builder + importer (~80%-coverage gate at v0.9) |
 | True "replacement" experience | partial | ✅ |
 
 v0.1 is honest about being a panel that makes HA tolerable to pass
@@ -194,4 +287,6 @@ half of a two-part plan, not a cosmetic afterthought.
 
 *Cross-references: `PREMORTEM-DIFF.md` point 4 (distribution slot
 decision), `BUILD-PLAN.md` (v0.1 scope lists), `ARCHITECTURE.md`
-(honest escape hatch principle).*
+(honest escape hatch principle), `RENDERER-CONTRACT.md` (the plugin
+rewrite contract), `BUILD-LOG.md` 2026-05-14 evening (the design
+conversation the v0.2 refinements came from).*

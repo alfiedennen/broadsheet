@@ -159,10 +159,33 @@ Tap an area row to expand:
   drop
 - **Tap-to-toggle hidden** — strikethrough rendering when hidden
 - **The Assign affordance on Unsorted entities** opens a popup with all
-  Areas + a "Create new area" option that drops you into HA's UI to add
-  one (deep link to `/config/areas` on the user's HA host)
+  Areas + a "Create new room" option that creates a real HA area
+  in-place (see *Creating rooms* below) and assigns the entity to it —
+  no leaving broadsheet
 - **No save button** — every change writes through to `broadsheet.json`
   immediately. Visible toast: "Saved" in the bottom-right, dismisses in 1s
+
+### Creating rooms
+
+A **"+ New room"** affordance on the Areas list header. Creating a room
+makes a **real HA area** via the `config/area_registry/create` WS
+command — name + optional floor; icon and aliases are HA's area
+editor's job, reached as a doorway. It is *not* a broadsheet-local
+construct:
+
+- A created room is a real HA area. It flows back through Layer 1
+  discovery (broadsheet already subscribes to `area_registry_updated`),
+  so it appears everywhere — every broadsheet page, and HA itself —
+  with no extra plumbing.
+- Distinct from the v0.2 custom-pages builder: **a room is a spatial HA
+  area; a custom page is an authored view that pins things.**
+- Two guards: it respects the readonly gate (dev read-only mode blocks
+  it like a service call), and the registry write is audit-logged —
+  broadsheet's audit envelope, currently scoped to *service calls*,
+  learns about registry-mutation commands as a class.
+
+Rationale (real area, not local construct) in `REPLACEMENT-VISION.md`
+and `BUILD-LOG.md` 2026-05-14 (evening).
 
 ### Hard cases
 

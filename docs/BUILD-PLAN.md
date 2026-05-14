@@ -63,6 +63,13 @@ configuration required to feel complete on first paint.
   "P0–P4" + RENDERER-CONTRACT.md.)_
 - **Lovelace strategy facade** (the v0.2 channel for using broadsheet
   renderers inside HA's own dashboards)
+- **Custom-pages builder** (v0.2) - author new in-register pages by
+  pinning entities/areas; curation Layer 3 generalised. See
+  `REPLACEMENT-VISION.md`.
+- **Lovelace importer** (v0.2) - on-ramp converting built-in Lovelace
+  card config into custom pages. Carries a v0.9 production gate: ~80%
+  of cards-in-the-wild render in-register, frequency-weighted. See
+  `REPLACEMENT-VISION.md`.
 - **Theme inheritance from HA** â€” i.e. broadsheet *adopting HA's*
   theme tokens. broadsheet's editorial register is the point in v0.1;
   a toggleable HA-theme overlay is deferred. (Note: this is the
@@ -422,6 +429,8 @@ a security or correctness issue. Specifically:
 - **No multi-instance HA.** One HA per broadsheet.
 - **No auto-install of plugins.** Security risk, deferred.
 - **No Lovelace strategy facade.** v0.2 channel.
+- **No custom-pages builder or Lovelace importer.** v0.2 - see
+  `REPLACEMENT-VISION.md`.
 - **No Docker path.** v0.2 gated on demand.
 
 The discipline is: write v0.2 issues for everything we want but don't

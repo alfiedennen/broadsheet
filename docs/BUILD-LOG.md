@@ -2169,3 +2169,136 @@ Added it — and learned the shape over two iterations:
 - **Tag v0.1.0** on both repos (after the above).
 - **GitHub Discussions** enabled + the soft launch (maintainer
   actions).
+
+---
+
+## 2026-05-14 (evening) — replacement vision refined: the v0.2 deep-HA design
+
+A design conversation, not a build session. M7's public push is
+**parked** — the canary needs a real dogfooding soak first, and the
+repos stay private until then. Eight canary screenshots captured for
+the README (real-data — names, rooms, presence — so a blur pass is
+needed before they go anywhere public). Two dogfooding findings logged
+in passing: `/body` renders raw sensor values (`6120000.0 ms`,
+unconverted durations — the renderer isn't humanising units), and
+`/settings` reports 278 un-auto-grouped + 1363 hidden entities on the
+real install — worth a look at whether discovery's grouping heuristics
+leave too much in Unsorted.
+
+The substance: scoping the v0.2 "deep HA" work — how broadsheet reaches
+the nooks and crannies HA's UI covers that broadsheet's 8 surfaces
+don't (integrations, automation editor, logbook, backups, dev tools).
+
+### Where "primarily styling" works — and where it breaks
+
+HA's UI splits three ways, and the styling instinct only carries two:
+
+- **Chrome** (sidebar, header, frame) — the v0.1 broadsheet HA theme
+  already reaches this.
+- **Data surfaces** (logbook, history, energy stats, the
+  device/entity/area registries, system health, the backup list) —
+  not a "wheel" to recreate; just data over the same stable WS/REST
+  API broadsheet already consumes. broadsheet can render these
+  natively in-register.
+- **Genuine editors** (automation/script editor, integration
+  config-flow wizards, add-on store, Z2M/ZHA panels) — styling cannot
+  reach these and shouldn't try. Their information architecture is the
+  opposite of editorial. The honest choice is binary: rebuild (recreate
+  the wheel — rejected) or **doorway** to them.
+
+### The brittleness firewall — the governing rule
+
+> broadsheet only ever consumes the stable contract — the WS/REST API,
+> the theme system, Ingress. It never reaches into HA's rendered DOM.
+
+The WS API (states, services, registries, config, logbook, history,
+energy) is versioned and stable. HA's frontend DOM — Lit components,
+shadow DOM, panel internals — is not. Any approach that styles or wraps
+*that* is the brittle overlay. So: anything buildable on the API gets a
+native broadsheet surface; anything that can't becomes a **doorway**,
+never a wrap. A doorway is a broadsheet-register index page that frames
+the handoff — in panel mode it navigates the parent HA frame, in
+standalone mode it's a link/tab. An honest seam, stable across HA
+releases because it's just navigation.
+
+So the v0.2 tiering is: **native surfaces → natively-rendered data →
+doorways to editors.** Dogfooding the 8 surfaces is what ranks the
+middle tier — which nooks are actually reached for.
+
+### Extensibility — three things, not two
+
+"Users can add whatever they want, styled in the broadsheet paradigm"
+resolves into three distinct mechanisms:
+
+1. **Custom-pages builder** — user pins their own entities/areas into
+   named pages that render in-register automatically. The curation
+   model generalised. Confirmed for v0.2.
+2. **Lovelace importer** — an on-ramp that parses a Lovelace view,
+   maps each *built-in* card type to a broadsheet-register rendering,
+   and emits a custom page. Feeds *into* (1) — not a separate channel.
+   What doesn't map is dropped with an honest "N cards couldn't be
+   imported" notice (the `/settings` honesty pattern). One-time import,
+   not a live link — broadsheet curation becomes the source of truth.
+3. **Plugin contract** — the supported path for anything needing custom
+   code. A **rewrite** contract, not a wrap contract, by design.
+
+Ruled out: **hosting third-party custom cards** (the compiled JS web
+components from HACS). There's no transpile path from a compiled web
+component to a broadsheet-register Svelte component, and *running* one
+means impersonating HA's `hass` frontend contract — which is the
+brittle overlay back through the side door, breaking on every HA
+frontend release and rendering in the card's own style. The plugin
+contract (a deliberate rewrite) is the answer for bespoke rendering;
+there is no auto-conversion.
+
+### The v0.9 production gate
+
+The Lovelace importer carries a measurable acceptance criterion for the
+v0.9 production milestone: **~80% of cards-in-the-wild render
+in-register, frequency-weighted** — measured by running the importer
+over a corpus of real Lovelace configs (Harold Road's, harold-home's
+old dashboards, community examples) and counting covered vs dropped
+cards, weighted by how often each card type appears. Frequency-weighting
+also tells us *which* ~20 built-in card types to build mappings for
+first. The metric is "render in register" (not "card types covered",
+not "whole dashboards clean") because that's the one that reflects
+actual user experience.
+
+v0.9 is read as the feature-complete pre-1.0 production milestone; the
+importer gate is one of its acceptance criteria, not the only one.
+v0.2–v0.8 are the incremental build-up (the custom-pages builder lands
+early — the importer needs it as a destination).
+
+`REPLACEMENT-VISION.md` updated with the firewall rule, the three-tier
+surface model, and the extensibility section; `BUILD-PLAN.md`'s "What's
+NOT in v0.1" + scope guards extended with the two new v0.2 items.
+
+### Settings omission: create rooms via the House tab
+
+`/settings/house` lets you rename / hide / move-to-area, but every
+target area has to already exist in HA — and `SETTINGS-UI.md`'s "Assign"
+popup punted "Create new area" to a deep-link into HA's own
+`/config/areas`. That deep-link IS the "ejected back into HA's chrome"
+failure the replacement vision exists to kill. Closed:
+
+- **A created room is a real HA area** — `config/area_registry/create`
+  over the stable WS contract — not a broadsheet-local construct. The
+  House tab already writes HA's registries (move-to-area is a device
+  `area_id` write); creating an area is the same write-class one step
+  earlier. It honours "discovery, not configuration": a new room is a
+  new room *everywhere*, not a parallel concept only broadsheet knows.
+- **Distinct from the v0.2 custom-pages builder**: a room is a spatial
+  HA area that flows through discovery; a custom page is an authored
+  view that pins things.
+- **Cheap mechanically** — discovery already subscribes to
+  `area_registry_updated`, so a created area flows Layer 1 → 2 → the
+  House list with no extra plumbing. The work is the "+ New room"
+  affordance, the readonly-gate respect, and teaching the audit
+  envelope (currently service-call-scoped) about registry-mutation
+  commands as a class.
+- **Near-term, not v0.2** — a present-tense omission in a screen that
+  already ships; belongs on the dogfooding-pass punch list.
+
+`SETTINGS-UI.md` updated: new *Creating rooms* subsection under
+`/settings/house`, and the Assign popup's "Create new room" now creates
+in-place instead of deep-linking out.
