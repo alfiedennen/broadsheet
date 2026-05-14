@@ -3,7 +3,8 @@
 	 * KebabNav — top-right kebab (⋮) opens a sheet with the page list.
 	 *
 	 * Pages come from PAGES + NAV_ORDER in $lib/discovery/page-map.
-	 * Plus fixed entries: Settings, About.
+	 * Plus active plugin pages (from the plugin loader), then the
+	 * fixed entries: Settings, Forget token.
 	 *
 	 * Pattern from harold-home: minimal chrome on every page; only
 	 * affordance to navigate is the kebab. Keeps the editorial
@@ -14,6 +15,7 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { PAGES, NAV_ORDER, type PageSlug } from '$lib/discovery';
+	import { pluginLoader } from '$lib/plugins/loader.svelte';
 
 	let open = $state(false);
 
@@ -48,6 +50,14 @@
 			active: currentPath === `${base}/${slug}/`
 		})),
 		{ href: `${base}/wall/`, label: 'Wall', active: currentPath === `${base}/wall/` },
+		// Active plugin pages slot in after the core domain pages,
+		// before Settings. The loader already filters to pages that
+		// are both routable + nav-visible, sorted by navOrder.
+		...pluginLoader.activePluginPages.map((p) => ({
+			href: `${base}/${p.slug}/`,
+			label: p.label,
+			active: currentPath === `${base}/${p.slug}/`
+		})),
 		{
 			href: `${base}/settings/`,
 			label: 'Settings',

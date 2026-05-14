@@ -29,12 +29,14 @@ import type { Component } from 'svelte';
 import type { DomainArea, DomainEntity, DomainFloor, DomainPerson } from '$lib/discovery';
 
 /**
- * A lazily-imported Svelte component. The registry is heterogeneous
- * (every plugin's components have different props), so the props type
- * is intentionally permissive — concrete prop typing happens where a
- * component is actually rendered.
+ * A lazily-imported Svelte component. The registry is heterogeneous —
+ * every plugin's components have different (or no) props — and
+ * `Component<Props>` is contravariant in `Props`, so no concrete
+ * props type accepts *every* component. `Component<any>` is the
+ * deliberate escape hatch: it accepts any component shape. Concrete
+ * prop typing happens where a component is actually rendered.
  */
-export type LazyComponent = () => Promise<{ default: Component<Record<string, any>> }>;
+export type LazyComponent = () => Promise<{ default: Component<any> }>;
 
 /**
  * The discovery snapshot a plugin sees — a read-only subset of core's

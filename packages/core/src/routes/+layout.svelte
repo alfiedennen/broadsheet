@@ -15,6 +15,7 @@
 	import { callService } from '$lib/ha/actions';
 	import { discovery, bootDiscovery } from '$lib/discovery';
 	import { bootCuration, curationStore } from '$lib/curation/store.svelte';
+	import { bootPlugins, pluginLoader } from '$lib/plugins/loader.svelte';
 	import WriteAllowedBanner from '$lib/components/WriteAllowedBanner.svelte';
 	import KebabNav from '$lib/components/KebabNav.svelte';
 	import Toast from '$lib/components/Toast.svelte';
@@ -91,6 +92,13 @@
 			console.error('[broadsheet] discovery / curation boot failed', err);
 		}
 
+		// Plugin loader: pure static validation of the bundled plugins.
+		// Runs unconditionally — even if discovery/curation had a hiccup
+		// above, the loader's reactive status (registry, activePluginPages)
+		// tracks curation + discovery as they settle, so plugins recover
+		// on their own. Sync; needs nothing awaited.
+		bootPlugins();
+
 		booted = true;
 
 		// Dev-only test handle. Exposes the SAME module bindings the
@@ -112,7 +120,8 @@
 				discovery,
 				curation: curationStore,
 				curationApi: curationMod,
-				registry: registryMod
+				registry: registryMod,
+				plugins: pluginLoader
 			};
 			audit({ kind: 'auth-event', note: 'window.__broadsheet_dev__ exposed (dev only)' });
 		}

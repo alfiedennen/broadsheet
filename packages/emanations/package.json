@@ -1,14 +1,15 @@
 {
   "name": "@broadsheet/emanations",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "Multi-person presence painting plugin for broadsheet",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build": "echo 'emanations: stub at M0 — implementation lands post-v0.1' && exit 0"
+    "build": "echo 'emanations is built THROUGH @broadsheet/core (core imports it via the plugin registry) — no standalone build' && exit 0"
   },
   "peerDependencies": {
-    "@broadsheet/core": "workspace:*"
+    "@broadsheet/core": "workspace:*",
+    "svelte": "^5.1.0"
   }
 }

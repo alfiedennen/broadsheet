@@ -10,6 +10,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@broadsheet/emanations':
+        specifier: workspace:*
+        version: link:../emanations
       home-assistant-js-websocket:
         specifier: ^9.4.0
         version: 9.6.0
@@ -53,6 +56,9 @@ importers:
       '@broadsheet/core':
         specifier: workspace:*
         version: link:../core
+      svelte:
+        specifier: ^5.1.0
+        version: 5.55.5
 
   packages/ghost-cloud:
     dependencies:

@@ -73,6 +73,28 @@ never fetched.
 The v0.2 story — runtime plugin install behind a signed allowlist —
 remains "not bundled". v0.1 is "bundled, lazy-chunked, curation-gated".
 
+### v0.1 → v0.2 evolution — one seam
+
+`core/src/lib/plugins/registry.ts` is the **only** bundling-aware
+module. It produces a `BroadsheetPlugin[]`; everything downstream —
+the loader, the `[pluginSlug]` route, KebabNav, `useRenderer`,
+`/settings/plugins` — consumes that array and has no idea where a
+plugin came from.
+
+v0.2 extends `registry.ts` with a *second* code path: fetch +
+dynamic-`import()` of third-party plugin bundles behind a signed
+allowlist, merged into the same array. Nothing else changes. The
+first-class trio stays statically bundled; third-party plugins are
+runtime-installed and **never** bundled — so "only our core plugins
+ship in the bundle" stays true by construction. The contract
+(`BroadsheetPlugin`) is bundling-agnostic, so a plugin written for
+v0.1 runs unchanged in v0.2. `pluginAssetUrl` already abstracts asset
+URLs; the `enabled` curation flag works identically; v0.2 adds only
+*optional additive* curation fields (`source`, `installUrl`).
+
+**The whole v0.1 → v0.2 evolution is: extend `registry.ts`, touch
+nothing else.**
+
 ---
 
 ## Routing model

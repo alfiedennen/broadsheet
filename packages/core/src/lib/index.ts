@@ -40,3 +40,14 @@ export type { DomainArea, DomainEntity, DomainFloor, DomainPerson, PageSlug } fr
 
 /* ── HA primitives a plugin's components may need (P0) ───────────── */
 export type { State } from './ha/types';
+
+/* ── Runtime surface for plugin pages + components (P1) ──────────── */
+// The reactive discovery façade. Plugin pages read `discovery.areas`,
+// `discovery.persons`, etc. — never core internals.
+export { discovery } from './discovery';
+// Editorial layout primitives. Plugin pages compose with the same
+// shell as core pages, so they inherit the register for free.
+export { default as PageShell } from './components/PageShell.svelte';
+export { default as Hero } from './components/Hero.svelte';
+export { default as Eyebrow } from './components/Eyebrow.svelte';
+export { default as OutLine } from './components/OutLine.svelte';
