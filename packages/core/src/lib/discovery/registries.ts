@@ -17,7 +17,7 @@
  */
 
 import { subscribeEntities } from 'home-assistant-js-websocket';
-import type { Connection } from 'home-assistant-js-websocket';
+import type { Connection, UnsubscribeFunc } from 'home-assistant-js-websocket';
 import { audit } from '$lib/ha/audit';
 import { getConnection } from '$lib/ha/client';
 import { discoveryStore } from './store.svelte';
@@ -57,8 +57,13 @@ function normalisePersons(raw: RawPersonResponse[]): Person[] {
 	}));
 }
 
-let _unsubEntities: (() => void) | null = null;
-let _unsubRegistryEvents: Array<() => void> = [];
+// NB: the HA library's unsubscribe functions are `() => Promise<void>`,
+// NOT `() => void`. The promise REJECTS with "Subscription not found"
+// when the sub id is stale (e.g. teardown runs after the socket
+// reconnected with fresh ids). teardownDiscovery must catch that
+// rejection or it surfaces as an Uncaught (in promise) console error.
+let _unsubEntities: UnsubscribeFunc | null = null;
+let _unsubRegistryEvents: UnsubscribeFunc[] = [];
 let _readyListener: (() => void) | null = null;
 let _connectionRef: Connection | null = null;
 
@@ -139,20 +144,26 @@ export async function bootDiscovery(): Promise<void> {
 
 /** Tear down all subscriptions + reset state. Used on disconnect / hot-reload. */
 export async function teardownDiscovery(): Promise<void> {
-	if (_unsubEntities) {
+	// Each unsub returns a Promise that can reject with "Subscription
+	// not found" if the connection already reconnected (stale sub id).
+	// Catch the async rejection — a bare try/catch only guards the
+	// synchronous call, letting the rejection escape as Uncaught.
+	const swallowUnsub = (fn: UnsubscribeFunc) => {
 		try {
-			_unsubEntities();
+			Promise.resolve(fn()).catch(() => {
+				/* stale sub id post-reconnect — expected, ignore */
+			});
 		} catch {
-			/* ignore */
+			/* ignore synchronous throw too */
 		}
+	};
+
+	if (_unsubEntities) {
+		swallowUnsub(_unsubEntities);
 		_unsubEntities = null;
 	}
 	for (const u of _unsubRegistryEvents) {
-		try {
-			u();
-		} catch {
-			/* ignore */
-		}
+		swallowUnsub(u);
 	}
 	_unsubRegistryEvents = [];
 
