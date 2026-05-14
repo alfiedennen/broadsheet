@@ -151,20 +151,27 @@
 		</div>
 	{/if}
 
-	{#if tvSources.length > 0}
+	{#if primaryTv}
 		<OutLine label="Apps" />
-		<div class="sources">
-			{#each tvSources as source (source)}
-				<button
-					class="source-btn"
-					class:active={source === currentSource}
-					type="button"
-					onclick={() => selectSource(source)}
-				>
-					{source}
-				</button>
-			{/each}
-		</div>
+		{#if tvSources.length > 0}
+			<div class="sources">
+				{#each tvSources as source (source)}
+					<button
+						class="source-btn"
+						class:active={source === currentSource}
+						type="button"
+						onclick={() => selectSource(source)}
+					>
+						{source}
+					</button>
+				{/each}
+			</div>
+		{:else}
+			<!-- An off / standby TV reports no source_list — HA only
+			     has the app list while the set is on. Say so rather
+			     than vanishing the section. -->
+			<p class="sources-note"><em>Turn the TV on to see its apps.</em></p>
+		{/if}
 	{/if}
 
 	{#if allMedia.length > 0}
@@ -342,6 +349,12 @@
 		border-color: var(--accent);
 		color: var(--accent);
 		background: var(--accent-glow);
+	}
+
+	.sources-note {
+		margin: 0;
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
 	}
 
 	.media-list {
