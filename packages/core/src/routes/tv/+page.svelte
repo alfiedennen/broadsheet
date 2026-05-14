@@ -17,10 +17,18 @@
 	import { discovery } from '$lib/discovery';
 	import type { DomainEntity } from '$lib/discovery';
 	import { callService, callOn, callOff } from '$lib/ha/actions';
+	import { curationStore } from '$lib/curation/store.svelte';
+	import { useRenderer } from '$lib/plugins/renderers.svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+
+	// Content slot — the @broadsheet/tmdb-tv plugin's renderer fills it
+	// when enabled. core never hard-depends on it: `content.current` is
+	// null when the plugin's off, and the slot's built-in CTA covers it.
+	const content = useRenderer('tmdb-content-rows');
+	const tmdb = $derived(curationStore.current.integrations.tmdb ?? {});
 
 	const tvAreas = $derived(discovery.areasForPage('tv'));
 	const allTVs = $derived(tvAreas.flatMap((a) => a.tvs));
@@ -140,14 +148,20 @@
 	{/if}
 
 	<OutLine label="Watch" />
-	<div class="content-slot">
-		<p class="slot-headline"><em>Content browser slot</em></p>
-		<p class="slot-dek">
-			TMDB-driven "New" and "Trending" rows arrive via the
-			<code>@broadsheet/tmdb-tv</code> plugin (v0.1.x). Add your TMDB API key
-			in <a href="{base}/settings/integrations/">Settings → Integrations</a> to enable.
-		</p>
-	</div>
+	{#if content.current}
+		{@const ContentRows = content.current}
+		<ContentRows apiKey={tmdb.apiKey ?? null} region={tmdb.region ?? 'GB'} />
+	{:else}
+		<div class="content-slot">
+			<p class="slot-headline"><em>Content browser slot</em></p>
+			<p class="slot-dek">
+				TMDB-driven "New" and "Trending" rows arrive via the
+				<code>@broadsheet/tmdb-tv</code> plugin. Enable it in
+				<a href="{base}/settings/plugins/">Settings → Plugins</a>, then add your free
+				TMDB API key.
+			</p>
+		</div>
+	{/if}
 
 	{#if !primaryTv && !primaryRemote}
 		<p class="empty">No TV / remote entities discovered yet.</p>

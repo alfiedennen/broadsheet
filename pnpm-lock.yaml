@@ -16,6 +16,9 @@ importers:
       '@broadsheet/ghost-cloud':
         specifier: workspace:*
         version: link:../ghost-cloud
+      '@broadsheet/tmdb-tv':
+        specifier: workspace:*
+        version: link:../tmdb-tv
       home-assistant-js-websocket:
         specifier: ^9.4.0
         version: 9.6.0
@@ -77,6 +80,9 @@ importers:
       '@broadsheet/core':
         specifier: workspace:*
         version: link:../core
+      svelte:
+        specifier: ^5.1.0
+        version: 5.55.5
 
 packages:
 

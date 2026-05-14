@@ -37,6 +37,7 @@
   "dependencies": {
     "home-assistant-js-websocket": "^9.4.0",
     "@broadsheet/emanations": "workspace:*",
-    "@broadsheet/ghost-cloud": "workspace:*"
+    "@broadsheet/ghost-cloud": "workspace:*",
+    "@broadsheet/tmdb-tv": "workspace:*"
   }
 }
