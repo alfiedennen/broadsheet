@@ -29,6 +29,7 @@ import type {
 } from './types';
 import { RESERVED_ROUTE_SLUGS } from './types';
 import { BUNDLED_PLUGINS } from './registry';
+import { contributorErrors } from './contributorStore.svelte';
 import { discovery } from '$lib/discovery';
 import { curationStore } from '$lib/curation/store.svelte';
 import { audit } from '$lib/ha/audit';
@@ -159,6 +160,14 @@ class PluginLoader {
 						statusReason: 'enabled, but no page passes its visibility check yet'
 					};
 				}
+			}
+
+			// Enabled + loaded + visible — but a discoveryContributor
+			// may have thrown on its last run. The plugin still runs;
+			// its data is degraded. Surface that honestly.
+			const contributorError = contributorErrors[plugin.id];
+			if (contributorError) {
+				return { plugin, status: 'errored', statusReason: contributorError };
 			}
 
 			return { plugin, status: 'active' };

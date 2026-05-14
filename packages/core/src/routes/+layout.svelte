@@ -16,6 +16,7 @@
 	import { discovery, bootDiscovery } from '$lib/discovery';
 	import { bootCuration, curationStore } from '$lib/curation/store.svelte';
 	import { bootPlugins, pluginLoader } from '$lib/plugins/loader.svelte';
+	import { bootContributors } from '$lib/plugins/contributors.svelte';
 	import WriteAllowedBanner from '$lib/components/WriteAllowedBanner.svelte';
 	import KebabNav from '$lib/components/KebabNav.svelte';
 	import Toast from '$lib/components/Toast.svelte';
@@ -98,6 +99,11 @@
 		// tracks curation + discovery as they settle, so plugins recover
 		// on their own. Sync; needs nothing awaited.
 		bootPlugins();
+
+		// discoveryContributor runner: an $effect.root that runs each
+		// active plugin's contributors at boot + on every registry /
+		// active-plugin change. Idempotent; merges into discovery.plugins.
+		bootContributors();
 
 		booted = true;
 

@@ -12,6 +12,7 @@ import { discoveryStore } from './store.svelte';
 import { projectDomain, type DomainArea, type DomainEntity, type DomainFloor, type DomainPerson } from './domain';
 import { PAGES, NAV_ORDER, unbucketed, type PageSlug } from './page-map';
 import { curationStore } from '$lib/curation/store.svelte';
+import { pluginContributions } from '$lib/plugins/contributorStore.svelte';
 
 export type { DomainArea, DomainEntity, DomainFloor, DomainPerson, PageSlug };
 export { bootDiscovery, teardownDiscovery } from './registries';
@@ -126,6 +127,17 @@ class DiscoveryAPI {
 	/** Entities not picked up by any page (for /settings/house surface in M4). */
 	unbucketed(): DomainEntity[] {
 		return unbucketed(this.areas);
+	}
+
+	/**
+	 * Plugin discovery contributions, keyed by plugin id. A plugin's
+	 * discoveryContributors run at boot + on registry updates; their
+	 * merged output lands here. A plugin reads its own slice via
+	 * `discovery.plugins[<id>]?.<key>`. Empty until contributors run
+	 * (or `{}` for plugins with no contributors).
+	 */
+	get plugins(): Record<string, Record<string, unknown>> {
+		return pluginContributions;
 	}
 }
 

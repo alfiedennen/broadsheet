@@ -64,3 +64,9 @@ export { useRenderer } from './plugins/renderers.svelte';
 // `pluginAssetUrl(id, path)` resolves a plugin's bundled static asset
 // to a URL that works under HA Ingress and direct serving alike.
 export { pluginAssetUrl } from './plugins/assets';
+
+/* ── Settings-panel surface for plugin config UIs (P4) ───────────── */
+// A plugin's `settingsPanel` component binds curation fields with
+// `useCurationField` and lays them out with `SettingsRow`.
+export { useCurationField } from './curation/store.svelte';
+export { default as SettingsRow } from './components/SettingsRow.svelte';

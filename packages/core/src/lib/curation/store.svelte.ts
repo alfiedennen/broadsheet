@@ -222,6 +222,61 @@ export async function setPluginEnabled(pluginId: string, enabled: boolean): Prom
 	});
 }
 
+/* ─────────────── generic path access (plugin settings panels) ─────────────── */
+
+/** Read a dotted path (`plugins.x.config.fadeMs`) out of an object. */
+function getByPath(obj: unknown, path: string): unknown {
+	return path.split('.').reduce<unknown>((acc, key) => {
+		if (acc && typeof acc === 'object') return (acc as Record<string, unknown>)[key];
+		return undefined;
+	}, obj);
+}
+
+/** Write `value` at a dotted path, creating intermediate objects. */
+function setByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
+	const keys = path.split('.');
+	let cur: Record<string, unknown> = obj;
+	for (let i = 0; i < keys.length - 1; i++) {
+		const k = keys[i];
+		if (!cur[k] || typeof cur[k] !== 'object') cur[k] = {};
+		cur = cur[k] as Record<string, unknown>;
+	}
+	cur[keys[keys.length - 1]] = value;
+}
+
+/** Write `value` at a dotted curation path, optimistic + revert-on-fail. */
+export async function setCurationPath(path: string, value: unknown): Promise<boolean> {
+	return update((c) => {
+		setByPath(c as unknown as Record<string, unknown>, path, value);
+		return c;
+	});
+}
+
+/**
+ * Reactive two-way binding to a dotted curation path — the binding
+ * primitive for plugin settings panels (`@broadsheet/core` re-exports
+ * this as `useCurationField`). Read `field.value` in a reactive
+ * context to track it; assign `field.value = …` (or `bind:value`) to
+ * persist through the optimistic-write path.
+ *
+ *   const fade = useCurationField<number>('plugins.emanations.config.fadeMs');
+ *   <input type="number" bind:value={fade.value} />
+ */
+export function useCurationField<T = unknown>(path: string): { value: T | undefined } {
+	return {
+		get value(): T | undefined {
+			// Reactive dep on curation mutations — the curation object is
+			// replaced on every save; the tick guarantees recompute.
+			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+			curationStore.tick;
+			return getByPath(curationStore.current, path) as T | undefined;
+		},
+		set value(v: T | undefined) {
+			void setCurationPath(path, v);
+		}
+	};
+}
+
 /* ─────────────── reset ─────────────── */
 
 /** Wipe all curation back to defaults. Persists immediately. */

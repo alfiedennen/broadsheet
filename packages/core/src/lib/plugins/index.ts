@@ -11,3 +11,5 @@ export { BUNDLED_PLUGINS } from './registry';
 export { pluginLoader, bootPlugins, type ActivePluginPage } from './loader.svelte';
 export { useRenderer, rendererRegistry } from './renderers.svelte';
 export { pluginAssetUrl } from './assets';
+export { bootContributors } from './contributors.svelte';
+export { pluginContributions, contributorErrors } from './contributorStore.svelte';

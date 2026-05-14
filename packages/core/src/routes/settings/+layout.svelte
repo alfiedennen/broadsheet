@@ -39,7 +39,9 @@
 			{#each tabs as tab (tab.slug)}
 				<a
 					class="tab"
-					class:active={currentSlug === tab.slug}
+					class:active={tab.slug
+						? currentSlug === tab.slug || currentSlug.startsWith(`${tab.slug}/`)
+						: currentSlug === ''}
 					href={tab.slug ? `${base}/settings/${tab.slug}/` : `${base}/settings/`}
 				>
 					{tab.label}

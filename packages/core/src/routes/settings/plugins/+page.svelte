@@ -15,6 +15,7 @@
 	 * plugin silently doing nothing.
 	 */
 
+	import { base } from '$app/paths';
 	import { pluginLoader } from '$lib/plugins/loader.svelte';
 	import type { PluginStatus } from '$lib/plugins/types';
 	import { curationStore, setPluginEnabled } from '$lib/curation/store.svelte';
@@ -124,6 +125,12 @@
 					<span class="toggle-track"><span class="toggle-thumb"></span></span>
 					<span class="toggle-label">{enabled ? 'Enabled' : 'Disabled'}</span>
 				</button>
+
+				{#if plugin.settingsPanel}
+					<a class="config-link" href="{base}/settings/plugins/{plugin.id}/config/">
+						Configure →
+					</a>
+				{/if}
 			</div>
 		</section>
 	{/each}
@@ -262,7 +269,24 @@
 
 	.plugin-actions {
 		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-4);
 		margin-top: var(--space-1);
+	}
+
+	.config-link {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--accent);
+		text-decoration: none;
+		white-space: nowrap;
+	}
+
+	.config-link:hover {
+		text-decoration: underline;
 	}
 
 	.toggle {
