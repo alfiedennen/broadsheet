@@ -302,7 +302,9 @@ than the plugin silently doing nothing.
 ## Discovery contributor contract
 
 Some plugins read HA data the core doesn't (ghost-cloud reads radar
-JSON). They register `discoveryContributors`:
+JSON; emanations reads its painting-set manifest). They register
+`discoveryContributors` — an eager `DiscoveryContributor[]` (the runner
+needs the objects at boot, so they are NOT lazy thunks):
 
 ```ts
 import type { DiscoveryContributor } from '@broadsheet/core';
@@ -322,10 +324,17 @@ const radarRooms: DiscoveryContributor = {
     return { radarRooms: rooms };
   }
 };
+
+// in the plugin object:  discoveryContributors: [radarRooms]
 ```
 
-Contributors run at boot + on registry updates. Their return value is
-merged into `discovery.plugins[<plugin-id>]`:
+The contributor module is `import type`-only against `@broadsheet/core`
+and side-effect-free, so a plugin's `index.ts` can eagerly import it
+without breaking the two hard rules.
+
+Contributors run at boot + on registry updates (a debounced
+`$effect.root` watches discovery + the active-plugin set). Their
+return value is merged into `discovery.plugins[<plugin-id>]`:
 
 ```ts
 const radarRooms = $derived(discovery.plugins['ghost-cloud']?.radarRooms ?? []);

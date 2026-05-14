@@ -1,21 +1,26 @@
 /**
  * @broadsheet/emanations — multi-person presence painting.
  *
+ * The first-class proof plugin. As of P4 it exercises EVERY surface
+ * of the frozen BroadsheetPlugin contract:
+ *   - `pages`       — /emanations (the catch-all route renders it)
+ *   - `renderers`   — multi-person-painting (core's `/` opts into it)
+ *   - `settingsPanel` — config UI at /settings/plugins/emanations/config
+ *   - `staticAssets`  — the painting set under static/
+ *   - `discoveryContributors` — discovers which painting sets exist
+ *
  * This module is statically imported by core's plugin registry, so it
  * obeys the two hard rules from RENDERER-CONTRACT.md:
  *   1. No side effects at module-eval time — it exports a plain object.
- *   2. `import type` from @broadsheet/core ONLY — never a runtime
- *      import. The heavy page component is behind a LazyComponent
- *      thunk; it may freely runtime-import core (it's a separate,
- *      lazily-fetched chunk, so there's no static cycle).
- *
- * Status: P1 — the plugin object + a stub page that proves the
- * contract end-to-end (separate package, bundled, lazy-chunked,
- * curation-gated, routed, nav-listed). The real multi-person painting
- * renderer lands in P4.
+ *   2. `import type` from @broadsheet/core ONLY. (Importing the
+ *      plugin's OWN modules at runtime is fine — `paintingSets` is a
+ *      side-effect-free object the contributor runner needs at boot,
+ *      so it can't be lazy.) Heavy components stay behind LazyComponent
+ *      thunks; those chunks may freely runtime-import core.
  */
 
 import type { BroadsheetPlugin } from '@broadsheet/core';
+import { paintingSetsContributor } from './discovery/paintingSets';
 
 export const plugin: BroadsheetPlugin = {
 	id: 'emanations',
@@ -40,15 +45,27 @@ export const plugin: BroadsheetPlugin = {
 
 	// A renderer core pages can opt into via useRenderer(). core's `/`
 	// upgrades its ProceduralPainting fallback to this when emanations
-	// is active. P2 stub; P4 ports the real axonometric painting.
+	// is active (procedural mode — core passes no painting set).
 	renderers: {
 		'multi-person-painting': () => import('./renderers/MultiPersonPainting.svelte')
 	},
 
+	// Plugin config UI — shown at /settings/plugins/emanations/config.
+	// Binds plugins.emanations.config.* via useCurationField.
+	settingsPanel: {
+		label: 'Emanations',
+		icon: 'mdi:image-multiple-outline',
+		component: () => import('./settings/EmanationsSettings.svelte')
+	},
+
 	// Static assets shipped with the plugin. The add-on build stages
-	// this directory into the image at www/plugin-assets/emanations/;
-	// nginx serves it at /plugin-assets/emanations/*. Plugin code
-	// references it via pluginAssetUrl('emanations', '<path>'). P3
-	// ships a placeholder mark.svg; P4 ships the real painting set.
-	staticAssets: 'static/'
+	// static/ into the image at www/plugin-assets/emanations/; nginx
+	// serves it at /plugin-assets/emanations/*. Plugin code resolves
+	// paths via pluginAssetUrl('emanations', '<path>'). Ships the
+	// painting set (paintings/) + a mark.svg.
+	staticAssets: 'static/',
+
+	// Discovers which painting sets are available — fetches the
+	// painting manifest and merges it into discovery.plugins.emanations.
+	discoveryContributors: [paintingSetsContributor]
 };

@@ -1,27 +1,50 @@
 <script lang="ts">
 	/**
-	 * Emanations page — P1 stub.
+	 * /emanations — where everyone is, as living imagery.
 	 *
-	 * This is a LazyComponent (core only fetches this chunk when the
-	 * plugin is active + the route is hit), so it may freely
-	 * runtime-import @broadsheet/core's primitives — no static cycle.
+	 * This page exercises the whole plugin contract end to end:
+	 *  - it's a plugin PAGE (routed at /emanations via the catch-all)
+	 *  - it renders the plugin's own RENDERER (multi-person-painting)
+	 *  - the renderer's painting set comes from the plugin's
+	 *    DISCOVERY CONTRIBUTOR (discovery.plugins.emanations.paintingSets)
+	 *  - painting asset URLs resolve via pluginAssetUrl (STATIC ASSETS)
+	 *  - painting mode is gated by a SETTINGS PANEL field
 	 *
-	 * P4 replaces this body with the real multi-person painting
-	 * renderer ported from harold-home. For now it exists to prove the
-	 * whole contract path: bundled separate package → registry →
-	 * loader → [pluginSlug] route → rendered inside an error boundary.
+	 * As a LazyComponent it may freely runtime-import @broadsheet/core.
 	 */
-	import { PageShell, Hero, Eyebrow, OutLine, discovery, pluginAssetUrl } from '@broadsheet/core';
+	import {
+		PageShell,
+		Hero,
+		Eyebrow,
+		OutLine,
+		discovery,
+		pluginAssetUrl,
+		useCurationField
+	} from '@broadsheet/core';
+	import MultiPersonPainting from '../renderers/MultiPersonPainting.svelte';
+	import type { PaintingManifest } from '../discovery/paintingSets';
 
-	const peopleWithSensor = $derived(
-		discovery.persons.filter((p) => p.suggestedPresenceSensor !== null)
+	const persons = $derived(discovery.persons);
+
+	// The discoveryContributor merged the painting manifest into
+	// discovery.plugins.emanations.paintingSets at boot / on updates.
+	const paintingSets = $derived(
+		discovery.plugins.emanations?.paintingSets as PaintingManifest | null | undefined
+	);
+	const paintingCount = $derived(
+		paintingSets?.paintings ? Object.keys(paintingSets.paintings).length : 0
 	);
 
-	// Proves the P3 static-asset pipeline end to end: this SVG ships
-	// in packages/emanations/static/, is staged into the add-on image
-	// at www/plugin-assets/emanations/, served by nginx, and resolved
-	// here through pluginAssetUrl — ingress-prefix-correct.
-	const markUrl = pluginAssetUrl('emanations', 'mark.svg');
+	// Settings-panel field: painting mode on/off (default on).
+	const usePaintings = useCurationField<boolean>('plugins.emanations.config.usePaintings');
+	const paintingsEnabled = $derived(usePaintings.value !== false);
+
+	// Resolve manifest paths → ingress-correct asset URLs, gated by
+	// the setting. Empty → the renderer falls back to procedural.
+	const paintingUrls = $derived.by(() => {
+		if (!paintingsEnabled || !paintingSets?.paintings) return [];
+		return Object.values(paintingSets.paintings).map((p) => pluginAssetUrl('emanations', p));
+	});
 </script>
 
 <svelte:head>
@@ -37,38 +60,42 @@
 			Where everyone is.
 		{/snippet}
 		{#snippet dek()}
-			A plugin page, served from a separate package. The multi-person painting renderer lands in
-			P4 — this stub proves the contract path end to end.
+			Presence as living imagery — a painting per room when you have them, a procedural field
+			when you don't.
 		{/snippet}
 	</Hero>
 
-	<OutLine label="Plugin contract" />
-	<div class="contract">
-		<img class="mark" src={markUrl} alt="" width="120" height="120" />
-		<dl class="facts">
-			<dt>Package</dt>
-			<dd><code>@broadsheet/emanations</code></dd>
-			<dt>Delivery</dt>
-			<dd>bundled · lazy-chunked · curation-gated</dd>
-			<dt>Static asset</dt>
-			<dd><code>{markUrl}</code></dd>
-			<dt>People with a presence sensor</dt>
-			<dd>{peopleWithSensor.length}</dd>
-		</dl>
+	<div class="band">
+		<MultiPersonPainting {persons} paintings={paintingUrls} />
 	</div>
+
+	<OutLine label="Source" />
+	<dl class="facts">
+		<dt>Mode</dt>
+		<dd>{paintingUrls.length > 0 ? 'Painting' : 'Procedural'}</dd>
+		<dt>Painting set</dt>
+		<dd>
+			{#if paintingSets}
+				{paintingCount} discovered via the plugin's discoveryContributor
+			{:else}
+				none discovered — procedural fallback
+			{/if}
+		</dd>
+		<dt>Painting mode</dt>
+		<dd>{paintingsEnabled ? 'on' : 'off (Settings → Plugins → Emanations)'}</dd>
+		<dt>People</dt>
+		<dd>{persons.map((p) => p.name).join(', ') || '—'}</dd>
+	</dl>
 </PageShell>
 
 <style>
-	.contract {
-		display: flex;
-		align-items: flex-start;
-		gap: var(--space-6);
-		flex-wrap: wrap;
-	}
-
-	.mark {
-		flex: 0 0 auto;
-		display: block;
+	.band {
+		position: relative;
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		border-radius: var(--radius-card);
+		overflow: hidden;
+		border: 1px solid var(--rule);
 	}
 
 	.facts {
@@ -76,8 +103,6 @@
 		grid-template-columns: auto 1fr;
 		gap: var(--space-2) var(--space-6);
 		margin: 0;
-		flex: 1;
-		min-width: 16rem;
 	}
 
 	.facts dt {
@@ -93,11 +118,5 @@
 		font-family: var(--font-body);
 		font-size: var(--text-body);
 		color: var(--fg);
-	}
-
-	.facts code {
-		font-family: var(--font-mono);
-		font-size: 0.9em;
-		color: var(--accent);
 	}
 </style>

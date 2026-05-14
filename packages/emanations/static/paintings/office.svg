@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450" role="img" aria-label="Office — an ambient painting">
+  <!--
+    A P4 test painting (the office). Abstract, warm, dark-theme — an
+    ambient room field, not a literal render. Proves the painting
+    path: shipped as a plugin static asset, found by the emanations
+    discoveryContributor, resolved via pluginAssetUrl, displayed by
+    the multi-person-painting renderer. The real per-area painting
+    set is a follow-on asset-generation task.
+  -->
+  <defs>
+    <radialGradient id="office-glow" cx="38%" cy="44%" r="60%">
+      <stop offset="0%" stop-color="#e8b878" stop-opacity="0.85"/>
+      <stop offset="45%" stop-color="#c08a4a" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#1a1814" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="office-floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a2118" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0f0d0a" stop-opacity="0.9"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="#1a1814"/>
+  <rect width="800" height="450" fill="url(#office-glow)"/>
+  <!-- a desk-edge suggestion -->
+  <path d="M0 318 L800 286 L800 450 L0 450 Z" fill="#26201a"/>
+  <path d="M0 318 L800 286" stroke="#c08a4a" stroke-width="2" stroke-opacity="0.4"/>
+  <rect width="800" height="450" fill="url(#office-floor)"/>
+  <!-- a soft window of warm light, upper-left -->
+  <rect x="84" y="70" width="150" height="170" rx="6" fill="#e8b878" fill-opacity="0.16"/>
+  <rect x="84" y="70" width="150" height="170" rx="6" fill="none" stroke="#e8b878" stroke-opacity="0.3" stroke-width="1.5"/>
+</svg>

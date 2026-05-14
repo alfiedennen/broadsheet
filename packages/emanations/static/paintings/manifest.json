@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "_comment": "Painting-set manifest. The emanations discoveryContributor fetches this at boot; the page resolves each path via pluginAssetUrl('emanations', <path>) and hands the URLs to the renderer. P4 ships two test paintings to prove the path end to end; a full per-area / per-person set is a follow-on asset-generation task.",
+  "paintings": {
+    "office": "paintings/office.svg",
+    "library": "paintings/library.svg"
+  }
+}

@@ -1,53 +1,55 @@
 <script lang="ts">
 	/**
-	 * MultiPersonPainting — emanations' renderer, P2 stub.
+	 * MultiPersonPainting — emanations' renderer.
 	 *
-	 * A renderer is a component a plugin exposes for OTHER pages to
-	 * use. Core's `/` page does `useRenderer('multi-person-painting')`
-	 * and swaps this in when emanations is active, falling back to
-	 * core's ProceduralPainting otherwise.
+	 * A pure component: props in, render out, no side effects on
+	 * mount, no reaching into `discovery.*` (that keeps it reusable as
+	 * a Lovelace strategy in v0.2). It's exposed via `useRenderer` so
+	 * core's `/` page can opportunistically upgrade to it.
 	 *
-	 * Per the contract: a renderer is a pure component — props in,
-	 * render out, no side effects on mount. It takes `persons` rather
-	 * than reaching into `discovery.*` directly (that keeps it
-	 * reusable as a Lovelace strategy in v0.2).
+	 * Two modes, decided by props:
+	 *  - PROCEDURAL (default) — a present, saturated field with one
+	 *    soft hue-spread orb per person. Works for everyone, no assets.
+	 *    This is what core's `/` gets (it passes only `persons`).
+	 *  - PAINTING — when `paintings` (already-resolved asset URLs) is
+	 *    non-empty, the first painting is the full-bleed backdrop with
+	 *    the person orbs layered over a scrim. emanations' own page
+	 *    passes this, sourced from its discoveryContributor.
 	 *
-	 * P2 stub: deliberately VISIBLE — a present, saturated field with
-	 * each person rendered as a soft hue-spread orb labelled with
-	 * their name, so toggling emanations on/off in /settings/plugins
-	 * produces an unmistakable change on `/`. It actually consumes the
-	 * `persons` prop, so it reads as "the multi-person renderer", not
-	 * just a gradient. P4 replaces this with the real axonometric
-	 * multi-person painting ported from harold-home.
-	 *
-	 * Layout note: the blurred orb and the crisp name are SIBLINGS
-	 * inside `.person` — `filter: blur` applies to a whole subtree, so
-	 * the name can't live inside the orb or it blurs too.
+	 * The page that owns the painting set resolves the URLs (via
+	 * pluginAssetUrl) and passes them in — the renderer never resolves
+	 * assets or reads curation itself.
 	 */
 	import type { DomainPerson } from '@broadsheet/core';
 
-	// `DomainPerson` carries identity + presence-sensor metadata, not
-	// live home/away state — that's resolved against the states map,
-	// which a pure renderer doesn't get. The P4 renderer will take
-	// resolved presence as a prop; the P2 stub just lays out who's
-	// tracked, which is enough to prove the swap.
-	let { persons = [] }: { persons?: DomainPerson[] } = $props();
+	let {
+		persons = [],
+		paintings = []
+	}: {
+		persons?: DomainPerson[];
+		/** Already-resolved painting asset URLs. Empty → procedural. */
+		paintings?: string[];
+	} = $props();
 
-	// A warm-anchored hue per person, spread around the wheel.
+	const paintingMode = $derived(paintings.length > 0);
+
 	function hueFor(i: number): number {
 		return (28 + i * 67) % 360;
 	}
-
-	// Horizontal placement, kept inside 30%–70% so orbs never clip
-	// the viewport edge and frame (not cover) the centred manifest.
 	function personX(i: number, n: number): number {
 		if (n <= 1) return 50;
 		return 30 + (i * 40) / (n - 1);
 	}
 </script>
 
-<div class="emanation" aria-hidden="true">
-	<div class="field"></div>
+<div class="emanation" class:painting-mode={paintingMode} aria-hidden="true">
+	{#if paintingMode}
+		<img class="backdrop" src={paintings[0]} alt="" />
+		<div class="scrim"></div>
+	{:else}
+		<div class="field"></div>
+	{/if}
+
 	{#each persons as person, i (person.id)}
 		<div
 			class="person"
@@ -59,7 +61,7 @@
 	{/each}
 </div>
 <p class="marker">
-	emanations · {persons.length}
+	emanations · {paintingMode ? 'painting' : 'procedural'} · {persons.length}
 	{persons.length === 1 ? 'person' : 'people'}
 </p>
 
@@ -71,7 +73,24 @@
 		background: linear-gradient(160deg, hsl(248 28% 16%), hsl(218 32% 11%) 60%, hsl(266 26% 13%));
 	}
 
-	/* A broad moving sheen so the field reads as alive, not flat. */
+	/* ── painting mode ── */
+	.backdrop {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.scrim {
+		position: absolute;
+		inset: 0;
+		background: radial-gradient(ellipse at center, transparent 35%, rgba(0, 0, 0, 0.5) 92%);
+		pointer-events: none;
+	}
+
+	/* ── procedural mode ── */
 	.field {
 		position: absolute;
 		inset: -20%;
@@ -89,8 +108,7 @@
 		}
 	}
 
-	/* One person = one positioned cell that gently floats. The orb
-	   (blurred) and the name (crisp) are siblings inside it. */
+	/* ── person orbs (both modes) ── */
 	.person {
 		position: absolute;
 		top: 50%;
@@ -126,15 +144,25 @@
 		filter: blur(10px);
 	}
 
-	/* Sibling of .orb, NOT a child — so the orb's blur doesn't touch it. */
+	/* painting mode: tighten the orbs so the painting reads through */
+	.painting-mode .orb {
+		background: radial-gradient(
+			circle,
+			hsl(var(--hue) 60% 56% / 0.5),
+			hsl(var(--hue) 54% 34% / 0.18) 42%,
+			transparent 66%
+		);
+		filter: blur(14px);
+	}
+
 	.orb-name {
 		position: relative;
 		z-index: 1;
 		font-family: var(--font-display);
 		font-style: italic;
 		font-size: 1.5rem;
-		color: hsl(0 0% 100% / 0.78);
-		text-shadow: 0 2px 14px hsl(0 0% 0% / 0.6);
+		color: hsl(0 0% 100% / 0.82);
+		text-shadow: 0 2px 14px hsl(0 0% 0% / 0.7);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
