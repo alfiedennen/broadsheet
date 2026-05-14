@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "home-assistant-js-websocket": "^9.4.0",
-    "@broadsheet/emanations": "workspace:*"
+    "@broadsheet/emanations": "workspace:*",
+    "@broadsheet/ghost-cloud": "workspace:*"
   }
 }

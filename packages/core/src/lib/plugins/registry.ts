@@ -28,10 +28,12 @@
 
 import type { BroadsheetPlugin } from './types';
 import { plugin as emanations } from '@broadsheet/emanations';
+import { plugin as ghostCloud } from '@broadsheet/ghost-cloud';
+// import { plugin as tmdbTv } from '@broadsheet/tmdb-tv';  // post-v0.1 — still a stub
 
 /**
- * The bundled first-class plugins. ghost-cloud + tmdb-tv join this
- * array once their `index.ts` is ported (post-v0.1) — until then
- * their packages are stubs with no plugin object to import.
+ * The bundled first-class plugins. tmdb-tv joins this array once its
+ * `index.ts` is ported (post-v0.1) — until then its package is a stub
+ * with no plugin object to import.
  */
-export const BUNDLED_PLUGINS: BroadsheetPlugin[] = [emanations];
+export const BUNDLED_PLUGINS: BroadsheetPlugin[] = [emanations, ghostCloud];

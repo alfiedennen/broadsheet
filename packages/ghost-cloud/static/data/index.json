@@ -1,0 +1,29 @@
+{
+  "generated_at": 1778771187,
+  "rooms": {
+    "office": {
+      "label": "Alfie's Office",
+      "n_original": 30106,
+      "n_kept": 30106,
+      "size_kb": 711
+    },
+    "library": {
+      "label": "Library",
+      "n_original": 13316,
+      "n_kept": 13316,
+      "size_kb": 292
+    },
+    "living_room": {
+      "label": "Living Room",
+      "n_original": 220234,
+      "n_kept": 33542,
+      "size_kb": 728
+    },
+    "kitchen": {
+      "label": "Kitchen",
+      "n_original": 8226,
+      "n_kept": 8226,
+      "size_kb": 183
+    }
+  }
+}
