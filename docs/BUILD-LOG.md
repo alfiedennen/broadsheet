@@ -2351,6 +2351,47 @@ convention: an empty area actuates nothing, and gating create while
 `updateEntityArea` (which moves *existing* things) stays ungated would
 be backwards. `SETTINGS-UI.md` corrected to match.
 
-`pnpm --filter @broadsheet/core check` + `build` both clean. Still
-pending: deploy + canary verify, and the discovery-grouping
-investigation (278 un-auto-grouped on the real install).
+`pnpm --filter @broadsheet/core check` + `build` both clean.
+
+### Deployed + verified (addon 0.1.37)
+
+Shipped both fixes to the canary and verified live: `/body` renders
+`Sleep segment 1h 42m` (was `6120000.0 ms`); `/settings/house` "+ New
+room" opens its inline form and `createArea` writes a real HA area
+end-to-end (created a throwaway `Verification Test` area, confirmed it
+landed in the registry, deleted it via `area_registry/delete` — zero
+residue). Deploy is now scripted: `broadsheet-addon/scripts/deploy.py`
+drives the WS `supervisor/api` cycle + poll-verifies. Confirmed the old
+warning: the update call reports `False` while succeeding — the poll
+loop is the source of truth.
+
+### Discovery investigation — it's an alert-framing bug, not heuristics
+
+"278 un-auto-grouped" on the real install is **not** a discovery bug —
+`resolveAreaId` is deterministic, broadsheet can't place what HA hasn't
+placed. The bug is in `/settings`'s alerts:
+
+- **Alert #1 over-counted.** It showed the whole Unsorted bucket as
+  "couldn't be auto-grouped" — but only the *device-backed* cohort is
+  actionable (helpers / automations / scripts / scenes / template
+  sensors are legitimately place-less and never hit editorial pages).
+  Rewritten: counts the device-backed cohort → *"N devices need a
+  room"*, with a parenthetical noting the place-less ones are normal.
+- **Alert #4 used a heuristic the code itself flagged "rough".** It did
+  `rawCounts.entities − sum(visible per area)` — which swept in
+  *skipped* config/diagnostic/disabled entities and miscalled them all
+  "hidden". Rewritten to `sum(area.hiddenEntities.length)` — the
+  genuinely-hidden set.
+
+Both fixed in `alerts.svelte.ts`.
+
+### Mojibake repair (623 runs, 9 files)
+
+Dogfooding surfaced double-encoded UTF-8 baked into the source bytes —
+a cp1252 misdecode (with the 5 cp1252-hole bytes passed through as
+latin-1). `Â·` for `·`, `â€"` for `—`, `â–£` for `▣`, box-art borders,
+arrows. User-visible in `/settings/house`. Repaired via per-run
+cp1252→UTF-8 round-trip classification (genuine chars fail the
+round-trip → left untouched, so it was safe on the one file mixing old
+mojibake with fresh edits). 1 source file + 8 docs; verified every
+distinct mapping; zero mojibake remains. Shipped as 0.1.38, verified.

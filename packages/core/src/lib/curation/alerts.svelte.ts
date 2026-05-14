@@ -30,16 +30,45 @@ export interface Alert {
 export function computeAlerts(): Alert[] {
 	const out: Alert[] = [];
 
-	// 1. Unsorted bucket has entities → curation gap
+	// 1. Unsorted bucket — only the DEVICE-BACKED cohort is actionable.
+	// Helpers, automations, scripts, scenes, template sensors etc. are
+	// legitimately place-less; broadsheet never surfaces them on editorial
+	// pages anyway. Counting the whole bucket (the old behaviour) made a
+	// perfectly normal big install look broken.
 	const unsorted = discovery.unsorted;
-	if (unsorted && unsorted.entityCount > 0) {
-		out.push({
-			id: 'unsorted-entities',
-			severity: 'attention',
-			title: `${unsorted.entityCount} entities couldn't be auto-grouped`,
-			body: `They're in your "Unsorted" sections. Assign them to rooms in HA, or pin them to pages here.`,
-			cta: { label: 'Fix in House', href: '/settings/house/' }
-		});
+	if (unsorted) {
+		const visible = [
+			...unsorted.lights,
+			...unsorted.switches,
+			...unsorted.climates,
+			...unsorted.locks,
+			...unsorted.contacts,
+			...unsorted.cameras,
+			...unsorted.media,
+			...unsorted.tvs,
+			...unsorted.remotes,
+			...unsorted.sensors,
+			...unsorted.scenes,
+			...unsorted.otherEntities
+		];
+		const needRoom = visible.filter((e) => e.deviceId !== null).length;
+		const placeless = visible.length - needRoom;
+		if (needRoom > 0) {
+			const one = needRoom === 1;
+			const helpers =
+				placeless > 0
+					? ` (${placeless} helpers, automations & scenes are also unsorted — that's normal, they have no physical place.)`
+					: '';
+			out.push({
+				id: 'unsorted-entities',
+				severity: 'attention',
+				title: `${needRoom} ${one ? 'device needs' : 'devices need'} a room`,
+				body:
+					`${one ? 'A device-backed entity' : 'Device-backed entities'} HA hasn't been ` +
+					`told a room for — assign ${one ? 'it' : 'them'} in House.${helpers}`,
+				cta: { label: 'Fix in House', href: '/settings/house/' }
+			});
+		}
 	}
 
 	// 2. Person without a presence sensor (suggested OR overridden)
@@ -76,17 +105,18 @@ export function computeAlerts(): Alert[] {
 		}
 	}
 
-	// 4. Many entities have hidden_by integration — info
-	const hiddenByIntegrationCount = discovery.areas.reduce((acc, a) => {
-		// Count visible+invisible per area is hard; this is a rough heuristic
-		return acc + a.entityCount;
-	}, 0);
-	if (hiddenByIntegrationCount > 0 && discovery.rawCounts.entities - hiddenByIntegrationCount > 50) {
+	// 4. Entities hidden — HA's own `hidden_by` + broadsheet's auto-hide
+	// (duplicates, system plumbing). Counted from the per-area
+	// `hiddenEntities` lists — the ACTUAL hidden set. The old version
+	// subtracted visible-from-raw, which swept in skipped
+	// config/diagnostic/disabled entities and badly over-counted.
+	const hiddenCount = discovery.areas.reduce((acc, a) => acc + a.hiddenEntities.length, 0);
+	if (hiddenCount > 20) {
 		out.push({
 			id: 'integration-hidden',
 			severity: 'info',
-			title: `${discovery.rawCounts.entities - hiddenByIntegrationCount} entities are hidden`,
-			body: `Most are hidden by their integrations (config, diagnostic, internal). You can unhide individually if needed.`,
+			title: `${hiddenCount} entities are hidden`,
+			body: `Hidden by their integration, or auto-hidden by broadsheet (duplicates, system plumbing). Unhide individually in House if needed.`,
 			cta: { label: 'Browse all entities', href: '/settings/house/' }
 		});
 	}
