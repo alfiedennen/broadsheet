@@ -60,13 +60,33 @@ class LocalStorageBackend implements CurationBackend {
 	}
 }
 
-/* ─────────────── sidecar backend (M5 placeholder) ─────────────── */
+/* ─────────────── sidecar backend (M5) ─────────────── */
+
+/**
+ * Resolve the curation API URL.
+ *
+ * Under HA Ingress the SPA is served from `/api/hassio_ingress/<token>/`,
+ * and a bare `/api/broadsheet/curation` would resolve against the ORIGIN
+ * root — i.e. HA Core's frontend, which 404s it. The add-on's run.sh
+ * writes `window.__BROADSHEET_ENV__.curationEndpoint` already prefixed
+ * with the ingress entry, so requests land on the add-on nginx's
+ * `/api/broadsheet/` location block. Fall back to the bare path for any
+ * environment where the env var isn't set (shouldn't happen in addon
+ * mode, but keeps the backend honest).
+ */
+function curationUrl(): string {
+	if (typeof window !== 'undefined') {
+		const ep = window.__BROADSHEET_ENV__?.curationEndpoint;
+		if (ep) return ep;
+	}
+	return '/api/broadsheet/curation';
+}
 
 class SidecarBackend implements CurationBackend {
 	readonly id = 'sidecar' as const;
 
 	async load(): Promise<Curation> {
-		const res = await fetch('/api/broadsheet/curation', { cache: 'no-store' });
+		const res = await fetch(curationUrl(), { cache: 'no-store' });
 		if (!res.ok) throw new Error(`sidecar load failed: ${res.status}`);
 		const parsed = await res.json();
 		return migrate(parsed);
@@ -74,7 +94,7 @@ class SidecarBackend implements CurationBackend {
 
 	async save(curation: Curation): Promise<void> {
 		const stamped = { ...curation, lastModifiedAt: new Date().toISOString() };
-		const res = await fetch('/api/broadsheet/curation', {
+		const res = await fetch(curationUrl(), {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(stamped)
