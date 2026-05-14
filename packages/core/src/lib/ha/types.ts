@@ -143,6 +143,7 @@ export interface AuditEntry {
 		| 'blocked-hard-banned' // blocked because domain is hard-banned (lock.*)
 		| 'dry-run' // dry-run mode returned fake success
 		| 'call-service-error' // call was made but HA returned error
+		| 'registry-write' // area/entity/device registry mutation
 		| 'connection-status' // connection lifecycle event
 		| 'auth-event'; // setup, token saved, token cleared
 	domain?: string;

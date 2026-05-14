@@ -142,6 +142,8 @@ function consoleColourFor(kind: AuditEntry['kind']): string {
 			return '#8a7f6f'; // muted — fake call
 		case 'call-service-error':
 			return '#bf3a30'; // rust — real error
+		case 'registry-write':
+			return '#6f93a3'; // slate-blue — registry mutation
 		case 'connection-status':
 			return '#a89978'; // gold — lifecycle
 		case 'auth-event':
@@ -163,6 +165,8 @@ function formatForConsole(e: AuditEntry): string {
 			return `⤳ dry-run: ${e.domain}.${e.service}`;
 		case 'call-service-error':
 			return `✗ ${e.domain}.${e.service}: ${e.error}`;
+		case 'registry-write':
+			return `⊕ ${e.note}`;
 		case 'connection-status':
 			return `◇ ${e.note}`;
 		case 'auth-event':

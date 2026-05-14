@@ -27,7 +27,7 @@
 	} from '$lib/curation/store.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
-	import { updateEntityArea, updateDeviceArea } from '$lib/ha/registry';
+	import { updateEntityArea, updateDeviceArea, createArea } from '$lib/ha/registry';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
@@ -67,6 +67,47 @@
 		if (next.has(key)) next.delete(key);
 		else next.add(key);
 		expandedDevices = next;
+	}
+
+	/* ─────────────── create-room ─────────────── */
+	// "+ New room" — creates a REAL HA area via config/area_registry/create
+	// (lib/ha/registry.ts → createArea). Discovery's area_registry_updated
+	// subscription re-projects it into the list within the debounce window,
+	// so there's no manual insert here: create, toast, the row appears.
+	let creatingRoom = $state<boolean>(false);
+	let newRoomName = $state<string>('');
+	let newRoomFloor = $state<string | null>(null);
+	let newRoomNameEl = $state<HTMLInputElement | null>(null);
+
+	$effect(() => {
+		if (creatingRoom && newRoomNameEl) newRoomNameEl.focus();
+	});
+
+	function openCreateRoom() {
+		newRoomName = '';
+		newRoomFloor = null;
+		creatingRoom = true;
+	}
+
+	function cancelCreateRoom() {
+		creatingRoom = false;
+		newRoomName = '';
+		newRoomFloor = null;
+	}
+
+	async function commitCreateRoom() {
+		const name = newRoomName.trim();
+		if (!name) {
+			showToast('Give the room a name first', 'error');
+			return;
+		}
+		const result = await createArea(name, newRoomFloor);
+		if (result.success) {
+			showToast(`Room "${name}" created`, 'success');
+			cancelCreateRoom();
+		} else {
+			showToast(`Couldn't create room: ${result.error ?? result.reason}`, 'error');
+		}
 	}
 
 	/**
@@ -479,6 +520,44 @@
 	</Hero>
 
 	<OutLine label="Areas" />
+
+	<div class="new-room">
+		{#if creatingRoom}
+			<div class="new-room-form">
+				<input
+					type="text"
+					class="new-room-input"
+					placeholder="Room name — e.g. Conservatory"
+					aria-label="New room name"
+					bind:value={newRoomName}
+					bind:this={newRoomNameEl}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') commitCreateRoom();
+						if (e.key === 'Escape') cancelCreateRoom();
+					}}
+				/>
+				{#if discoveryStore.floors.length > 0}
+					<select class="new-room-floor" bind:value={newRoomFloor} aria-label="Floor">
+						<option value={null}>No floor</option>
+						{#each discoveryStore.floors as f (f.floor_id)}
+							<option value={f.floor_id}>{f.name}</option>
+						{/each}
+					</select>
+				{/if}
+				<button class="action confirm" type="button" onclick={commitCreateRoom}>Create</button>
+				<button class="action" type="button" onclick={cancelCreateRoom}>Cancel</button>
+			</div>
+			<p class="new-room-hint">
+				Creates a real Home Assistant area — it appears here, on every page, and
+				in HA itself. Place entities into it with the “Place in” / “Move…”
+				pickers below.
+			</p>
+		{:else}
+			<button class="new-room-trigger" type="button" onclick={openCreateRoom}>
+				+ New room
+			</button>
+		{/if}
+	</div>
 
 	<!--
 		The snippet + the ul wrap together in a div so the snippet
@@ -1029,6 +1108,67 @@
 </PageShell>
 
 <style>
+	.new-room {
+		margin-bottom: var(--space-4);
+	}
+
+	.new-room-trigger {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		padding: var(--space-2) var(--space-3);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		min-height: 36px;
+		transition: color var(--ease-quick), border-color var(--ease-quick);
+	}
+
+	.new-room-trigger:hover {
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.new-room-form {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		align-items: center;
+	}
+
+	.new-room-input {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.2rem;
+		padding: var(--space-1) var(--space-2);
+		background: var(--bg-raised);
+		color: var(--fg);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-input);
+		flex: 1;
+		min-width: 14rem;
+	}
+
+	.new-room-floor {
+		font-family: var(--font-caption);
+		font-size: var(--text-caption);
+		padding: var(--space-1) var(--space-2);
+		background: var(--bg-raised);
+		color: var(--fg);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-input);
+		min-height: 36px;
+	}
+
+	.new-room-hint {
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+		line-height: var(--leading-snug);
+		margin: var(--space-2) 0 0;
+		max-width: 64ch;
+	}
+
 	.area-list {
 		list-style: none;
 		margin: 0;

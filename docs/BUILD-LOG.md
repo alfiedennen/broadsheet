@@ -2302,3 +2302,55 @@ failure the replacement vision exists to kill. Closed:
 `SETTINGS-UI.md` updated: new *Creating rooms* subsection under
 `/settings/house`, and the Assign popup's "Create new room" now creates
 in-place instead of deep-linking out.
+
+---
+
+## 2026-05-14 (later) — dogfooding punch list: /body humanising + create-room
+
+First two punch-list items built.
+
+### /body — raw values humanised
+
+The canary `/body` showed `Sleep segment 6120000.0 ms` — a raw
+millisecond integer. `valueFor()` had a one-off `sleep_duration`
+minutes→hours branch but nothing general. Replaced with a
+`humanizeDuration(seconds)` helper + a per-sensor `kind` field on the
+`Meta` table (`'duration-min'` for sleep_duration, `'duration-ms'` for
+sleep_segment). Now both render as `Xh Ym`. Keyed on the sensor's
+`kind`, deliberately **not** on the unit string — `heart_rate_variability`
+is also in ms but ms IS its natural unit, so a blind unit-based
+converter would have mangled HRV.
+
+### /settings/house — "+ New room"
+
+The create-rooms omission, closed:
+
+- **`lib/ha/registry.ts` → `createArea(name, floorId?)`** — sends
+  `config/area_registry/create`, returns the new `area_id`. Discovery's
+  `area_registry_updated` subscription re-projects the new area into the
+  House list within the debounce window, so the caller just creates +
+  toasts; the row appears on its own.
+- **Audit envelope learned registry mutations as a class** — added a
+  dedicated `registry-write` `AuditEntry` kind (`types.ts`), wired its
+  console colour + format (`audit.ts`), and retrofitted
+  `updateEntityArea` / `updateDeviceArea` / `updateAreaName` off the
+  overloaded `auth-event` kind onto it. Registry writes are now a
+  first-class, self-describing audit category.
+- **`/settings/house` affordance** — a "+ New room" trigger under the
+  Areas rule expands to an inline form (name + optional floor picker,
+  populated from `discoveryStore.floors`). Enter commits, Escape
+  cancels, focus auto-lands on the name field.
+
+**Correction to the plan entry above**: that entry said the create
+would "respect the readonly gate." On implementation, `registry.ts`
+turned out to already carry a settled, well-reasoned convention —
+registry writes are audit-logged + `not-connected`-checked but **not**
+readonly-gated, because they're metadata not actuation ("setting an
+area_id can't unlock your front door"). `createArea` follows that
+convention: an empty area actuates nothing, and gating create while
+`updateEntityArea` (which moves *existing* things) stays ungated would
+be backwards. `SETTINGS-UI.md` corrected to match.
+
+`pnpm --filter @broadsheet/core check` + `build` both clean. Still
+pending: deploy + canary verify, and the discovery-grouping
+investigation (278 un-auto-grouped on the real install).

@@ -23,11 +23,12 @@
 	const sensors = $derived(discovery.crossAreaEntitiesForPage('body'));
 
 	// Per-sensor metadata: pretty label + honest "why empty" sub-label
-	type Meta = { match: RegExp; label: string; subLabel: string };
+	type ValueKind = 'auto' | 'duration-min' | 'duration-ms';
+	type Meta = { match: RegExp; label: string; subLabel: string; kind?: ValueKind };
 	const META: Meta[] = [
-		{ match: /sleep_duration/i, label: 'Sleep last night', subLabel: 'updated once daily' },
+		{ match: /sleep_duration/i, label: 'Sleep last night', subLabel: 'updated once daily', kind: 'duration-min' },
 		{ match: /sleep_confidence/i, label: 'Sleep confidence', subLabel: 'paired with sleep duration' },
-		{ match: /sleep_segment/i, label: 'Sleep segment', subLabel: 'most recent stage' },
+		{ match: /sleep_segment/i, label: 'Sleep segment', subLabel: 'most recent stage', kind: 'duration-ms' },
 		{ match: /resting_heart_rate/i, label: 'Resting heart rate', subLabel: 'measured during sleep' },
 		{ match: /heart_rate(?!_)/i, label: 'Heart rate', subLabel: 'most recent reading' },
 		{ match: /heart_rate_variability|hrv/i, label: 'HRV', subLabel: 'measured during sleep' },
@@ -45,17 +46,34 @@
 		return { match: /./, label: e.name, subLabel: '' };
 	}
 
+	// "Xh Ym" from a raw second count — editorial, not a raw ms/min dump.
+	function humanizeDuration(totalSeconds: number): string {
+		if (!isFinite(totalSeconds) || totalSeconds < 0) return '—';
+		const totalMin = Math.round(totalSeconds / 60);
+		if (totalMin < 1) return '<1m';
+		const h = Math.floor(totalMin / 60);
+		const m = totalMin % 60;
+		if (h === 0) return `${m}m`;
+		if (m === 0) return `${h}h`;
+		return `${h}h ${m}m`;
+	}
+
 	function valueFor(e: DomainEntity): string {
 		const s = e.state?.state;
 		if (s === undefined || s === null || s === 'unknown' || s === 'unavailable') return '—';
+		const n = Number(s);
 		const unit = e.state?.attributes?.unit_of_measurement as string | undefined;
-		// Sleep duration (Health Connect ships in minutes) → hours
-		if (/sleep_duration/.test(e.id) && !isNaN(Number(s))) {
-			const hours = Number(s) / 60;
-			return `${hours.toFixed(1)}h`;
-		}
-		if (!isNaN(Number(s))) {
-			return `${Number(s).toFixed(unit && unit.includes('%') ? 0 : 1)}${unit ? ` ${unit}` : ''}`;
+		const kind = metaFor(e).kind;
+
+		// Duration sensors → humanised "Xh Ym". Health Connect ships
+		// sleep_duration in minutes and sleep_segment in milliseconds;
+		// both are raw integers without the conversion. (HRV is also in
+		// ms but ms IS its natural unit — so this is keyed on the
+		// sensor's kind, never blindly on the unit string.)
+		if (!isNaN(n)) {
+			if (kind === 'duration-min') return humanizeDuration(n * 60);
+			if (kind === 'duration-ms') return humanizeDuration(n / 1000);
+			return `${n.toFixed(unit && unit.includes('%') ? 0 : 1)}${unit ? ` ${unit}` : ''}`;
 		}
 		return s;
 	}

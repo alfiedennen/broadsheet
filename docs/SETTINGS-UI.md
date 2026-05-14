@@ -179,10 +179,13 @@ construct:
   with no extra plumbing.
 - Distinct from the v0.2 custom-pages builder: **a room is a spatial HA
   area; a custom page is an authored view that pins things.**
-- Two guards: it respects the readonly gate (dev read-only mode blocks
-  it like a service call), and the registry write is audit-logged —
-  broadsheet's audit envelope, currently scoped to *service calls*,
-  learns about registry-mutation commands as a class.
+- Safety model: like broadsheet's other registry mutations
+  (`updateEntityArea` / `updateDeviceArea` in `lib/ha/registry.ts`),
+  the create is audit-logged under a dedicated `registry-write` kind
+  and `not-connected`-checked, but *not* readonly-gated — an empty
+  area actuates nothing, and gating create while the move operations
+  stay ungated would be backwards. `registry.ts` is the single home
+  for this convention.
 
 Rationale (real area, not local construct) in `REPLACEMENT-VISION.md`
 and `BUILD-LOG.md` 2026-05-14 (evening).
