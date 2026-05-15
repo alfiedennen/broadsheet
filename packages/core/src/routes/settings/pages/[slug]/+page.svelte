@@ -119,6 +119,93 @@
 	}
 
 	let pendingDelete = $state(false);
+
+	/* ─────────────── action-grid action mutators ───────────────────
+	 * The structured per-action editor edits items inside an
+	 * action-grid block. All routes go through patchBlockConfig() so
+	 * we get the same optimistic-write + debounce-persist as every
+	 * other block edit.
+	 */
+
+	import type { ActionGridItem, ActionServiceCall } from '$lib/blocks/types';
+
+	function actionGridAt(blockIdx: number): ActionGridItem[] | null {
+		if (!customPage) return null;
+		const b = customPage.blocks[blockIdx];
+		if (b?.type !== 'action-grid') return null;
+		return [...b.config.actions];
+	}
+
+	function patchAction(blockIdx: number, actionIdx: number, patch: Partial<ActionGridItem>) {
+		const arr = actionGridAt(blockIdx);
+		if (!arr) return;
+		arr[actionIdx] = { ...arr[actionIdx], ...patch };
+		patchBlockConfig(blockIdx, { actions: arr });
+	}
+
+	function patchActionService(
+		blockIdx: number,
+		actionIdx: number,
+		patch: Partial<ActionServiceCall>
+	) {
+		const arr = actionGridAt(blockIdx);
+		if (!arr) return;
+		arr[actionIdx] = {
+			...arr[actionIdx],
+			service: { ...arr[actionIdx].service, ...patch }
+		};
+		patchBlockConfig(blockIdx, { actions: arr });
+	}
+
+	function patchActionTarget(blockIdx: number, actionIdx: number, entityId: string) {
+		const arr = actionGridAt(blockIdx);
+		if (!arr) return;
+		const id = entityId.trim();
+		const target = id ? { entity_id: id } : undefined;
+		arr[actionIdx] = {
+			...arr[actionIdx],
+			service: { ...arr[actionIdx].service, target }
+		};
+		patchBlockConfig(blockIdx, { actions: arr });
+	}
+
+	function patchActionBinding(blockIdx: number, actionIdx: number, entityId: string) {
+		const arr = actionGridAt(blockIdx);
+		if (!arr) return;
+		const id = entityId.trim();
+		arr[actionIdx] = {
+			...arr[actionIdx],
+			stateBinding: id ? { entityId: id } : undefined
+		};
+		patchBlockConfig(blockIdx, { actions: arr });
+	}
+
+	function addAction(blockIdx: number) {
+		const arr = actionGridAt(blockIdx);
+		if (!arr) return;
+		arr.push({
+			label: 'New action',
+			service: { domain: 'light', service: 'toggle', target: {} }
+		});
+		patchBlockConfig(blockIdx, { actions: arr });
+	}
+
+	function removeAction(blockIdx: number, actionIdx: number) {
+		const arr = actionGridAt(blockIdx);
+		if (!arr) return;
+		arr.splice(actionIdx, 1);
+		patchBlockConfig(blockIdx, { actions: arr });
+	}
+
+	function moveAction(blockIdx: number, actionIdx: number, delta: -1 | 1) {
+		const arr = actionGridAt(blockIdx);
+		if (!arr) return;
+		const target = actionIdx + delta;
+		if (target < 0 || target >= arr.length) return;
+		const [moved] = arr.splice(actionIdx, 1);
+		arr.splice(target, 0, moved);
+		patchBlockConfig(blockIdx, { actions: arr });
+	}
 </script>
 
 <svelte:head>
@@ -625,29 +712,165 @@
 				<option value="large">Large (chunky tile)</option>
 			</select>
 		</label>
-		<label class="field">
-			<span class="field-label">Actions (JSON)</span>
-			<textarea
-				class="field-input textarea"
-				rows="10"
-				value={JSON.stringify(block.config.actions, null, 2)}
-				oninput={(e) => {
-					try {
-						const parsed = JSON.parse((e.target as HTMLTextAreaElement).value);
-						if (Array.isArray(parsed)) patchBlockConfig(i, { actions: parsed });
-					} catch {
-						/* ignore parse errors mid-edit; user will fix */
-					}
-				}}
-			></textarea>
-			<span class="field-hint">
-				One action per array entry. Required:
-				<code>{`{ label, service: { domain, service, target?: { entity_id }, data? } }`}</code>.
-				Optional: <code>icon</code>, <code>detail</code>,
-				<code>stateBinding: {`{ entityId, activeStates? }`}</code>.
-				Hand-editing for now — a structured editor lands in a future commit.
-			</span>
-		</label>
+		<!--
+			Structured per-action editor. Each tile is a card with label,
+			detail, icon, service-call (domain.service + target entity_id),
+			and optional state-binding. Add / remove / reorder per action.
+			Replaces the raw-JSON textarea — biggest builder pain point
+			from the dogfooding pass.
+		-->
+		<div class="action-editor">
+			<header class="action-editor-head">
+				<span class="field-label">Actions</span>
+				<span class="action-count">
+					{block.config.actions.length} action{block.config.actions.length === 1 ? '' : 's'}
+				</span>
+			</header>
+
+			{#if block.config.actions.length === 0}
+				<p class="action-empty">
+					No actions yet. Tap <strong>+ Add action</strong> below — each becomes a tile.
+				</p>
+			{/if}
+
+			{#each block.config.actions as a, ai (ai)}
+				<article class="action-card">
+					<header class="action-card-head">
+						<span class="action-card-num">№ {String(ai + 1).padStart(2, '0')}</span>
+						<span class="action-card-title">{a.label || '(no label)'}</span>
+						<div class="action-card-controls">
+							<button
+								type="button"
+								class="mini"
+								disabled={ai === 0}
+								onclick={() => moveAction(i, ai, -1)}
+								aria-label="Move up"
+							>↑</button>
+							<button
+								type="button"
+								class="mini"
+								disabled={ai === block.config.actions.length - 1}
+								onclick={() => moveAction(i, ai, 1)}
+								aria-label="Move down"
+							>↓</button>
+							<button
+								type="button"
+								class="mini danger"
+								onclick={() => removeAction(i, ai)}
+							>Remove</button>
+						</div>
+					</header>
+
+					<div class="action-card-grid">
+						<label class="field">
+							<span class="field-label">Label</span>
+							<input
+								type="text"
+								class="field-input"
+								value={a.label}
+								oninput={(e) =>
+									patchAction(i, ai, { label: (e.target as HTMLInputElement).value })}
+							/>
+						</label>
+						<label class="field">
+							<span class="field-label">Detail (optional)</span>
+							<input
+								type="text"
+								class="field-input"
+								value={a.detail ?? ''}
+								placeholder="e.g. → 21°"
+								oninput={(e) =>
+									patchAction(i, ai, {
+										detail: (e.target as HTMLInputElement).value || null
+									})}
+							/>
+						</label>
+						<label class="field">
+							<span class="field-label">Icon (mdi:*, optional)</span>
+							<input
+								type="text"
+								class="field-input mono"
+								value={a.icon ?? ''}
+								placeholder="mdi:lightbulb"
+								oninput={(e) =>
+									patchAction(i, ai, {
+										icon: (e.target as HTMLInputElement).value || null
+									})}
+							/>
+						</label>
+					</div>
+
+					<fieldset class="action-card-fieldset">
+						<legend>Service call</legend>
+						<div class="action-card-grid">
+							<label class="field">
+								<span class="field-label">Domain</span>
+								<input
+									type="text"
+									class="field-input mono"
+									value={a.service.domain}
+									placeholder="light"
+									oninput={(e) =>
+										patchActionService(i, ai, {
+											domain: (e.target as HTMLInputElement).value
+										})}
+								/>
+							</label>
+							<label class="field">
+								<span class="field-label">Service</span>
+								<input
+									type="text"
+									class="field-input mono"
+									value={a.service.service}
+									placeholder="toggle"
+									oninput={(e) =>
+										patchActionService(i, ai, {
+											service: (e.target as HTMLInputElement).value
+										})}
+								/>
+							</label>
+							<label class="field action-card-wide">
+								<span class="field-label">Target entity_id (optional)</span>
+								<input
+									type="text"
+									class="field-input mono"
+									value={a.service.target?.entity_id ?? ''}
+									placeholder="light.living_room"
+									oninput={(e) =>
+										patchActionTarget(i, ai, (e.target as HTMLInputElement).value)}
+								/>
+							</label>
+						</div>
+					</fieldset>
+
+					<fieldset class="action-card-fieldset">
+						<legend>State binding (optional)</legend>
+						<p class="action-card-hint">
+							Tile highlights when this entity's state matches one of <code>on</code> /
+							<code>playing</code> / <code>home</code> / <code>open</code> /
+							<code>unlocked</code>.
+						</p>
+						<div class="action-card-grid">
+							<label class="field">
+								<span class="field-label">Entity ID</span>
+								<input
+									type="text"
+									class="field-input mono"
+									value={a.stateBinding?.entityId ?? ''}
+									placeholder="(none)"
+									oninput={(e) =>
+										patchActionBinding(i, ai, (e.target as HTMLInputElement).value)}
+								/>
+							</label>
+						</div>
+					</fieldset>
+				</article>
+			{/each}
+
+			<button type="button" class="action-add-btn" onclick={() => addAction(i)}>
+				+ Add action
+			</button>
+		</div>
 	{/if}
 {/snippet}
 
@@ -1032,5 +1255,142 @@
 		padding: var(--space-4);
 		background: var(--bg);
 		overflow: hidden;
+	}
+
+	/* ── Action-grid structured editor ─────────────────────────── */
+	.action-editor {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		margin-top: var(--space-3);
+	}
+
+	.action-editor-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+	}
+
+	.action-count {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-dim);
+	}
+
+	.action-empty {
+		padding: var(--space-4);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		font-style: italic;
+		color: var(--fg-muted);
+		text-align: center;
+		margin: 0;
+	}
+
+	.action-empty strong {
+		color: var(--accent);
+		font-style: normal;
+	}
+
+	.action-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+	}
+
+	.action-card-head {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-3);
+		padding-bottom: var(--space-2);
+		border-bottom: 1px dashed var(--rule);
+	}
+
+	.action-card-num {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		color: var(--fg-dim);
+	}
+
+	.action-card-title {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.1rem;
+		color: var(--accent);
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.action-card-controls {
+		display: flex;
+		gap: var(--space-2);
+	}
+
+	.action-card-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: var(--space-3);
+	}
+
+	@media (min-width: 540px) {
+		.action-card-grid {
+			grid-template-columns: 1fr 1fr;
+		}
+		.action-card-grid > .action-card-wide {
+			grid-column: 1 / -1;
+		}
+	}
+
+	.action-card-fieldset {
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		padding: var(--space-3) var(--space-4);
+		margin: 0;
+	}
+
+	.action-card-fieldset legend {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		padding: 0 var(--space-2);
+	}
+
+	.action-card-hint {
+		font-family: var(--font-body);
+		font-style: italic;
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+		line-height: var(--leading-snug);
+		margin: 0 0 var(--space-3);
+	}
+
+	.action-add-btn {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		padding: var(--space-3) var(--space-4);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		min-height: 44px;
+		transition: color var(--ease-quick), border-color var(--ease-quick);
+	}
+
+	.action-add-btn:hover {
+		color: var(--accent);
+		border-color: var(--accent);
 	}
 </style>
