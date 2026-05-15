@@ -414,8 +414,40 @@ function translateLight(card: LovelaceCard): { blocks: BlockDef[]; coverage: Cov
 function translateMushroomTemplate(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
 	const primary = (card.primary ?? '') as string;
 	const secondary = (card.secondary ?? '') as string;
+	const entity = (card.entity ?? null) as string | null;
+	const tapAction = card.tap_action;
+	// Path 1 — icon-only button shape (no text, has tap_action). Common
+	// in remote-control dashboards built from mushroom-template-cards.
+	// Land as an action-grid tile so the user can actually tap it.
+	if (!primary && !secondary && tapAction) {
+		const service = tapActionToServiceCall(tapAction, entity);
+		if (service) {
+			const label = (card.icon as string)?.replace(/^mdi:/, '') ?? entity ?? 'button';
+			return {
+				blocks: [
+					{
+						type: 'action-grid',
+						config: {
+							size: 'small',
+							actions: [
+								{
+									label,
+									icon: (card.icon as string) ?? null,
+									service,
+									stateBinding: entity ? { entityId: entity } : undefined
+								}
+							]
+						}
+					}
+				],
+				coverage: 'partial',
+				note: 'Icon-only mushroom button — translated as action tile.'
+			};
+		}
+	}
+	// Path 2 — text card (primary / secondary). Existing behaviour.
 	if (!primary && !secondary) {
-		return { blocks: [], coverage: 'unsupported', note: 'no primary/secondary text.' };
+		return { blocks: [], coverage: 'unsupported', note: 'no primary/secondary text + no actionable tap.' };
 	}
 	const body = [primary && `**${primary}**`, secondary].filter(Boolean).join('\n\n');
 	const hasJinja = /\{\{|\{%/.test(body);
@@ -784,6 +816,53 @@ function translatePictureEntity(card: LovelaceCard): { blocks: BlockDef[]; cover
 }
 
 /**
+ * `heading` card → outline block. HA's section-heading card is the
+ * built-in equivalent of the OutLine primitive — direct mapping.
+ */
+function translateHeading(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const heading = (card.heading ?? card.title ?? '') as string;
+	if (!heading) {
+		return { blocks: [], coverage: 'unsupported', note: 'no heading text.' };
+	}
+	return {
+		blocks: [{ type: 'outline', config: { label: heading } }],
+		coverage: 'clean'
+	};
+}
+
+/**
+ * `custom:mini-graph-card` (HACS) → markdown stub showing the latest
+ * value(s) of the graphed entity/entities. The chart history doesn't
+ * have a primitive landing zone yet; surfacing the live value keeps
+ * the import readable + flagged 'partial' so the user knows.
+ */
+function translateMiniGraph(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	// Two shapes: single `entity` field, OR `entities` array (multi-line).
+	const single = (card.entity ?? null) as string | null;
+	const multi = (card.entities ?? null) as unknown[] | null;
+	const ids: string[] = [];
+	if (single) ids.push(single);
+	if (Array.isArray(multi)) {
+		for (const e of multi) {
+			if (typeof e === 'string') ids.push(e);
+			else if (e && typeof e === 'object' && typeof (e as { entity?: string }).entity === 'string')
+				ids.push((e as { entity: string }).entity);
+		}
+	}
+	if (ids.length === 0) {
+		return { blocks: [], coverage: 'unsupported', note: 'no entity / entities resolved.' };
+	}
+	const name = (card.name ?? 'Trend') as string;
+	const lines = ids.map((id) => `- \`${id}\`: \`{{${id}}}\``);
+	const body = `**${name}** (graph dropped)\n\n${lines.join('\n')}`;
+	return {
+		blocks: [{ type: 'markdown', config: { body } }],
+		coverage: 'partial',
+		note: 'Chart history dropped — current values surfaced as a list.'
+	};
+}
+
+/**
  * `custom:button-card` (HACS) → action-grid item. Button-card is the
  * Swiss army knife — supports templates, custom layouts, etc. We
  * land it as a single action tile, the most-common shape.
@@ -841,6 +920,8 @@ const TRANSLATORS: Record<string, true> = {
 	'media-control': true,
 	conditional: true,
 	iframe: true,
+	heading: true,
+	'custom:mini-graph-card': true,
 	'custom:mushroom-template-card': true,
 	'custom:mushroom-chips-card': true,
 	'custom:mushroom-light-card': true,
@@ -949,6 +1030,8 @@ export function translateView(view: LovelaceView): TranslatedView {
 			tile: translateTile,
 			'media-control': translateMediaControl,
 			iframe: translateIframe,
+			heading: translateHeading,
+			'custom:mini-graph-card': translateMiniGraph,
 			'custom:mushroom-template-card': translateMushroomTemplate,
 			'custom:mushroom-chips-card': translateMushroomChips,
 			'custom:mushroom-light-card': translateMushroomEntity,
