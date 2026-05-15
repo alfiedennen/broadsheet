@@ -402,7 +402,7 @@
 						</p>
 					{:else}
 						<p class="other-count">
-							{matches.length} other entity{matches.length === 1 ? '' : ' (entities)'}
+							{matches.length} match{matches.length === 1 ? '' : 'es'}
 						</p>
 						<ul class="other-list" role="radiogroup" aria-label="Other entities">
 							{#each matches.slice(0, 50) as id (id)}
