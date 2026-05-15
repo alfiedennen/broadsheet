@@ -34,3 +34,23 @@ export function pluginAssetUrl(pluginId: string, assetPath: string): string {
 	const clean = assetPath.replace(/^\/+/, '');
 	return `${base}/plugin-assets/${pluginId}/${clean}`;
 }
+
+/**
+ * Resolve a USER-UPLOADED plugin file to a servable URL.
+ *
+ * Counterpart to `pluginAssetUrl`. Bundled assets (pluginAssetUrl) live
+ * in the add-on image — immutable per build, baked at CI time. Plugin
+ * DATA (this) lives in the add-on's persistent /data/ volume and
+ * survives add-on updates; files land via `uploadPluginData()` and are
+ * served by nginx at `/plugin-data/<pluginId>/<filename>`.
+ *
+ * Different lifecycles, different namespaces, same URL pattern.
+ *
+ * @param pluginId  the plugin's `id` (e.g. `'emanations'`)
+ * @param filename  filename within the plugin's data dir (e.g.
+ *                  `'office-elena.png'`); leading slashes tolerated.
+ */
+export function pluginDataUrl(pluginId: string, filename: string): string {
+	const clean = filename.replace(/^\/+/, '');
+	return `${base}/plugin-data/${pluginId}/${clean}`;
+}

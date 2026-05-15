@@ -65,6 +65,21 @@ export { useRenderer } from './plugins/renderers.svelte';
 // to a URL that works under HA Ingress and direct serving alike.
 export { pluginAssetUrl } from './plugins/assets';
 
+/* ── Plugin DATA — user-uploaded persistent files (P5) ───────────── */
+// `pluginDataUrl(id, filename)` mirrors `pluginAssetUrl` but resolves
+// to /plugin-data/<id>/<filename> — the addon's persistent /data/
+// volume, where files uploaded via `uploadPluginData()` land. Survives
+// add-on updates. emanations is the proving consumer (per-room +
+// per-person paintings); the API is generic so any plugin can use it.
+export { pluginDataUrl } from './plugins/assets';
+export {
+	listPluginData,
+	uploadPluginData,
+	deletePluginData,
+	type PluginDataFile,
+	type PluginDataUploadResult
+} from './plugins/pluginData';
+
 /* ── Settings-panel surface for plugin config UIs (P4) ───────────── */
 // A plugin's `settingsPanel` component binds curation fields with
 // `useCurationField` and lays them out with `SettingsRow`.
