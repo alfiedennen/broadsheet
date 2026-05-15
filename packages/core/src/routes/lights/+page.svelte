@@ -11,6 +11,7 @@
 	 *      assign-to-area CTA → /settings/house (M4)
 	 */
 
+	import { base } from '$app/paths';
 	import { discovery, PAGES } from '$lib/discovery';
 	import type { DomainArea, DomainEntity } from '$lib/discovery';
 	import { callOn, callOff, callToggle } from '$lib/ha/actions';
@@ -18,6 +19,7 @@
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import Explainer from '$lib/components/Explainer.svelte';
 	import RoomReveal from '$lib/components/RoomReveal.svelte';
 	import UnsortedSection from '$lib/components/UnsortedSection.svelte';
 
@@ -179,6 +181,12 @@
 		kind="lights"
 		hint="Assign them to rooms in Home Assistant or via Settings."
 	/>
+
+	<Explainer>
+		Light is decided by <a href="{base}/">who's home</a> and the hour of the day. For
+		evenings specifically: <a href="{base}/tv">tonight's screen</a>, and
+		<a href="{base}/heat">the heat that goes with it</a>.
+	</Explainer>
 </PageShell>
 
 <style>

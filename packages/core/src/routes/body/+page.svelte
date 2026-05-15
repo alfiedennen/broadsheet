@@ -13,12 +13,14 @@
 	 * Apple Health bridge → v0.2 plugin.
 	 */
 
+	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import type { DomainEntity } from '$lib/discovery';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import Explainer from '$lib/components/Explainer.svelte';
 
 	// Filter out duplicate-label noise. Health Connect ships
 	// `basal_body_temperature` alongside `body_temperature`; both match
@@ -182,6 +184,12 @@
 			bridge + custom-pattern overrides are on the v0.2 roadmap.
 		</p>
 	{/if}
+
+	<Explainer>
+		The body is the human shape behind <a href="{base}/">presence</a>. Last night's
+		sleep follows <a href="{base}/heat">the night's warmth</a>; the resting heart
+		follows the day that preceded it.
+	</Explainer>
 </PageShell>
 
 <style>

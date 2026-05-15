@@ -10,6 +10,7 @@
 	 * not action. Tap the kebab to navigate, or scroll for status.
 	 */
 
+	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { composeManifest, resolvePresence } from '$lib/manifest';
@@ -115,6 +116,21 @@
 				{/each}
 			</ul>
 		{/if}
+
+		<!--
+			The site map in prose. This sentence is the broadsheet's IA
+			expressed editorially — every link goes to a sibling page,
+			arranged by parent / child / surrounding-context. Lifted from
+			harold-home's `/`. Intentionally subtle on the moment view so
+			the manifest leads.
+		-->
+		<p class="connections">
+			Who's home is the parent of <a href="{base}/long-take">the long take</a>,
+			<a href="{base}/emanations">the paintings on the wall</a>, and
+			<a href="{base}/body">the bodies behind it</a>. The day around them is described in
+			<a href="{base}/lights">light</a>, <a href="{base}/heat">heat</a>,
+			<a href="{base}/door">comings and goings</a>, and <a href="{base}/tv">tonight's screen</a>.
+		</p>
 	</article>
 
 	<footer class="colophon">
@@ -238,6 +254,27 @@
 
 	.people .away .where {
 		color: var(--fg-dim);
+	}
+
+	.connections {
+		font-family: var(--font-body);
+		font-style: italic;
+		font-size: 0.85rem;
+		line-height: 1.5;
+		color: rgba(255, 255, 255, 0.62);
+		margin: var(--space-6) 0 0;
+		text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
+	}
+
+	.connections a {
+		color: var(--accent);
+		text-decoration: none;
+		border-bottom: 1px solid color-mix(in oklab, var(--accent), transparent 70%);
+		transition: border-color var(--ease-quick);
+	}
+
+	.connections a:hover {
+		border-bottom-color: var(--accent);
 	}
 
 	.colophon {

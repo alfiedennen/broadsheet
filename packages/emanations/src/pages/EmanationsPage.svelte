@@ -26,12 +26,14 @@
 		PageShell,
 		Hero,
 		Eyebrow,
+		Explainer,
 		discovery,
 		pluginDataUrl,
 		useCurationField,
 		type DomainPerson,
 		type DomainArea
 	} from '@broadsheet/core';
+	import { base } from '$app/paths';
 	import MultiPersonPainting from '../renderers/MultiPersonPainting.svelte';
 
 	const persons = $derived(discovery.persons);
@@ -202,6 +204,12 @@
 		<dt>Painting mode</dt>
 		<dd>{paintingsEnabled ? 'on' : 'off (Settings → Plugins → Emanations)'}</dd>
 	</dl>
+
+	<Explainer>
+		The painting changes with <a href="{base}/">who's home</a>. For the deeper presence
+		layer that drives the swap — body movement over time —
+		<a href="{base}/long-take">the long take</a>.
+	</Explainer>
 </PageShell>
 
 <style>

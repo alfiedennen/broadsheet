@@ -53,6 +53,7 @@ export { default as PageShell } from './components/PageShell.svelte';
 export { default as Hero } from './components/Hero.svelte';
 export { default as Eyebrow } from './components/Eyebrow.svelte';
 export { default as OutLine } from './components/OutLine.svelte';
+export { default as Explainer } from './components/Explainer.svelte';
 
 /* ── Renderer hook for plugin-aware core pages (P2) ──────────────── */
 // `useRenderer(id)` returns a plugin's renderer component when its

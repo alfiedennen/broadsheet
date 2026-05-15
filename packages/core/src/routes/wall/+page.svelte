@@ -13,6 +13,7 @@
 	 *   4. Heat boost row per area (smaller than primary)
 	 */
 
+	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import type { DomainArea, DomainEntity } from '$lib/discovery';
 	import { callService, callOff, callOn } from '$lib/ha/actions';
@@ -20,6 +21,7 @@
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import Explainer from '$lib/components/Explainer.svelte';
 
 	const lightingAreas = $derived(discovery.areasForPage('lights'));
 	const climateAreas = $derived(discovery.areasForPage('heat'));
@@ -158,6 +160,14 @@
 			{/each}
 		</div>
 	{/if}
+
+	<Explainer>
+		For the deeper views: <a href="{base}/lights">light</a>,
+		<a href="{base}/heat">heat</a>, <a href="{base}/door">door</a>,
+		<a href="{base}/tv">tv</a>, <a href="{base}/body">body</a>,
+		<a href="{base}/emanations">the wall painting</a>, and
+		<a href="{base}/long-take">the long take</a>.
+	</Explainer>
 </PageShell>
 
 <style>

@@ -10,6 +10,7 @@
 	 *   4. Unsorted section — climate entities without area
 	 */
 
+	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import type { DomainArea, DomainEntity } from '$lib/discovery';
 	import { callService } from '$lib/ha/actions';
@@ -17,6 +18,7 @@
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import Explainer from '$lib/components/Explainer.svelte';
 	import RoomReveal from '$lib/components/RoomReveal.svelte';
 	import UnsortedSection from '$lib/components/UnsortedSection.svelte';
 
@@ -204,6 +206,11 @@
 		kind="climate entities"
 		hint="Most likely TRVs that haven't been assigned to rooms in HA."
 	/>
+
+	<Explainer>
+		Heat follows <a href="{base}/">who's home</a> and the cost of electricity. The
+		bedroom cools to its night setting before sleep.
+	</Explainer>
 </PageShell>
 
 <style>

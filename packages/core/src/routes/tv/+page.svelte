@@ -25,6 +25,7 @@
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import Explainer from '$lib/components/Explainer.svelte';
 
 	// Content slot — the @broadsheet/tmdb-tv plugin's renderer fills it
 	// when enabled. core never hard-depends on it: `content.current` is
@@ -258,6 +259,11 @@
 	{#if !primaryTv && !primaryRemote}
 		<p class="empty">No TV / remote entities discovered yet.</p>
 	{/if}
+
+	<Explainer>
+		Around the screen: <a href="{base}/lights">light</a> and
+		<a href="{base}/heat">heat</a>, both of which follow the cinema scene.
+	</Explainer>
 </PageShell>
 
 <style>

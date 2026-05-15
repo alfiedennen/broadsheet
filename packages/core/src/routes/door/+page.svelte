@@ -23,6 +23,7 @@
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import Explainer from '$lib/components/Explainer.svelte';
 
 	const doorAreas = $derived(discovery.areasForPage('door'));
 	const allLocks = $derived(doorAreas.flatMap((a) => a.locks));
@@ -196,6 +197,12 @@
 	{#if doorAreas.length === 0}
 		<p class="empty">No door / lock entities discovered yet.</p>
 	{/if}
+
+	<Explainer>
+		Comings and goings here are the parent of <a href="{base}/">who's home</a> on the
+		landing, and the spotlight on whoever sets foot on
+		<a href="{base}/emanations">the paintings inside</a>.
+	</Explainer>
 </PageShell>
 
 <style>
