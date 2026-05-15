@@ -860,13 +860,28 @@ function translateMiniGraph(card: LovelaceCard): { blocks: BlockDef[]; coverage:
 	if (ids.length === 0) {
 		return { blocks: [], coverage: 'unsupported', note: 'no entity / entities resolved.' };
 	}
-	const name = (card.name ?? 'Trend') as string;
-	const lines = ids.map((id) => `- \`${id}\`: \`{{${id}}}\``);
-	const body = `**${name}** (graph dropped)\n\n${lines.join('\n')}`;
+	const name = (card.name ?? null) as string | null;
+	const hours = (card.hours_to_show ?? 24) as number;
+	// Emit one sparkline per entity. Multi-line charts become stacked
+	// sparklines — broadsheet doesn't yet do overlaid lines (the
+	// editorial register prefers a stack of sparklines anyway).
+	const blocks: BlockDef[] = ids.map((id, i) => ({
+		type: 'sparkline',
+		config: {
+			entityId: id,
+			label: i === 0 ? name : null, // label only on the first
+			hours
+		}
+	}));
 	return {
-		blocks: [{ type: 'markdown', config: { body } }],
-		coverage: 'partial',
-		note: 'Chart history dropped — current values surfaced as a list.'
+		blocks,
+		// Multi-entity: 'partial' (overlaid → stacked is a register
+		// shift). Single-entity: clean — direct 1:1 mapping.
+		coverage: ids.length === 1 ? 'clean' : 'partial',
+		note:
+			ids.length > 1
+				? `Multi-entity overlay split into ${ids.length} stacked sparklines.`
+				: undefined
 	};
 }
 

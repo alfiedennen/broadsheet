@@ -45,7 +45,9 @@ const REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	'entity-list': () =>
 		import('./renderers/EntityListBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	'action-grid': () =>
-		import('./renderers/ActionGridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
+		import('./renderers/ActionGridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	sparkline: () =>
+		import('./renderers/SparklineBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
 };
 
 /** Look up a renderer thunk for a block type. Throws on unknown type. */
@@ -110,5 +112,10 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 		label: 'Action grid',
 		description:
 			'Configurable grid of action tiles, each firing a service call. Optionally state-bound to highlight when active. Lovelace landing zone for `button`, `light`, mushroom-chips, and similar.'
+	},
+	sparkline: {
+		label: 'Sparkline',
+		description:
+			'Inline SVG chart of one entity’s recent history pulled from HA. The first historical-data primitive — mini-graph-card / sensor / apexcharts importer landing zone.'
 	}
 };

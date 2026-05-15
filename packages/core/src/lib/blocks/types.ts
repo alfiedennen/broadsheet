@@ -180,6 +180,39 @@ export interface ActionGridBlockConfig {
 }
 
 /**
+ * Sparkline: inline SVG chart of one entity's recent history,
+ * pulled lazily via HA's `history/history_during_period` WS API.
+ *
+ * The first historical-data primitive in broadsheet — every other
+ * primitive renders from the live state snapshot. Sparkline opens
+ * the door to chart-shaped imports (mini-graph-card, sensor card,
+ * apexcharts-card etc) that previously dropped their history.
+ *
+ * Editorial register: thin warm-rule line, no axes, no grid, no
+ * tooltips. The current value (live, from discoveryStore.states)
+ * sits prominent next to the chart. The point IS the trend, not
+ * the precise readout.
+ *
+ * Performance: each sparkline holds a one-shot subscription that
+ * fires on mount (and when entityId or hours changes). No polling
+ * — the chart is "history as of when you opened the page". Live
+ * value updates via the discoveryStore subscription as normal.
+ */
+export interface SparklineBlockConfig {
+	/** Required: entity_id whose history is charted. */
+	entityId: string;
+	/** Optional label rendered above the chart. */
+	label?: string | null;
+	/** How far back to plot. Default 24 hours. */
+	hours?: number;
+	/**
+	 * Optional unit override for display. Falls back to the entity's
+	 * `unit_of_measurement` attribute when absent.
+	 */
+	unit?: string | null;
+}
+
+/**
  * Entity list: a vertical list of entities with name + state. The
  * Lovelace-importer landing zone for `entities` cards. Each row
  * resolves the entity at render time so state stays live.
@@ -219,7 +252,8 @@ export type BlockDef =
 	| { type: 'scene-row'; config: SceneRowBlockConfig }
 	| { type: 'boost-row'; config: BoostRowBlockConfig }
 	| { type: 'entity-list'; config: EntityListBlockConfig }
-	| { type: 'action-grid'; config: ActionGridBlockConfig };
+	| { type: 'action-grid'; config: ActionGridBlockConfig }
+	| { type: 'sparkline'; config: SparklineBlockConfig };
 
 /** Just the type discriminator — useful for builder UI listings. */
 export type BlockType = BlockDef['type'];
@@ -302,6 +336,11 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 			return {
 				type: 'action-grid',
 				config: { label: null, size: 'medium', actions: [] }
+			};
+		case 'sparkline':
+			return {
+				type: 'sparkline',
+				config: { entityId: '', label: null, hours: 24 }
 			};
 	}
 }

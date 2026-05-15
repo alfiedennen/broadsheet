@@ -551,6 +551,52 @@
 			/>
 			<span class="field-label">Show icon column</span>
 		</label>
+	{:else if block.type === 'sparkline'}
+		<label class="field">
+			<span class="field-label">Entity ID</span>
+			<input
+				type="text"
+				class="field-input mono"
+				value={block.config.entityId}
+				placeholder="sensor.electricity_consumption"
+				oninput={(e) =>
+					patchBlockConfig(i, { entityId: (e.target as HTMLInputElement).value })}
+			/>
+			<span class="field-hint">
+				Must be a sensor with a numeric state. History pulled from HA's
+				<code>history/history_during_period</code> on render.
+			</span>
+		</label>
+		<label class="field">
+			<span class="field-label">Inline label</span>
+			<input
+				type="text"
+				class="field-input"
+				value={block.config.label ?? ''}
+				placeholder="Optional"
+				oninput={(e) =>
+					patchBlockConfig(i, {
+						label: (e.target as HTMLInputElement).value || null
+					})}
+			/>
+		</label>
+		<label class="field">
+			<span class="field-label">Hours of history</span>
+			<input
+				type="number"
+				class="field-input mono"
+				min="1"
+				max="168"
+				value={block.config.hours ?? 24}
+				oninput={(e) =>
+					patchBlockConfig(i, {
+						hours: Number((e.target as HTMLInputElement).value) || 24
+					})}
+			/>
+			<span class="field-hint">
+				1–168 hours (1 week). Larger windows take longer to fetch.
+			</span>
+		</label>
 	{:else if block.type === 'action-grid'}
 		<label class="field">
 			<span class="field-label">Inline label</span>
@@ -638,6 +684,12 @@
 				const lbl = block.config.label;
 				const head = lbl ? `${lbl} — ` : '';
 				return `${head}${n} action${n === 1 ? '' : 's'}`;
+			}
+			case 'sparkline': {
+				const id = block.config.entityId || '(no entity)';
+				const lbl = block.config.label;
+				const hours = block.config.hours ?? 24;
+				return lbl ? `${lbl} — ${id} · ${hours}h` : `${id} · ${hours}h`;
 			}
 		}
 	}
