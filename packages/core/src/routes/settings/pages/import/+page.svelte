@@ -209,7 +209,7 @@
 			</p>
 		{:else}
 			<ul class="dash-list">
-				{#each dashboards as d (d.id)}
+				{#each dashboards as d, i (d.id ? `${d.id}-${i}` : i)}
 					<li>
 						<button class="dash-row" type="button" onclick={() => pickDashboard(d)}>
 							<div class="dash-meta">

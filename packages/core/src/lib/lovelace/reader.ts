@@ -59,7 +59,14 @@ export interface LovelaceConfig {
 
 /* ── WS readers ────────────────────────────────────────────────────── */
 
-/** List every Lovelace dashboard configured in HA. */
+/**
+ * List every Lovelace dashboard configured in HA.
+ *
+ * Note: HA's `lovelace/dashboards/list` returns ONLY user-added
+ * dashboards, NOT the default dashboard. We splice the default in at
+ * the front so users can import from it (the most common case for
+ * vanilla installs that haven't created any extra dashboards).
+ */
 export async function listLovelaceDashboards(): Promise<LovelaceDashboardEntry[]> {
 	const conn = getConnection();
 	if (!conn) {
@@ -72,15 +79,37 @@ export async function listLovelaceDashboards(): Promise<LovelaceDashboardEntry[]
 	try {
 		const result = (await conn.sendMessagePromise({
 			type: 'lovelace/dashboards/list'
-		})) as LovelaceDashboardEntry[];
-		return result ?? [];
+		})) as unknown;
+		// HA returns an array; defensive handling for unexpected shapes.
+		const arr = Array.isArray(result) ? (result as LovelaceDashboardEntry[]) : [];
+		audit({
+			kind: 'auth-event',
+			note: `listLovelaceDashboards: ${arr.length} extra dashboard(s)`
+		});
+		// Always include the default dashboard at the head of the list.
+		const defaultEntry: LovelaceDashboardEntry = {
+			id: '__default__',
+			url_path: null,
+			title: 'Overview (default)',
+			mode: 'storage'
+		};
+		return [defaultEntry, ...arr];
 	} catch (err) {
 		audit({
 			kind: 'auth-event',
 			note: 'listLovelaceDashboards FAILED',
 			error: String(err)
 		});
-		return [];
+		// Even on error, return the default — it's the most common case
+		// and lovelace/config without url_path will succeed for it.
+		return [
+			{
+				id: '__default__',
+				url_path: null,
+				title: 'Overview (default)',
+				mode: 'storage'
+			}
+		];
 	}
 }
 
