@@ -247,7 +247,16 @@
 			<p class="loading">Translating Lovelace cards…</p>
 		{:else if configError}
 			<p class="empty">{configError}</p>
-			<button class="action" type="button" onclick={back}>← Pick another dashboard</button>
+			<div class="actions">
+				<button
+					class="action confirm"
+					type="button"
+					onclick={() => pickedDashboard && pickDashboard(pickedDashboard)}
+				>
+					Retry
+				</button>
+				<button class="action" type="button" onclick={back}>← Pick another dashboard</button>
+			</div>
 		{:else if translated && translated.views.length === 0}
 			<p class="empty">This dashboard has no views. Nothing to import.</p>
 		{:else if translated}

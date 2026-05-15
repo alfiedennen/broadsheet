@@ -97,11 +97,27 @@
 			curationStore.current = { ...curationStore.current, customPages: arr };
 			curationStore.tick++;
 		}
+		// Surface 'pending' state — debounce timer about to fire
+		saveStatus = 'pending';
+		if (savedFadeTimer) {
+			clearTimeout(savedFadeTimer);
+			savedFadeTimer = null;
+		}
 		// Debounced persistence
 		if (pendingTimer) clearTimeout(pendingTimer);
-		pendingTimer = setTimeout(() => {
-			setCustomPageBlocks(slug, next);
+		pendingTimer = setTimeout(async () => {
 			pendingTimer = null;
+			saveStatus = 'saving';
+			const ok = await setCustomPageBlocks(slug, next);
+			if (ok) {
+				saveStatus = 'saved';
+				savedFadeTimer = setTimeout(() => {
+					saveStatus = 'idle';
+					savedFadeTimer = null;
+				}, 1600);
+			} else {
+				saveStatus = 'error';
+			}
 		}, 400);
 	}
 
@@ -119,6 +135,59 @@
 	}
 
 	let pendingDelete = $state(false);
+
+	/* ─────────────── block drag-to-reorder ─────────────────────────
+	 * Header is the drag handle (draggable=true), whole row is the
+	 * drop target. Dropping ON a row inserts the dragged block at
+	 * that position, pushing the target down. Visual: dragging row
+	 * dims; drop target shows a dashed accent border.
+	 */
+	let draggedBlockIdx = $state<number | null>(null);
+	let dragOverBlockIdx = $state<number | null>(null);
+
+	function handleBlockDragStart(e: DragEvent, idx: number) {
+		draggedBlockIdx = idx;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			// Set a payload so Firefox actually starts the drag
+			e.dataTransfer.setData('text/plain', String(idx));
+		}
+	}
+
+	function handleBlockDragOver(e: DragEvent, idx: number) {
+		// Required to accept the drop
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		if (draggedBlockIdx !== null && draggedBlockIdx !== idx) dragOverBlockIdx = idx;
+	}
+
+	function handleBlockDragLeave() {
+		// Don't clear immediately — dragover on the next row will overwrite,
+		// but if we leave the list entirely the dragend handler clears.
+	}
+
+	function handleBlockDrop(e: DragEvent, idx: number) {
+		e.preventDefault();
+		const from = draggedBlockIdx;
+		draggedBlockIdx = null;
+		dragOverBlockIdx = null;
+		if (from === null || from === idx || !customPage) return;
+		const next = customPage.blocks.slice();
+		const [moved] = next.splice(from, 1);
+		next.splice(idx, 0, moved);
+		setCustomPageBlocks(slug, next);
+		// Keep the user's expanded block visible after the move
+		if (expandedIdx === from) expandedIdx = idx;
+		else if (expandedIdx !== null) {
+			if (from < expandedIdx && idx >= expandedIdx) expandedIdx--;
+			else if (from > expandedIdx && idx <= expandedIdx) expandedIdx++;
+		}
+	}
+
+	function handleBlockDragEnd() {
+		draggedBlockIdx = null;
+		dragOverBlockIdx = null;
+	}
 
 	/* ─────────────── action-grid action mutators ───────────────────
 	 * The structured per-action editor edits items inside an
@@ -206,6 +275,103 @@
 		arr.splice(target, 0, moved);
 		patchBlockConfig(blockIdx, { actions: arr });
 	}
+
+	/* ─────────────── slug rename + page duplicate ──────────────────
+	 * The slug is the route key, so renaming has to validate uniqueness
+	 * against RESERVED_ROUTE_SLUGS + active plugin pages + every other
+	 * custom page. After the rename, redirect the editor URL — the
+	 * underlying customPage stays in place at the same array index, but
+	 * its slug field changes, so the resolver finds it under the new key.
+	 */
+	import { duplicateCustomPage } from '$lib/curation/store.svelte';
+	import { pluginLoader } from '$lib/plugins/loader.svelte';
+	import { RESERVED_ROUTE_SLUGS } from '$lib/plugins';
+
+	let renameMode = $state(false);
+	let renameSlug = $state('');
+	let duplicateMode = $state(false);
+	let duplicateSlug = $state('');
+	let duplicateLabel = $state('');
+
+	function slugErrorFor(candidate: string, ignoreSlug?: string): string | null {
+		const s = candidate.trim();
+		if (!s) return 'Slug required';
+		if (!/^[a-z0-9-]+$/.test(s)) return 'Lowercase letters / digits / hyphens only';
+		if (RESERVED_ROUTE_SLUGS.includes(s)) return `"${s}" is a core route`;
+		if (pluginLoader.activePluginPages.some((p) => p.slug === s))
+			return `"${s}" is used by an active plugin`;
+		const others = (curationStore.current.customPages ?? []).filter(
+			(p) => p.slug !== ignoreSlug
+		);
+		if (others.some((p) => p.slug === s)) return `"${s}" already exists`;
+		return null;
+	}
+
+	function openRename() {
+		renameSlug = customPage?.slug ?? '';
+		renameMode = true;
+	}
+	function cancelRename() {
+		renameMode = false;
+	}
+	async function commitRename() {
+		const err = slugErrorFor(renameSlug, slug);
+		if (err) {
+			showToast(err, 'error');
+			return;
+		}
+		const ok = await updateCustomPage(slug, { slug: renameSlug });
+		if (ok) {
+			showToast('Slug renamed', 'success');
+			renameMode = false;
+			// Redirect to the new slug so the editor URL matches
+			goto(`${base}/settings/pages/${renameSlug}/`);
+		} else {
+			showToast('Rename failed', 'error');
+		}
+	}
+
+	function openDuplicate() {
+		duplicateLabel = `${customPage?.label ?? 'Page'} (copy)`;
+		duplicateSlug = `${customPage?.slug ?? 'page'}-copy`;
+		duplicateMode = true;
+	}
+	function cancelDuplicate() {
+		duplicateMode = false;
+	}
+	async function commitDuplicate() {
+		if (!customPage) return;
+		const err = slugErrorFor(duplicateSlug);
+		if (err) {
+			showToast(err, 'error');
+			return;
+		}
+		if (!duplicateLabel.trim()) {
+			showToast('Label required', 'error');
+			return;
+		}
+		const ok = await duplicateCustomPage(customPage.slug, duplicateSlug, duplicateLabel.trim());
+		if (ok) {
+			showToast('Page duplicated', 'success');
+			duplicateMode = false;
+			goto(`${base}/settings/pages/${duplicateSlug}/`);
+		} else {
+			showToast('Duplicate failed', 'error');
+		}
+	}
+
+	/* ─────────────── unsaved-edit indicator ────────────────────────
+	 * The block-config edits debounce at 400ms before persisting via
+	 * setCustomPageBlocks. Surface that as a tiny saving/saved/error
+	 * status near the page-meta header so authors don't wonder
+	 * whether their typing has landed.
+	 *
+	 * State machine:
+	 *   idle → patch fires → pending (debounce running) → saving
+	 *     → saved (auto back to idle after 1.6s) | error
+	 */
+	let saveStatus = $state<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
+	let savedFadeTimer: ReturnType<typeof setTimeout> | null = null;
 </script>
 
 <svelte:head>
@@ -237,6 +403,93 @@
 	</Hero>
 
 	{#if customPage}
+		<!-- Save status indicator (persistent footer-of-hero band) -->
+		<div class="save-status-row" data-status={saveStatus}>
+			<span class="save-status">
+				{#if saveStatus === 'pending'}
+					editing…
+				{:else if saveStatus === 'saving'}
+					saving…
+				{:else if saveStatus === 'saved'}
+					✓ saved
+				{:else if saveStatus === 'error'}
+					⚠ save failed
+				{:else}
+					&nbsp;
+				{/if}
+			</span>
+			<div class="save-status-actions">
+				<button class="mini" type="button" onclick={openRename}>
+					Rename slug
+				</button>
+				<button class="mini" type="button" onclick={openDuplicate}>
+					Duplicate page
+				</button>
+			</div>
+		</div>
+
+		{#if renameMode}
+			<div class="rename-form">
+				<label class="field">
+					<span class="field-label">New slug</span>
+					<input
+						type="text"
+						class="field-input mono"
+						bind:value={renameSlug}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') commitRename();
+							if (e.key === 'Escape') cancelRename();
+						}}
+					/>
+					{#if slugErrorFor(renameSlug, slug)}
+						<span class="field-error">{slugErrorFor(renameSlug, slug)}</span>
+					{:else}
+						<span class="field-hint">URL becomes <code>/{renameSlug}/</code> · old URL will 404.</span>
+					{/if}
+				</label>
+				<div class="actions">
+					<button
+						class="action confirm"
+						type="button"
+						disabled={!!slugErrorFor(renameSlug, slug)}
+						onclick={commitRename}
+					>
+						Rename
+					</button>
+					<button class="action" type="button" onclick={cancelRename}>Cancel</button>
+				</div>
+			</div>
+		{/if}
+
+		{#if duplicateMode}
+			<div class="rename-form">
+				<label class="field">
+					<span class="field-label">Label of copy</span>
+					<input type="text" class="field-input" bind:value={duplicateLabel} />
+				</label>
+				<label class="field">
+					<span class="field-label">Slug of copy</span>
+					<input type="text" class="field-input mono" bind:value={duplicateSlug} />
+					{#if slugErrorFor(duplicateSlug)}
+						<span class="field-error">{slugErrorFor(duplicateSlug)}</span>
+					{:else}
+						<span class="field-hint">URL: <code>/{duplicateSlug}/</code></span>
+					{/if}
+				</label>
+				<div class="actions">
+					<button
+						class="action confirm"
+						type="button"
+						disabled={!!slugErrorFor(duplicateSlug) || !duplicateLabel.trim()}
+						onclick={commitDuplicate}
+					>
+						Duplicate
+					</button>
+					<button class="action" type="button" onclick={cancelDuplicate}>Cancel</button>
+				</div>
+			</div>
+		{/if}
+
 		<div class="editor-grid">
 			<!-- LEFT: meta + block list editor -->
 			<section class="editor-pane">
@@ -295,8 +548,30 @@
 				<OutLine label="Blocks" />
 				<ol class="block-list">
 					{#each customPage.blocks as block, i (i)}
-						<li class="block-row" class:expanded={expandedIdx === i}>
-							<header class="block-head">
+						<li
+							class="block-row"
+							class:expanded={expandedIdx === i}
+							class:dragging={draggedBlockIdx === i}
+							class:drop-target={dragOverBlockIdx === i && draggedBlockIdx !== null && draggedBlockIdx !== i}
+							ondragover={(e) => handleBlockDragOver(e, i)}
+							ondragleave={handleBlockDragLeave}
+							ondrop={(e) => handleBlockDrop(e, i)}
+						>
+							<!--
+								Header is the drag handle. Whole li is the drop
+								target. Limiting `draggable` to the header keeps
+								form interactions inside the expanded editor
+								(text inputs, drag-to-select) working normally.
+							-->
+							<header
+								class="block-head"
+								role="group"
+								aria-label="Block {i + 1} header (drag to reorder)"
+								draggable="true"
+								ondragstart={(e) => handleBlockDragStart(e, i)}
+								ondragend={handleBlockDragEnd}
+							>
+								<span class="block-grip" aria-hidden="true" title="Drag to reorder">⋮⋮</span>
 								<button
 									type="button"
 									class="block-title"
@@ -1009,7 +1284,7 @@
 		background: var(--bg-card);
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-card);
-		transition: border-color var(--ease-quick);
+		transition: border-color var(--ease-quick), opacity var(--ease-quick);
 	}
 
 	.block-row:hover {
@@ -1020,12 +1295,43 @@
 		border-color: var(--accent);
 	}
 
+	/* Drag-to-reorder visual states */
+	.block-row.dragging {
+		opacity: 0.4;
+	}
+
+	.block-row.drop-target {
+		border-style: dashed;
+		border-color: var(--accent);
+		background: var(--accent-glow);
+	}
+
 	.block-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-3);
 		padding: var(--space-3) var(--space-4);
+		/* draggable=true is on this header — show grab cursor on hover */
+		cursor: grab;
+	}
+
+	.block-head:active {
+		cursor: grabbing;
+	}
+
+	/* Drag handle (decorative — the whole header is draggable) */
+	.block-grip {
+		font-family: var(--font-mono);
+		font-size: 0.85rem;
+		color: var(--fg-dim);
+		letter-spacing: -2px;
+		user-select: none;
+		flex: 0 0 auto;
+	}
+
+	.block-row:hover .block-grip {
+		color: var(--accent);
 	}
 
 	.block-title {
@@ -1255,6 +1561,74 @@
 		padding: var(--space-4);
 		background: var(--bg);
 		overflow: hidden;
+	}
+
+	/* ── Save-status indicator + slug rename / duplicate ─────────── */
+	.save-status-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		margin-bottom: var(--space-3);
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-dim);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		min-height: 36px;
+		transition: border-color var(--ease-quick), color var(--ease-quick);
+	}
+
+	.save-status-row[data-status='saving'] {
+		border-color: color-mix(in srgb, var(--accent) 60%, var(--rule));
+		color: var(--accent);
+	}
+
+	.save-status-row[data-status='pending'] {
+		color: var(--fg-muted);
+	}
+
+	.save-status-row[data-status='saved'] {
+		border-color: var(--state-on, #7aa37a);
+		color: var(--state-on, #7aa37a);
+	}
+
+	.save-status-row[data-status='error'] {
+		border-color: var(--state-alert);
+		color: var(--state-alert);
+	}
+
+	.save-status {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+	}
+
+	.save-status-actions {
+		display: flex;
+		gap: var(--space-2);
+	}
+
+	.rename-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding: var(--space-4);
+		margin-bottom: var(--space-4);
+		background: var(--bg-card);
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-card);
+	}
+
+	.field-error {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		color: var(--state-alert);
 	}
 
 	/* ── Action-grid structured editor ─────────────────────────── */

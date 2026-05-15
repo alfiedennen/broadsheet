@@ -198,6 +198,35 @@ export async function setCustomPageBlocks(
 	return updateCustomPage(slug, { blocks });
 }
 
+/**
+ * Duplicate a custom page. Creates a deep-cloned copy with the new
+ * slug + label, appended to the end of the array (gets a fresh
+ * navOrder one higher than the highest existing). Caller must
+ * ensure the new slug is non-colliding.
+ */
+export async function duplicateCustomPage(
+	sourceSlug: string,
+	newSlug: string,
+	newLabel: string
+): Promise<boolean> {
+	return update((c) => {
+		const src = (c.customPages ?? []).find((p) => p.slug === sourceSlug);
+		if (!src) return c;
+		const existing = c.customPages ?? [];
+		const maxOrder = existing.reduce(
+			(m, p) => Math.max(m, p.navOrder ?? 0),
+			99
+		);
+		// Deep clone via JSON round-trip — safe for our value-only schema.
+		const clone: CustomPageDef = JSON.parse(JSON.stringify(src));
+		clone.slug = newSlug;
+		clone.label = newLabel;
+		clone.navOrder = maxOrder + 1;
+		c.customPages = [...existing, clone];
+		return c;
+	});
+}
+
 /** Remove a custom page. */
 export async function deleteCustomPage(slug: string): Promise<boolean> {
 	return update((c) => {
