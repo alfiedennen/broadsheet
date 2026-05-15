@@ -131,6 +131,55 @@ export interface BoostRowBlockConfig {
 }
 
 /**
+ * Service-call spec — what an action tile fires when tapped. Plain-
+ * shape JSON so the importer + builder UI can both produce it from
+ * a Lovelace tap_action / service / entity hint.
+ */
+export interface ActionServiceCall {
+	domain: string;
+	service: string;
+	data?: Record<string, unknown>;
+	target?: { entity_id?: string | string[]; area_id?: string | string[] };
+}
+
+/** One tile in an ActionGrid. */
+export interface ActionGridItem {
+	label: string;
+	/** Optional sub-label, shown small + accent ("→ 21°", "playing", etc). */
+	detail?: string | null;
+	/** mdi:* icon name (chip-rendered, no SVG dependency). */
+	icon?: string | null;
+	/** What firing the tile does. */
+	service: ActionServiceCall;
+	/**
+	 * If set, the tile reflects this entity's live state — highlights
+	 * when state is in `activeStates` (default ['on', 'playing',
+	 * 'home']). Used for light toggles, media toggles, etc so the
+	 * tile shows whether the underlying thing is currently ON.
+	 */
+	stateBinding?: {
+		entityId: string;
+		activeStates?: string[];
+	};
+}
+
+/**
+ * Action grid: a flexible grid of action tiles. Each tile fires a
+ * service call when tapped, optionally reflecting an entity's live
+ * state. Lovelace landing zone for `button`, `light`, mushroom-light,
+ * mushroom-chips, and similar action-shaped cards.
+ *
+ * Different from macro-grid (which is a fixed 3-tile house-wide
+ * macro set) — action-grid is variable-length + per-tile-configured.
+ */
+export interface ActionGridBlockConfig {
+	label?: string | null;
+	/** Tile size affects min-height + label size. Default 'medium'. */
+	size?: 'small' | 'medium' | 'large';
+	actions: ActionGridItem[];
+}
+
+/**
  * Entity list: a vertical list of entities with name + state. The
  * Lovelace-importer landing zone for `entities` cards. Each row
  * resolves the entity at render time so state stays live.
@@ -169,7 +218,8 @@ export type BlockDef =
 	| { type: 'room-toggle-grid'; config: RoomToggleGridBlockConfig }
 	| { type: 'scene-row'; config: SceneRowBlockConfig }
 	| { type: 'boost-row'; config: BoostRowBlockConfig }
-	| { type: 'entity-list'; config: EntityListBlockConfig };
+	| { type: 'entity-list'; config: EntityListBlockConfig }
+	| { type: 'action-grid'; config: ActionGridBlockConfig };
 
 /** Just the type discriminator — useful for builder UI listings. */
 export type BlockType = BlockDef['type'];
@@ -247,6 +297,11 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 			return {
 				type: 'entity-list',
 				config: { label: null, entities: [], showIcon: true }
+			};
+		case 'action-grid':
+			return {
+				type: 'action-grid',
+				config: { label: null, size: 'medium', actions: [] }
 			};
 	}
 }

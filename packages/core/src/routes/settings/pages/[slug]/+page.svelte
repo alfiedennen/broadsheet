@@ -551,6 +551,57 @@
 			/>
 			<span class="field-label">Show icon column</span>
 		</label>
+	{:else if block.type === 'action-grid'}
+		<label class="field">
+			<span class="field-label">Inline label</span>
+			<input
+				type="text"
+				class="field-input"
+				value={block.config.label ?? ''}
+				oninput={(e) =>
+					patchBlockConfig(i, {
+						label: (e.target as HTMLInputElement).value || null
+					})}
+			/>
+		</label>
+		<label class="field">
+			<span class="field-label">Tile size</span>
+			<select
+				class="field-input"
+				value={block.config.size ?? 'medium'}
+				onchange={(e) =>
+					patchBlockConfig(i, {
+						size: (e.target as HTMLSelectElement).value as 'small' | 'medium' | 'large'
+					})}
+			>
+				<option value="small">Small (chip pills)</option>
+				<option value="medium">Medium (default tile)</option>
+				<option value="large">Large (chunky tile)</option>
+			</select>
+		</label>
+		<label class="field">
+			<span class="field-label">Actions (JSON)</span>
+			<textarea
+				class="field-input textarea"
+				rows="10"
+				value={JSON.stringify(block.config.actions, null, 2)}
+				oninput={(e) => {
+					try {
+						const parsed = JSON.parse((e.target as HTMLTextAreaElement).value);
+						if (Array.isArray(parsed)) patchBlockConfig(i, { actions: parsed });
+					} catch {
+						/* ignore parse errors mid-edit; user will fix */
+					}
+				}}
+			></textarea>
+			<span class="field-hint">
+				One action per array entry. Required:
+				<code>{`{ label, service: { domain, service, target?: { entity_id }, data? } }`}</code>.
+				Optional: <code>icon</code>, <code>detail</code>,
+				<code>stateBinding: {`{ entityId, activeStates? }`}</code>.
+				Hand-editing for now — a structured editor lands in a future commit.
+			</span>
+		</label>
 	{/if}
 {/snippet}
 
@@ -581,6 +632,12 @@
 				const n = block.config.entities.length;
 				const lbl = block.config.label;
 				return lbl ? `${lbl} — ${n} entit${n === 1 ? 'y' : 'ies'}` : `${n} entit${n === 1 ? 'y' : 'ies'}`;
+			}
+			case 'action-grid': {
+				const n = block.config.actions.length;
+				const lbl = block.config.label;
+				const head = lbl ? `${lbl} — ` : '';
+				return `${head}${n} action${n === 1 ? '' : 's'}`;
 			}
 		}
 	}

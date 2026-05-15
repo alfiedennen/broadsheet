@@ -51,6 +51,15 @@
 	function inlineMd(s: string): string {
 		return (
 			s
+				// ![alt](url) — image. Match BEFORE the link rule so the leading
+				// `!` isn't consumed by it. Relative paths get base-prefixed.
+				.replace(
+					/!\[([^\]]*)\]\(((?:https?:\/\/|\/)[^)]*)\)/g,
+					(_m, alt, url) => {
+						const src = url.startsWith('/') ? `${base}${url}` : url;
+						return `<img src="${src}" alt="${alt}" loading="lazy" />`;
+					}
+				)
 				// [text](url) — only http/https/relative paths to avoid
 				// javascript: schemes; the URL is escaped inline already.
 				// Relative paths (starts with `/`) get the SvelteKit `base`
@@ -129,5 +138,14 @@
 	.md-block :global(em) {
 		color: var(--accent);
 		font-style: italic;
+	}
+
+	.md-block :global(img) {
+		display: block;
+		max-width: 100%;
+		height: auto;
+		border-radius: var(--radius-card);
+		border: 1px solid var(--rule);
+		margin: var(--space-3) 0;
 	}
 </style>
