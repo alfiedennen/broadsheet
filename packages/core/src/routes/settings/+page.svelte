@@ -53,6 +53,16 @@
 				).length;
 				return `${enabled} enabled`;
 			}
+		},
+		{
+			slug: 'pages',
+			label: 'Pages',
+			tagline:
+				'Compose your own broadsheet pages from typed primitives. Same surface as the core pages, written in the same register.',
+			count: () => {
+				const n = (curationStore.current.customPages ?? []).length;
+				return n === 0 ? 'none yet' : `${n} custom page${n === 1 ? '' : 's'}`;
+			}
 		}
 	];
 </script>

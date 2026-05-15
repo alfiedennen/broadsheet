@@ -155,6 +155,76 @@ export async function unhideEntity(entityId: string, unhide: boolean): Promise<b
 	return setEntityOverride(entityId, { unhide });
 }
 
+/* ─────────────── custom page mutators ─────────────── */
+
+import type { CustomPageDef } from '$lib/blocks/types';
+
+/**
+ * Add a brand-new custom page to curation. Caller must guarantee
+ * the slug is non-colliding (the builder UI checks against
+ * RESERVED_ROUTE_SLUGS + active plugin pages + existing custom
+ * pages); this mutator just appends.
+ */
+export async function createCustomPage(page: CustomPageDef): Promise<boolean> {
+	return update((c) => {
+		c.customPages = [...(c.customPages ?? []), page];
+		return c;
+	});
+}
+
+/**
+ * Update a custom page in place by slug. Patch is shallow-merged.
+ * Returns false if the slug doesn't exist (caller may wish to
+ * fall back to createCustomPage for a rename + create flow).
+ */
+export async function updateCustomPage(
+	slug: string,
+	patch: Partial<CustomPageDef>
+): Promise<boolean> {
+	return update((c) => {
+		const idx = (c.customPages ?? []).findIndex((p) => p.slug === slug);
+		if (idx < 0) return c; // no-op; caller checks return value
+		const existing = c.customPages[idx];
+		c.customPages[idx] = { ...existing, ...patch };
+		return c;
+	});
+}
+
+/** Replace the entire blocks array on a custom page. */
+export async function setCustomPageBlocks(
+	slug: string,
+	blocks: CustomPageDef['blocks']
+): Promise<boolean> {
+	return updateCustomPage(slug, { blocks });
+}
+
+/** Remove a custom page. */
+export async function deleteCustomPage(slug: string): Promise<boolean> {
+	return update((c) => {
+		c.customPages = (c.customPages ?? []).filter((p) => p.slug !== slug);
+		return c;
+	});
+}
+
+/**
+ * Move a custom page up (delta=-1) or down (delta=+1) in the array.
+ * No-op if the move would push it past either end.
+ */
+export async function moveCustomPage(slug: string, delta: -1 | 1): Promise<boolean> {
+	return update((c) => {
+		const arr = c.customPages ?? [];
+		const idx = arr.findIndex((p) => p.slug === slug);
+		if (idx < 0) return c;
+		const target = idx + delta;
+		if (target < 0 || target >= arr.length) return c;
+		const next = arr.slice();
+		const [moved] = next.splice(idx, 1);
+		next.splice(target, 0, moved);
+		c.customPages = next;
+		return c;
+	});
+}
+
 /* ─────────────── moment-sensor mutators ─────────────── */
 
 /**
