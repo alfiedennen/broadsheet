@@ -103,6 +103,17 @@ export interface PluginConfig {
 }
 
 /**
+ * Custom page authored via the builder UI (Phase 2) or imported from
+ * Lovelace (Phase 3). Stored as a plain JSON object — the BlockDef
+ * union is JSON-serialisable so persistence is direct.
+ *
+ * The full type lives in $lib/blocks/types — this file imports it
+ * via `type` only to keep curation/types.ts free of runtime deps.
+ */
+export type { CustomPageDef } from '$lib/blocks/types';
+import type { CustomPageDef as _CustomPageDef } from '$lib/blocks/types';
+
+/**
  * Sensor picks that drive the moment-view manifest clauses. Each is
  * optional — if unset, `/+page.svelte` falls back to auto-discovery
  * (first matching entity). Curation override exists so installs with
@@ -133,6 +144,7 @@ export interface Curation {
 	voice: Record<string, string>; // string id → override text
 	paintings: Record<string, PaintingOverride>; // keyed by area_id
 	momentSensors: MomentSensorsConfig;
+	customPages: _CustomPageDef[]; // ordered — kebab nav respects array order
 	integrations: IntegrationsConfig;
 	plugins: Record<string, PluginConfig>;
 }
@@ -158,6 +170,7 @@ export function defaultCuration(): Curation {
 			primaryIndoorTempSensorId: null,
 			primaryElectricityRateSensorId: null
 		},
+		customPages: [],
 		integrations: {
 			tmdb: { apiKey: null, region: 'GB', enabledLenses: ['new', 'trending'] },
 			healthConnect: { platformDetected: false, sleepStartHourUTC: 21, sleepEndHourUTC: 9 },

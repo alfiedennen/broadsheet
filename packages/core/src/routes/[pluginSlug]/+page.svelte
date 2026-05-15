@@ -16,12 +16,24 @@
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
 	import { pluginLoader } from '$lib/plugins/loader.svelte';
+	import { curationStore } from '$lib/curation/store.svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
+	import RenderedPage from '$lib/blocks/RenderedPage.svelte';
 
 	const slug = $derived(page.params.pluginSlug ?? '');
+	// Resolution order:
+	//  1. Active plugin page wins (existing behaviour).
+	//  2. Custom page from curation.customPages — for v0.2 these
+	//     are authored via the builder UI / Lovelace importer.
+	//  3. 404.
+	// Plugin precedence is the safer default; the builder UI prevents
+	// collisions at write-time.
 	const activePage = $derived(pluginLoader.pageBySlug(slug));
+	const customPage = $derived(
+		!activePage ? curationStore.current.customPages?.find((p) => p.slug === slug) ?? null : null
+	);
 
 	// The lazy-component thunk, pulled into its own $derived.
 	//
@@ -40,10 +52,20 @@
 </script>
 
 <svelte:head>
-	<title>{activePage ? `${activePage.label} · broadsheet` : 'Not found · broadsheet'}</title>
+	<title>
+		{activePage
+			? `${activePage.label} · broadsheet`
+			: customPage
+				? `${customPage.label} · broadsheet`
+				: 'Not found · broadsheet'}
+	</title>
 </svelte:head>
 
-{#if activePage && componentThunk}
+{#if customPage}
+	<PageShell width={customPage.pageWidth ?? 'default'}>
+		<RenderedPage page={customPage} />
+	</PageShell>
+{:else if activePage && componentThunk}
 	{#key activePage.slug}
 		<svelte:boundary>
 			{#await componentThunk()}

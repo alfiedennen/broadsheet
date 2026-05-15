@@ -16,6 +16,7 @@
 	import { base } from '$app/paths';
 	import { PAGES, NAV_ORDER, type PageSlug } from '$lib/discovery';
 	import { pluginLoader } from '$lib/plugins/loader.svelte';
+	import { curationStore } from '$lib/curation/store.svelte';
 
 	let open = $state(false);
 
@@ -57,6 +58,21 @@
 		// entry (e.g. /emanations after the moment view absorbed it).
 		...pluginLoader.activePluginPages
 			.filter((p) => !p.hiddenFromNav)
+			.map((p) => ({
+				href: `${base}/${p.slug}/`,
+				label: p.label,
+				active: currentPath === `${base}/${p.slug}/`
+			})),
+		// Custom pages from curation (Phase 2 builder + Phase 3
+		// Lovelace importer write here). Same `hiddenFromNav` opt-out
+		// as plugin pages — keeps the route live for permalinks while
+		// removing the nav clutter for staging or one-off pages.
+		// navOrder lets authors slot a page anywhere in the kebab list;
+		// undefined = sort to end.
+		...(curationStore.current.customPages ?? [])
+			.filter((p) => !p.hiddenFromNav)
+			.slice()
+			.sort((a, b) => (a.navOrder ?? Infinity) - (b.navOrder ?? Infinity))
 			.map((p) => ({
 				href: `${base}/${p.slug}/`,
 				label: p.label,

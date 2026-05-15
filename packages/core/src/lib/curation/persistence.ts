@@ -182,6 +182,9 @@ function mergeWithDefault(input: Record<string, unknown>): Curation {
 						...(input.momentSensors as object)
 					} as Curation['momentSensors'])
 				: def.momentSensors,
+		customPages: Array.isArray(input.customPages)
+			? (input.customPages as Curation['customPages'])
+			: def.customPages,
 		integrations:
 			typeof input.integrations === 'object' && input.integrations
 				? ({
