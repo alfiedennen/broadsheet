@@ -56,7 +56,6 @@
 			style="--hue: {hueFor(i)}; --x: {personX(i, persons.length)}%; --delay: {i * 1.7}s;"
 		>
 			<div class="orb"></div>
-			<span class="orb-name">{person.name}</span>
 		</div>
 	{/each}
 </div>
@@ -153,16 +152,6 @@
 			transparent 66%
 		);
 		filter: blur(14px);
-	}
-
-	.orb-name {
-		position: relative;
-		z-index: 1;
-		font-family: var(--font-display);
-		font-style: italic;
-		font-size: 1.5rem;
-		color: hsl(0 0% 100% / 0.82);
-		text-shadow: 0 2px 14px hsl(0 0% 0% / 0.7);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
