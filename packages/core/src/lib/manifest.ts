@@ -88,12 +88,26 @@ export function composeManifest(input: ManifestInput): string {
 	if (home.length === 1) {
 		const { person, room } = home[0];
 		const name = person.name.split(' ')[0]; // first name only
+		// Are there other (away) people in the household to name? With ≥2
+		// people configured, naming the absent one is more informative than
+		// silence — "Alfie home in the office. Elena out." reads as the
+		// state of the WHOLE household, not just the one home.
+		const others = states.filter((s) => !s.isHome).map((s) => s.person.name.split(' ')[0]);
+		const outClause =
+			others.length === 1
+				? ` ${others[0]} out.`
+				: others.length === 2
+					? ` ${others[0]} and ${others[1]} out.`
+					: others.length > 2
+						? ` ${others.slice(0, -1).join(', ')} and ${others[others.length - 1]} out.`
+						: '';
+
 		if (room) {
 			const tpl = v['manifest.oneHome'] || '{name} home in the {room}.';
-			return fill(tpl, { name, room: room.toLowerCase() });
+			return fill(tpl, { name, room: room.toLowerCase() }) + outClause;
 		}
 		const tpl = v['manifest.oneHomeRoomUnknown'] || '{name} home.';
-		return fill(tpl, { name });
+		return fill(tpl, { name }) + outClause;
 	}
 
 	if (home.length === 2) {

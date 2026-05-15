@@ -58,6 +58,17 @@
 		line-height: var(--leading-tight);
 		letter-spacing: var(--track-tight);
 		margin: 0;
+		opacity: 0.92;
+	}
+
+	/* `<em>` inside the headline is the value-pop register — same italic-amber
+	   as the surrounding text but at full opacity, so numerical values
+	   ("17°C", "8p", "cheap") read as the spine of the manifest sentence.
+	   :global because pages may emit `<em>` via {@html} from the moment-
+	   manifest highlightValues helper. */
+	.hero-headline :global(em) {
+		opacity: 1;
+		font-style: italic;
 	}
 
 	.hero[data-size='md'] .hero-headline {

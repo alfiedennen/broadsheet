@@ -23,7 +23,11 @@
 	import { discovery } from '$lib/discovery';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { composeManifest, resolvePresence } from '$lib/manifest';
-	import { indoorTempClause, electricityRateClause } from '$lib/manifest/momentSensors';
+	import {
+		indoorTempClause,
+		electricityRateClause,
+		highlightValues
+	} from '$lib/manifest/momentSensors';
 	import type { DomainArea, DomainPerson } from '$lib/discovery';
 	import { connection } from '$lib/stores/connection.svelte';
 	import { curationStore, useCurationField } from '$lib/curation/store.svelte';
@@ -278,7 +282,10 @@
 			{:else if manifestClauses.length === 0}
 				Quiet.
 			{:else}
-				{#each manifestClauses as line, i (i)}{line}{#if i < manifestClauses.length - 1}
+				<!-- highlightValues HTML-escapes input then wraps numeric
+				     values + rate-band descriptors in <em>; safe to {@html}. -->
+				{#each manifestClauses as line, i (i)}<!--
+					-->{@html highlightValues(line)}{#if i < manifestClauses.length - 1}
 						<br />
 					{/if}{/each}
 			{/if}
