@@ -433,7 +433,16 @@ function visibilityFor(
 ): 'show' | 'hidden' | 'skipped' {
 	if (entity.disabled_by !== null) return 'skipped';
 	if (entity.entity_category === 'config') return 'skipped';
-	if (entity.entity_category === 'diagnostic') return 'skipped';
+	if (entity.entity_category === 'diagnostic') {
+		// EXCEPT: Health-Connect sensors are diagnostic-categorized by
+		// the HA Companion App but are exactly what /body is for. Without
+		// this exemption /body finds only the 2 sensors that happen to
+		// ship as cat=None (sleep_confidence, sleep_segment) — heart_rate,
+		// hrv, sleep_duration, oxygen_saturation, body_temperature,
+		// resting_heart_rate, respiratory_rate all carry diagnostic and
+		// would silently disappear.
+		if (!isHealthConnect(entity)) return 'skipped';
+	}
 
 	// Universal "show this" override — wins over everything else
 	if (override?.unhide) return 'show';

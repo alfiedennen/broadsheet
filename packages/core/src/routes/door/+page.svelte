@@ -103,8 +103,8 @@
 		<aside class="ban-banner">
 			<span class="ban-icon" aria-hidden="true">⚿</span>
 			<div>
-				<strong>Lock writes are hard-banned in dev mode.</strong>
-				<span>The Unlock button is visible for shape, but every call is blocked + audit-logged. See <code>docs/DEV-ENVIRONMENTS.md</code>.</span>
+				<strong>Lock writes are hard-banned.</strong>
+				<span>broadsheet treats locks as too consequential for a glanceable dashboard — the Unlock button stays visible for shape, but every call is blocked + audit-logged. To actually unlock, use Home Assistant's own controls or a voice assistant.</span>
 			</div>
 		</aside>
 	{/if}
@@ -225,12 +225,6 @@
 
 	.ban-banner span {
 		color: var(--fg-muted);
-	}
-
-	.ban-banner code {
-		font-family: var(--font-mono);
-		font-size: 0.85em;
-		color: var(--fg);
 	}
 
 	.locks {
