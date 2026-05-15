@@ -48,6 +48,8 @@ export interface ActivePluginPage {
 	label: string;
 	icon: string;
 	navOrder: number;
+	/** True iff the route is live but the page should NOT be in nav. */
+	hiddenFromNav: boolean;
 	component: PluginPage['component'];
 }
 
@@ -199,6 +201,7 @@ class PluginLoader {
 					label: page.label,
 					icon: page.icon,
 					navOrder: page.navOrder,
+					hiddenFromNav: page.hiddenFromNav ?? false,
 					component: page.component
 				});
 			}

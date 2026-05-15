@@ -78,6 +78,15 @@ export interface PluginPage {
 	 * with the reason. Omit to mean "always visible when enabled".
 	 */
 	visibleWhen?: (discovery: PluginDiscoverySnapshot) => boolean;
+	/**
+	 * When true, the route stays live (and the page stays "active" for
+	 * /settings/plugins purposes) but the page does NOT appear in the
+	 * kebab nav. Use for plugin pages whose content has migrated to a
+	 * core page (e.g. /emanations imagery now also rendering on `/`),
+	 * keeping permalinks valid while removing the redundant nav entry.
+	 * Defaults to false.
+	 */
+	hiddenFromNav?: boolean;
 	/** The page component. Lazy — code-split, fetched on first nav. */
 	component: LazyComponent;
 }

@@ -23,6 +23,7 @@
 	import { discovery } from '$lib/discovery';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { composeManifest, resolvePresence } from '$lib/manifest';
+	import { indoorTempClause, electricityRateClause } from '$lib/manifest/momentSensors';
 	import type { DomainArea, DomainPerson } from '$lib/discovery';
 	import { connection } from '$lib/stores/connection.svelte';
 	import { curationStore, useCurationField } from '$lib/curation/store.svelte';
@@ -104,8 +105,30 @@
 		return cond ? `Outside ${outsideTemp}°C, ${cond}.` : `Outside ${outsideTemp}°C.`;
 	});
 
+	/* ── Indoor temp clause ("Hallway 17°C.") ────────────────────────── */
+	const curatedIndoorTempId = $derived(
+		curationStore.current.momentSensors?.primaryIndoorTempSensorId ?? null
+	);
+	const areaNameOf = (entityId: string): string | null => {
+		const e = discovery.byEntityId(entityId);
+		if (!e?.areaId) return null;
+		const area = discovery.areas.find((a) => a.id === e.areaId);
+		return area?.name ?? null;
+	};
+	const indoorClause = $derived(
+		indoorTempClause(discoveryStore.states, curatedIndoorTempId, areaNameOf)
+	);
+
+	/* ── Electricity rate clause ("Electricity cheap at 8p.") ────────── */
+	const curatedRateId = $derived(
+		curationStore.current.momentSensors?.primaryElectricityRateSensorId ?? null
+	);
+	const rateClause = $derived(electricityRateClause(discoveryStore.states, curatedRateId));
+
 	const manifestClauses = $derived(
-		[todClause, presenceClause, outsideClause].filter(Boolean) as string[]
+		[todClause, presenceClause, indoorClause, rateClause, outsideClause].filter(
+			Boolean
+		) as string[]
 	);
 
 	/* ── Per-person presence cards ────────────────────────────────────
@@ -330,8 +353,7 @@
 	{/if}
 
 	<Explainer>
-		Who's home is the parent of <a href="{base}/long-take">the long take</a>,
-		<a href="{base}/emanations">the paintings on the wall</a>, and
+		Who's home shapes <a href="{base}/long-take">the long take</a> and
 		<a href="{base}/body">the bodies behind it</a>. The day around them is described in
 		<a href="{base}/lights">light</a>, <a href="{base}/heat">heat</a>,
 		<a href="{base}/door">comings and goings</a>, and <a href="{base}/tv">tonight's screen</a>.

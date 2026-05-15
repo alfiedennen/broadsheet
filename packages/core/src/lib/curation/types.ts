@@ -102,6 +102,20 @@ export interface PluginConfig {
 	config?: Record<string, unknown>;
 }
 
+/**
+ * Sensor picks that drive the moment-view manifest clauses. Each is
+ * optional — if unset, `/+page.svelte` falls back to auto-discovery
+ * (first matching entity). Curation override exists so installs with
+ * multiple temp sensors / multiple electricity tariffs can pin the one
+ * that matters. Settings UI surfaces these in /settings/house.
+ */
+export interface MomentSensorsConfig {
+	/** Indoor temp clause source ("Hallway 17°C."). */
+	primaryIndoorTempSensorId?: string | null;
+	/** Electricity rate clause source ("Electricity cheap at 8p."). */
+	primaryElectricityRateSensorId?: string | null;
+}
+
 /** The top-level shape of broadsheet.json v1. */
 export interface Curation {
 	version: CurationVersion;
@@ -118,6 +132,7 @@ export interface Curation {
 	pages: Record<string, PageOverride>; // keyed by page slug
 	voice: Record<string, string>; // string id → override text
 	paintings: Record<string, PaintingOverride>; // keyed by area_id
+	momentSensors: MomentSensorsConfig;
 	integrations: IntegrationsConfig;
 	plugins: Record<string, PluginConfig>;
 }
@@ -139,6 +154,10 @@ export function defaultCuration(): Curation {
 		pages: {},
 		voice: {},
 		paintings: {},
+		momentSensors: {
+			primaryIndoorTempSensorId: null,
+			primaryElectricityRateSensorId: null
+		},
 		integrations: {
 			tmdb: { apiKey: null, region: 'GB', enabledLenses: ['new', 'trending'] },
 			healthConnect: { platformDetected: false, sleepStartHourUTC: 21, sleepEndHourUTC: 9 },

@@ -39,6 +39,12 @@ export const plugin: BroadsheetPlugin = {
 			// but hidden + 404s — /settings/plugins explains why.
 			visibleWhen: (discovery) =>
 				discovery.persons.filter((p) => p.suggestedPresenceSensor !== null).length >= 2,
+			// As of 0.1.52, the moment view (/) renders the same per-person
+			// painting cards. /emanations stays live for permalinks (and
+			// the dedicated full-imagery surface remains the source of
+			// truth for upload/mapping flows linked from /settings) but
+			// no longer earns its own nav entry.
+			hiddenFromNav: true,
 			component: () => import('./pages/EmanationsPage.svelte')
 		}
 	],

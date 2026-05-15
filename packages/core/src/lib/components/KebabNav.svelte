@@ -51,13 +51,17 @@
 		})),
 		{ href: `${base}/wall/`, label: 'Wall', active: currentPath === `${base}/wall/` },
 		// Active plugin pages slot in after the core domain pages,
-		// before Settings. The loader already filters to pages that
-		// are both routable + nav-visible, sorted by navOrder.
-		...pluginLoader.activePluginPages.map((p) => ({
-			href: `${base}/${p.slug}/`,
-			label: p.label,
-			active: currentPath === `${base}/${p.slug}/`
-		})),
+		// before Settings. The loader returns ROUTABLE pages (visibility
+		// gate already passed); we additionally drop `hiddenFromNav` —
+		// those routes stay live for permalinks but don't earn a nav
+		// entry (e.g. /emanations after the moment view absorbed it).
+		...pluginLoader.activePluginPages
+			.filter((p) => !p.hiddenFromNav)
+			.map((p) => ({
+				href: `${base}/${p.slug}/`,
+				label: p.label,
+				active: currentPath === `${base}/${p.slug}/`
+			})),
 		{
 			href: `${base}/settings/`,
 			label: 'Settings',

@@ -175,6 +175,13 @@ function mergeWithDefault(input: Record<string, unknown>): Curation {
 			typeof input.paintings === 'object' && input.paintings
 				? (input.paintings as never)
 				: def.paintings,
+		momentSensors:
+			typeof input.momentSensors === 'object' && input.momentSensors
+				? ({
+						...def.momentSensors,
+						...(input.momentSensors as object)
+					} as Curation['momentSensors'])
+				: def.momentSensors,
 		integrations:
 			typeof input.integrations === 'object' && input.integrations
 				? ({
