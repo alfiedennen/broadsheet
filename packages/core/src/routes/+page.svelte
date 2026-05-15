@@ -23,10 +23,11 @@
 	import { discovery } from '$lib/discovery';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { composeManifest, resolvePresence } from '$lib/manifest';
+	import type { DomainArea, DomainPerson } from '$lib/discovery';
 	import { connection } from '$lib/stores/connection.svelte';
-	import { curationStore } from '$lib/curation/store.svelte';
+	import { curationStore, useCurationField } from '$lib/curation/store.svelte';
 	import { callService, callToggle, getHardBannedDomains } from '$lib/ha/actions';
-	import ProceduralPainting from '$lib/components/ProceduralPainting.svelte';
+	import { pluginDataUrl } from '$lib/plugins/assets';
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
@@ -34,8 +35,9 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 
 	// Opportunistic upgrade: when @broadsheet/emanations is active, its
-	// renderer takes the painting band; otherwise core's procedural
-	// gradient holds.
+	// renderer (MultiPersonPainting) is what fills each per-person card's
+	// band — gives us the procedural gradient + orbs for free as the
+	// fallback when no painting is mapped.
 	const painting = useRenderer('multi-person-painting');
 
 	const personOverrides = $derived(
@@ -106,13 +108,79 @@
 		[todClause, presenceClause, outsideClause].filter(Boolean) as string[]
 	);
 
-	/* ── Painting seed for the procedural fallback ────────────────────── */
-	const paintingSeed = $derived.by(() => {
-		if (!discovery.booted) return 'loading';
-		const home = presence.find((s) => s.isHome);
-		if (!home) return 'empty';
-		return home.room ?? 'home';
-	});
+	/* ── Per-person presence cards ────────────────────────────────────
+	 * Mirrors /emanations: one card per discovered person, painting
+	 * resolved by current state (in-room → solo variant; away → person
+	 * away image). Lifted from EmanationsPage so `/` shows the same
+	 * imagery — the moment view is the unified surface, /emanations
+	 * remains accessible but is increasingly redundant.
+	 */
+	type AreaMapping = Record<string, string | null>;
+	type SetMapping = Record<string, AreaMapping>;
+	type PaintingSetsConfig = {
+		active: string;
+		sets: Record<string, SetMapping>;
+		personImages?: Record<string, { away?: string | null }>;
+	};
+	const paintingSets = useCurationField<PaintingSetsConfig>(
+		'plugins.emanations.config.paintingSets'
+	);
+	const usePaintings = useCurationField<boolean>('plugins.emanations.config.usePaintings');
+	const paintingsEnabled = $derived(usePaintings.value !== false);
+
+	const NOT_PRESENT = new Set(['', 'unknown', 'unavailable', 'not_home', 'away', 'none']);
+
+	function personSlug(p: DomainPerson): string {
+		return p.id.replace(/^person\./, '');
+	}
+	function effectiveSensorFor(p: DomainPerson): string | null {
+		const overrideId = personOverrides[p.id];
+		return overrideId === null ? null : overrideId ?? p.suggestedPresenceSensor ?? null;
+	}
+
+	type PresenceSlot = { kind: 'in-room'; area: DomainArea } | { kind: 'away' };
+
+	function presenceFor(p: DomainPerson): PresenceSlot {
+		const sensorId = effectiveSensorFor(p);
+		if (!sensorId) return { kind: 'away' };
+		const sensor = discovery.byEntityId(sensorId);
+		const stateValue = (sensor?.state?.state ?? '').toString().trim();
+		if (!stateValue || NOT_PRESENT.has(stateValue.toLowerCase())) return { kind: 'away' };
+		const area = discovery.areas.find(
+			(a) => a.id !== '__unsorted__' && a.name.toLowerCase() === stateValue.toLowerCase()
+		);
+		return area ? { kind: 'in-room', area } : { kind: 'away' };
+	}
+
+	function paintingForPerson(p: DomainPerson, slot: PresenceSlot): string | null {
+		const cfg = paintingSets.value;
+		const slug = personSlug(p);
+		if (slot.kind === 'in-room') {
+			const active = cfg?.active ?? 'default';
+			const fn = cfg?.sets?.[active]?.[slot.area.id]?.[slug];
+			return fn ? pluginDataUrl('emanations', fn) : null;
+		}
+		const awayFn = cfg?.personImages?.[slug]?.away;
+		return awayFn ? pluginDataUrl('emanations', awayFn) : null;
+	}
+
+	type Card = {
+		person: DomainPerson;
+		slot: PresenceSlot;
+		paintingUrl: string | null;
+		locationLabel: string;
+	};
+	const cards = $derived.by((): Card[] =>
+		discovery.persons.map((p) => {
+			const slot = presenceFor(p);
+			return {
+				person: p,
+				slot,
+				paintingUrl: paintingsEnabled ? paintingForPerson(p, slot) : null,
+				locationLabel: slot.kind === 'in-room' ? slot.area.name : 'Away'
+			};
+		})
+	);
 
 	/* ── Quick reach actions ──────────────────────────────────────────── */
 	// Discover the primary entities generically — first TV, first lock.
@@ -194,14 +262,30 @@
 		{/snippet}
 	</Hero>
 
-	<div class="painting-band">
-		{#if painting.current}
-			{@const Painting = painting.current}
-			<Painting persons={discovery.persons} />
-		{:else}
-			<ProceduralPainting seed={paintingSeed} mood="warm" />
-		{/if}
-	</div>
+	{#if discovery.booted && cards.length > 0}
+		<div class="cards" data-count={cards.length}>
+			{#each cards as card (card.person.id)}
+				<article class="card" class:away={card.slot.kind === 'away'}>
+					<div class="card-band">
+						{#if painting.current}
+							{@const Painting = painting.current}
+							<Painting
+								persons={[card.person]}
+								paintings={card.paintingUrl ? [card.paintingUrl] : []}
+							/>
+						{/if}
+					</div>
+					<header class="card-meta">
+						<h3 class="card-name">{card.person.name}</h3>
+						<p class="card-loc">
+							<span class="dot" data-state={card.slot.kind}></span>
+							{card.locationLabel}
+						</p>
+					</header>
+				</article>
+			{/each}
+		</div>
+	{/if}
 
 	{#if discovery.booted && (hasLights || primaryTv || primaryLock)}
 		<section class="quick-reach" aria-label="Quick reach">
@@ -265,14 +349,84 @@
 </PageShell>
 
 <style>
-	.painting-band {
-		position: relative;
-		width: 100%;
-		aspect-ratio: 16 / 7;
+	/* ── Per-person painting cards (mirrors /emanations) ───────────────── */
+	.cards {
+		display: grid;
+		gap: var(--space-4);
 		margin: var(--space-2) 0 var(--space-6);
+	}
+
+	/* 1 → full width; 2 → split 50/50; 3+ → grid wrap */
+	.cards[data-count='1'] {
+		grid-template-columns: 1fr;
+	}
+	.cards[data-count='2'] {
+		grid-template-columns: 1fr 1fr;
+	}
+	.cards:not([data-count='1']):not([data-count='2']) {
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	}
+
+	.card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		border: 1px solid var(--rule);
 		border-radius: var(--radius-card);
 		overflow: hidden;
-		border: 1px solid var(--rule);
+		background: var(--bg-card);
+	}
+
+	.card.away {
+		opacity: 0.86;
+	}
+
+	.card-band {
+		position: relative;
+		width: 100%;
+		aspect-ratio: 16 / 9;
+		overflow: hidden;
+	}
+
+	.card-meta {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-3);
+		padding: 0 var(--space-4) var(--space-3);
+	}
+
+	.card-name {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.4rem;
+		color: var(--accent);
+		margin: 0;
+		font-weight: 400;
+	}
+
+	.card-loc {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		margin: 0;
+	}
+
+	.dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--state-on, #7aa37a);
+		display: inline-block;
+	}
+
+	.dot[data-state='away'] {
+		background: var(--fg-dim);
 	}
 
 	/* Quick-reach: editorial chip row, not a control panel */
