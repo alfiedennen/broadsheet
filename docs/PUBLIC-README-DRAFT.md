@@ -94,6 +94,54 @@ the goal; manual curation is the escape hatch.
 
 ---
 
+## Make your own pages
+
+Beyond the eight curated pages, broadsheet has a **typed
+primitive system** for composing custom pages without writing code.
+
+11 primitives — Hero, Markdown (with `{{entity_id}}` + Jinja
+templates), Explainer, Outline, Macro grid, Room toggle grid,
+Scene row, Boost row, Action grid, Entity list, **Sparkline** (an
+inline SVG chart of any sensor's history pulled live from HA).
+
+**Builder UI** at `/settings/pages`:
+
+- + New page → name, slug, width
+- Add blocks visually, edit each in a structured form (no JSON to
+  write — every block has a typed editor: text inputs, dropdowns,
+  per-action service-call fieldsets for action grids)
+- Drag-to-reorder blocks
+- Live preview pane updates as you type
+- Page is live at `/<slug>/` immediately + appears in the kebab nav
+- Slug rename + page duplicate with collision validation
+
+**Lovelace importer** at `/settings/pages/import`:
+
+- Reads your existing HA dashboards via the stable WS API
+- Translates 27 card types — every built-in HA card type plus
+  the most common HACS cards (Mushroom, layout-card, button-card,
+  mini-graph-card, calendar-card-pro, …) — into broadsheet
+  primitives
+- Includes a **minimal Jinja-subset evaluator** so
+  mushroom-template-card content with `{{ states('…') }}` /
+  `{% if %}` / `{% set %}` evaluates at render time, not as
+  literal text
+- Per-card coverage report (clean / partial / unsupported) before
+  you commit, so you know exactly what you're losing
+- Imported page lands in the editor for hand-tuning
+
+On real-world heavily-customised dashboards (the canary install
+runs a Mushroom-and-HACS-heavy 88-card dashboard), the importer
+renders **95% of cards** with at least partial fidelity.
+
+See [`CUSTOM-PAGES-GUIDE.md`](./CUSTOM-PAGES-GUIDE.md),
+[`IMPORTER-GUIDE.md`](./IMPORTER-GUIDE.md), and
+[`TRANSLATOR-MATRIX.md`](./TRANSLATOR-MATRIX.md) for the user-facing
+docs; [`PLUGIN-AUTHOR-QUICKSTART.md`](./PLUGIN-AUTHOR-QUICKSTART.md)
+for the plugin-author path.
+
+---
+
 ## Why this exists
 
 The Home Assistant frontend ecosystem is rich. Mushroom, Bubble Card,

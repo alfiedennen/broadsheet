@@ -2427,3 +2427,319 @@ far-future header, and a reload correctly pulled the new build's entry
 hash. **One-time cost**: an already-stale browser needs a single hard
 refresh to escape its current heuristic cache; from then on it
 self-heals on every load.
+
+---
+
+## v0.2 — extensibility
+
+The substantial arc that turns broadsheet from a fixed-shape SPA
+into something users can extend without code. Three phases: a typed
+substrate of rendering primitives, a builder UI to compose pages
+from them, and a Lovelace importer to migrate existing dashboards
+into the same shape.
+
+### M4 dogfooding pass — per-person cards, register drift, manifest enrichment (0.1.41 → 0.1.50)
+
+Used the live canary to catch what the spec had missed. Specifics:
+
+**Per-person presence cards on `/emanations`** then on `/`. Each
+person gets one card with the solo painting of their current room,
+or their per-person away image, or a procedural fallback. The
+underlying contract added a `personImages.<slug>.away` slot to the
+emanations curation schema so "Elena away" was first-class instead
+of misappropriating a per-room variant cell. Drag-drop upload, per-
+room/per-person mapping, drop unused area mappings (utility room,
+upstairs bathroom, front hallway — we don't render those as
+paintings), drop the orb-name overlay (let the painting carry the
+room), drop the renderer marker text. The bulk-import path lifted
+17 paintings from harold-home into the canary in one pass.
+
+**Register drift fix.** Lifted harold.local's cross-page Explainer
+prose mesh (the italic-muted footer linking sibling pages) onto
+all 8 broadsheet pages. New core component `Explainer.svelte` so
+plugin pages get the same affordance.
+
+**Moment manifest mirrors harold.local.** Reshaped `/` from "single
+contemplative procedural painting" to harold.local's newspaper
+shape: multi-clause headline (time-of-day · presence · indoor temp
+· electricity rate · outside) + per-person cards + quick-reach
+chips (lights off / TV / unlock) + Explainer. Closed four parity
+gaps in one round: explicit "Elena out" clause when one is home,
+`<em>` italic-amber pop on numerical values, three-band rate
+descriptor (cheap / ordinary / expensive), GBP/kWh conversion for
+Octopus tariffs.
+
+**`/emanations` dropped from the kebab nav.** The route stays live
+for permalinks but the moment view absorbs its imagery, so a nav
+entry is redundant. New plugin contract field `hiddenFromNav` —
+authors can ship a routable page that doesn't earn nav real estate.
+
+**Settings deepening (0.1.51–0.1.56).** Moment-sensor pickers on
+`/settings/house` (auto-discovered indoor temp + electricity rate
+sensors with curation-pin overrides). Shared `PresenceCards` core
+component (deduplicates `/` and `/emanations` card grids, exported
+to plugins via the package entry). People creation form on
+`/settings/people` (calls HA's stable `person/create` WS API; lets
+fresh installs build their first person without leaving broadsheet).
+"Other entity…" expansion on the per-person sensor picker (opens to
+ANY plausible presence carrier — `binary_sensor` / `sensor` /
+`device_tracker` / `person` — for users with custom-template
+presence the heuristic ranks miss).
+
+**HA OS reboot cascade diagnosed and mitigated.** Two ProDesk
+reboots in 4 hours during this arc — ended with no shutdown
+sequence, fsck recovered journals = hard cut. Root cause: Proxmox
+HA cluster's softdog watchdog was armed via `watchdog-mux`, fed by
+`pve-ha-lrm`'s heartbeat. On IO wedge from the mechanical HDD
+(`FSYNCS/SECOND: 11.18`) the heartbeat missed → softdog forced
+reboot. Mitigation: disabled `pve-ha-lrm` / `pve-ha-crm` /
+`watchdog-mux` (single-node Proxmox doesn't need cluster failover),
+blacklisted softdog, added `bwlimit: 40000` to `/etc/vzdump.conf`.
+Not a broadsheet bug per se but a deployment-environment finding
+worth recording.
+
+### Phase 1 — substrate (0.1.57 → 0.1.58)
+
+The typed primitives that custom pages compose from. Nine block
+types in this initial drop, plus the shell that orchestrates them.
+
+**Block contract.** `lib/blocks/types.ts` holds the discriminated
+union: `BlockDef = { type: 'hero', config: HeroBlockConfig } |
+{ type: 'markdown', config: MarkdownBlockConfig } | …`. Each block
+type has a typed config schema; the union is JSON-serialisable so
+curation persistence is direct. `defaultBlockConfig(type)` returns
+a sensible starter for each type (used by the builder's "+ Add
+block").
+
+**Lazy renderer registry.** `lib/blocks/registry.ts` maps each
+`BlockType` to a thunk that dynamic-imports the renderer module.
+Same pattern as the plugin renderer registry — chunks load on first
+use, shared across pages. `BLOCK_META` exports a label + description
+per type so the builder's "+ Add block" picker can list options
+without loading every renderer.
+
+**RenderedPage shell.** `lib/blocks/RenderedPage.svelte` takes
+`{ blocks }` or `{ page }`, resolves each block's renderer from the
+registry on mount, renders them in order. Per-block error chip for
+unknown types; loading placeholder reservation while chunks resolve.
+
+**Nine starter primitives.** `hero` (eyebrow + headline + dek),
+`markdown` (paragraph prose with `{{entity_id}}` shorthand),
+`explainer` (italic-muted footer with cross-page links), `outline`
+(section divider), `macro-grid` (the three house-wide macros: lights
+off / boost heat / TVs off), `room-toggle-grid` (per-area light
+toggle from areasForPage('lights')), `scene-row` (auto-discovered
+scenes), `boost-row` (per-climate-area boost tile),
+`presence-cards` (the existing component re-exported as a
+plugin-consumable surface).
+
+**`customPages` curation field.** `customPages: CustomPageDef[]`
+on the curation root, defaults to empty. `mergeWithDefault`
+preserves the array shape on legacy curation files. Catch-all
+route `[pluginSlug]` resolution adds custom-page lookup as the
+second resolver after plugin pages (plugin precedence — builder
+prevents collisions at write-time). `KebabNav` surfaces them
+filtered by `hiddenFromNav`, sorted by `navOrder`.
+
+**Dogfooded against `/wall`.** Refactored the existing 345-line
+inline composition to a 52-line declarative `RenderedPage` with
+6 blocks (hero, macro-grid, room-toggle-grid, scene-row, boost-row,
+explainer). Same surface, same behaviour — proves the substrate
+against a real page rather than just a demo.
+
+**Markdown link prefix bug fix.** Both `markdown` and `explainer`
+renderers' link transformer was returning bare `<a href="/lights">`
+which 404'd under HA Ingress (where the SPA is served from
+`/api/hassio_ingress/<token>/`). Fixed by prefixing the SvelteKit
+`base` to relative URLs in the regex callback. Caught during
+substrate smoke-test on the canary by injecting a custom page via
+the live curation API, navigating to its slug, verifying the
+links worked.
+
+### Phase 2 — builder UI (0.1.59)
+
+Lets users compose custom pages from typed primitives without
+touching JSON or writing Svelte.
+
+**`/settings/pages` list.** + New page form with auto-derived
+slug from label (slugify on label input until the user manually
+edits the slug field, then leave the manual edit alone). Slug
+validation against `RESERVED_ROUTE_SLUGS` + active plugin pages +
+existing custom-page slugs. On create, redirects straight into
+the editor with a starter Hero block. Per-row up/down reorder,
+edit link, delete with inline confirmation.
+
+**`/settings/pages/[slug]` editor.** Two-column on wide
+viewports, stacked on narrow. Left: page-meta fields (label /
+icon / width / hide-from-nav) + block list with per-block
+move/remove + click-to-expand inline editor. Right: live preview
+pane using `RenderedPage` so what authors see IS the page.
+
+**Per-block-type editors.** Each block type gets its own small
+form bound to the block's config. Hero: 3 text + 1 number + 1
+size dropdown. Markdown / Explainer: textarea. Outline: text.
+Macro-grid / room-toggle-grid: optional inline label. Scene-row:
+label + maxScenes number. Boost-row: label + temperature number.
+Action-grid (and entity-list later) launched with raw-JSON
+textareas; replaced with structured editors in Phase A.
+
+**Block-config edits debounce at ~400ms.** The preview updates
+synchronously via direct in-memory mutation of the curation store;
+only the persistence layer is debounced. Saves users from hammering
+the sidecar on every keystroke without making them feel the wait.
+
+**+ Add block menu** lists every registered block type from
+`BLOCK_META` with description. Selecting one appends a
+`defaultBlockConfig(type)` and auto-expands its editor.
+
+**Settings landing page** gains a "Pages" section card with a
+custom-page count.
+
+End-to-end flow from this commit: name a page, add blocks visually,
+see live preview, page is live at `/<slug>` immediately + appears
+in the kebab nav.
+
+### Phase 3 — Lovelace importer (0.1.60 → 0.1.67)
+
+The v0.9 80% gate. Translates user's existing Lovelace dashboards
+into broadsheet custom pages via stable WS API calls + a per-card
+translator framework. 27 registered translators across HA built-ins
++ Mushroom + popular HACS cards.
+
+**`lib/lovelace/reader.ts`.** Thin WS wrapper around HA's
+`lovelace/dashboards/list` + `lovelace/config`. Splices a synthetic
+default-Overview entry at the head of the dashboard list so users
+can import from the default even when HA hasn't stored a customised
+version of it. Defensive on shape variations.
+
+**`lib/lovelace/translate.ts`.** Translator framework that walks a
+view's cards, dispatches each to its registered translator (or null
+for unsupported), and aggregates a coverage report. Three coverage
+classes: `clean` (1:1 translation), `partial` (translates with
+caveats — chrome dropped, history dropped, etc.), `unsupported` (no
+translator yet). Per-card `note` surfaces what specifically was
+lost. `translateDashboard` rolls up totals across all views.
+
+**Recursive wrappers.** `vertical-stack`, `horizontal-stack`,
+`conditional`, `custom:layout-card`, `custom:stack-in-card` all
+recurse into their child cards. `horizontal-stack` flattens to
+vertical with a note. `conditional` drops the condition gate
+(no conditional-block primitive yet) but surfaces the wrapped card.
+The recursive translators were the gate-clearing breakthrough —
+once they were in, the canary's "22 visible cards" became "88
+actually translated" because layout-card + stack-in-card had been
+hiding most of the dashboard's content behind their wrappers.
+
+**27 translators total** across 6 commits. Final list:
+
+  Built-in HA: `markdown`, `entity`, `entities`, `vertical-stack`,
+  `horizontal-stack`, `glance`, `gauge`, `sensor`, `weather-forecast`,
+  `picture`, `picture-glance`, `picture-entity`, `button`, `light`,
+  `tile`, `media-control`, `conditional`, `iframe`, `heading`.
+
+  HACS: `custom:mushroom-template-card`, `custom:mushroom-chips-card`,
+  `custom:mushroom-light-card`, `custom:mushroom-entity-card`,
+  `custom:layout-card`, `custom:stack-in-card`, `custom:button-card`,
+  `custom:calendar-card-pro`, `custom:mini-graph-card`.
+
+**`lib/jinja/index.ts` — minimal Jinja-subset evaluator** (~470
+lines). Supports `{{ expression }}`, `{% set var = expr %}`,
+`{% if … %}…{% elif … %}…{% else %}…{% endif %}` with arbitrary
+nesting. Operators: `+ - * / %`, `== != > < >= <=`, `and / or /
+not`, conditional expression `value if cond else other`. Filter
+pipe with built-ins: `upper`, `lower`, `title`, `round`, `default`,
+`int`, `float`, `string`, `length`, `replace`. HA functions in
+scope: `states('id')`, `state_attr('id', 'attr')`, `is_state('id',
+'value')`, `is_state_attr('id', 'attr', 'value')`, `now()`. NOT
+supported: `{% for %}`, macros, blocks, includes, custom filter
+authoring (deferred).
+
+`MarkdownBlockRenderer` two-stage interpolate: legacy
+`{{entity.id}}` shorthand first (broadsheet's authoring register),
+Jinja-subset evaluator on remaining content (only when
+`looksLikeJinja` cheap check passes, so plain text takes the fast
+path). Errors swallow back to raw template — broken Jinja never
+crashes a page.
+
+**Quality lift from Jinja:** every `mushroom-template-card` with
+`{% set %}` / `{% if %}` / `states()` calls now renders the actual
+computed text instead of literal Jinja source. On the canary, the
+washer's first markdown went from
+`"Washer {% set mode = states('sensor.wash_dryer_mode') %} {% set modes = {'1': 'Ready', '2': 'Running"`
+to `"Washer · Care 30 · 2 min"`. The classification stays `partial`
+(card chrome — icon + grid layout — is still dropped) but the
+content is real.
+
+**Sparkline primitive — first historical-data block** (0.1.68).
+Inline SVG line chart of one entity's recent history, pulled lazily
+on mount via HA's `history/history_during_period` WS API. Refetches
+when entity_id / hours change (so live editor preview stays
+synced). Live current value sits prominent next to the chart so
+the register reads as 'trend + now', not 'chart'. Custom 40-line
+SVG renderer — no Chart.js / D3 dependency. Bundle cost: ~1KB vs
+80–150KB for a chart library. Editorial register: no axes, no
+grid, no tooltips, no zoom. Single entity per sparkline (multi-line
+charts translate to a stack of sparklines). `mini-graph-card`
+translator now emits real sparklines instead of markdown stubs;
+single-entity goes from `partial` to `clean`.
+
+**Coverage on the canary's 88-card real-world dashboard:**
+
+| Version | Visible | Clean | Partial | Skipped | Rendered |
+|---|---|---|---|---|---|
+| 0.1.62 (start of Phase 3) | 22 | 5 | 0 | 17 | 23% |
+| 0.1.63 (+10 translators) | 22 | 5 | 9 | 8 | 64% |
+| 0.1.64 (+Jinja) | 22 | 5 | 9 | 8 | 64% (quality fix) |
+| 0.1.65 (+8 translators) | 34 | 7 | 20 | 7 | 79% |
+| 0.1.66 (+stack-in-card) | 88 | 25 | 49 | 14 | 84% |
+| 0.1.67 (+heading + mini-graph + icon-only) | 88 | 27 | 57 | 4 | 95% |
+
+Total card count grew from 22 to 88 between 0.1.65 → 0.1.66 because
+the recursive wrappers revealed children previously hidden behind
+their wrapper failures. The 95% figure is the meaningful one — on a
+heavily-customised Mushroom-and-HACS dashboard, broadsheet renders
+84/88 cards with at least partial fidelity.
+
+### Phase A polish (0.1.69)
+
+Tighten the new surfaces while findings from the dogfooding pass
+were fresh. Five paired UX cleanups in two commits:
+
+- **Structured per-action editor for action-grid blocks** — the
+  raw-JSON textarea was the single biggest builder pain point.
+  Each action is now a card with label / detail / icon text inputs,
+  a service-call fieldset (domain / service / target entity_id),
+  an optional state-binding fieldset, and per-action move / remove
+  controls. + Add action button appends a sensible default.
+- **Drag-to-reorder blocks** — header is the drag handle (whole
+  row is the drop target), ⋮⋮ grip signals draggability, dragging
+  row dims to opacity 0.4, drop target gets dashed accent border.
+- **Slug rename on existing pages** — inline form with the same
+  validation as create. On commit, updates curation in place +
+  redirects the editor URL. Old URL 404s — flagged in the hint.
+- **Page duplicate** — deep-clones the source page (JSON
+  round-trip) with a new slug + label, slots into the array with
+  a fresh navOrder. Redirects into the new page's editor.
+- **Save-status indicator** — persistent strip near the editor
+  head: editing… / saving… / ✓ saved (auto-fades after 1.6s) / ⚠
+  save failed. Border + text colour reflect status. Closes the
+  "did my edit land?" gap from the 400ms debounce.
+- **Importer Retry button** on `getLovelaceConfig` failure (was
+  "Pick another dashboard" only).
+
+### v0.2 status
+
+| Phase | Status |
+|---|---|
+| 1 Substrate | Shipped — 11 primitives (incl. sparkline) |
+| 2 Builder UI | Shipped — list + editor + per-block forms + live preview |
+| 3 Importer | Shipped — 27 translators + Jinja evaluator |
+| Polish | Shipped — structured action editor + drag-reorder + rename + duplicate + save indicator |
+| Docs | In progress |
+
+Remaining v0.2 work:
+- Docs: translator matrix, plugin author quickstart, custom-page +
+  importer end-user guides
+- HA-user-landscape research → epics → automated rubric tests →
+  gap analysis → ship-readiness synthesis artefact (precedes
+  v0.1.0 release-prep gates)
