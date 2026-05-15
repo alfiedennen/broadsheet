@@ -28,6 +28,8 @@
 	import { pluginLoader } from '$lib/plugins/loader.svelte';
 	import { RESERVED_ROUTE_SLUGS } from '$lib/plugins';
 	import { showToast } from '$lib/stores/toast.svelte';
+	import { discovery } from '$lib/discovery';
+	import { applicablePresets, type PresetBuilder } from '$lib/presets';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
@@ -42,6 +44,13 @@
 	let newWidth = $state<'narrow' | 'default' | 'wide'>('default');
 	let labelEl = $state<HTMLInputElement | null>(null);
 	let submitting = $state(false);
+	// Preset selection — the form starts in 'pick-preset' mode if any
+	// presets are applicable, then falls through to label/slug after pick.
+	let pickedPreset = $state<PresetBuilder | null>(null);
+	let pickedPersonId = $state<string | null>(null);
+	const presets = $derived(
+		applicablePresets({ persons: discovery.persons, areas: discovery.areas })
+	);
 	// Auto-derive slug from label as the user types — but only until
 	// they manually edit the slug field, so a deliberate slug isn't
 	// clobbered by a label tweak.
@@ -53,10 +62,28 @@
 		newSlug = '';
 		newWidth = 'default';
 		slugEdited = false;
+		pickedPreset = null;
+		pickedPersonId = null;
 		tick().then(() => labelEl?.focus());
 	}
 	function cancelCreate() {
 		creating = false;
+		pickedPreset = null;
+	}
+
+	function selectPreset(preset: PresetBuilder | null) {
+		pickedPreset = preset;
+		if (preset) {
+			// Auto-fill label + slug + width from preset metadata
+			newLabel = preset.meta.label;
+			newSlug = slugify(preset.meta.label);
+			slugEdited = false;
+			// Person preset prompts for which person; default to first
+			if (preset.meta.requiresPerson) {
+				pickedPersonId = discovery.persons[0]?.id ?? null;
+			}
+		}
+		tick().then(() => labelEl?.focus());
 	}
 	function slugify(s: string): string {
 		return s
@@ -97,18 +124,36 @@
 		}
 		submitting = true;
 		try {
-			const ok = await createCustomPage({
-				slug: newSlug,
-				label,
-				navOrder: 100 + pages.length, // sit after core + plugins
-				pageWidth: newWidth,
-				blocks: [
-					{
-						type: 'hero',
-						config: { eyebrow: label, headline: label, size: 'md' }
-					}
-				]
-			});
+			// If a preset is picked, build the page def from its template;
+			// otherwise fall back to the blank-Hero starter.
+			let pageDef;
+			if (pickedPreset) {
+				const built = pickedPreset.build(
+					{ persons: discovery.persons, areas: discovery.areas },
+					{ label, personId: pickedPersonId ?? undefined }
+				);
+				pageDef = {
+					...built,
+					slug: newSlug,
+					label,
+					pageWidth: newWidth, // honour user override
+					navOrder: 100 + pages.length
+				};
+			} else {
+				pageDef = {
+					slug: newSlug,
+					label,
+					navOrder: 100 + pages.length,
+					pageWidth: newWidth,
+					blocks: [
+						{
+							type: 'hero' as const,
+							config: { eyebrow: label, headline: label, size: 'md' as const }
+						}
+					]
+				};
+			}
+			const ok = await createCustomPage(pageDef);
 			if (ok) {
 				showToast(`Created "${label}"`, 'success');
 				cancelCreate();
@@ -158,6 +203,45 @@
 	<div class="new-page">
 		{#if creating}
 			<div class="new-page-form">
+				{#if presets.length > 0}
+					<div class="preset-picker">
+						<span class="field-label">Start from</span>
+						<div class="preset-row">
+							<button
+								type="button"
+								class="preset-chip"
+								class:active={pickedPreset === null}
+								onclick={() => selectPreset(null)}
+							>
+								<span class="preset-name">Blank</span>
+								<span class="preset-desc">Start with a single Hero block.</span>
+							</button>
+							{#each presets as p (p.meta.id)}
+								<button
+									type="button"
+									class="preset-chip"
+									class:active={pickedPreset?.meta.id === p.meta.id}
+									onclick={() => selectPreset(p)}
+								>
+									<span class="preset-name">{p.meta.label}</span>
+									<span class="preset-desc">{p.meta.description}</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				{#if pickedPreset?.meta.requiresPerson}
+					<label class="field">
+						<span class="field-label">For which person</span>
+						<select class="field-input" bind:value={pickedPersonId}>
+							{#each discovery.persons as person (person.id)}
+								<option value={person.id}>{person.name}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
+
 				<label class="field">
 					<span class="field-label">Label</span>
 					<input
@@ -284,6 +368,62 @@
 </PageShell>
 
 <style>
+	/* ── Preset picker ─────────────────────────────────────────── */
+	.preset-picker {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.preset-row {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: var(--space-2);
+	}
+
+	@media (min-width: 540px) {
+		.preset-row {
+			grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		}
+	}
+
+	.preset-chip {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		padding: var(--space-3) var(--space-4);
+		background: var(--bg-raised);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		text-align: left;
+		min-height: 64px;
+		transition: border-color var(--ease-quick), background var(--ease-quick);
+	}
+
+	.preset-chip:hover {
+		border-color: var(--accent);
+	}
+
+	.preset-chip.active {
+		border-color: var(--accent);
+		background: var(--accent-glow);
+	}
+
+	.preset-name {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.1rem;
+		color: var(--accent);
+	}
+
+	.preset-desc {
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+		font-style: italic;
+		line-height: var(--leading-snug);
+	}
+
 	/* ── + New page ─────────────────────────────────────────────── */
 	.new-page {
 		margin-bottom: var(--space-6);

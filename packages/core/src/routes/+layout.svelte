@@ -20,6 +20,7 @@
 	import WriteAllowedBanner from '$lib/components/WriteAllowedBanner.svelte';
 	import KebabNav from '$lib/components/KebabNav.svelte';
 	import Toast from '$lib/components/Toast.svelte';
+	import ConnectionIndicator from '$lib/components/ConnectionIndicator.svelte';
 
 	let { children } = $props();
 
@@ -146,6 +147,13 @@
 {/if}
 
 <Toast />
+
+<!--
+	ConnectionIndicator hides when WS is healthy + appears bottom-right
+	when it isn't. Mounts unconditionally (even before discovery boots)
+	so users see "Connecting…" on cold start instead of a blank screen.
+-->
+<ConnectionIndicator />
 
 <div class="app">
 	{#if booted}
