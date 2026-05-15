@@ -846,6 +846,7 @@ const TRANSLATORS: Record<string, true> = {
 	'custom:mushroom-light-card': true,
 	'custom:mushroom-entity-card': true,
 	'custom:layout-card': true,
+	'custom:stack-in-card': true,
 	'custom:button-card': true,
 	'custom:calendar-card-pro': true
 };
@@ -912,12 +913,20 @@ export function translateView(view: LovelaceView): TranslatedView {
 				]
 			};
 		}
-		if (t === 'custom:layout-card') {
+		if (t === 'custom:layout-card' || t === 'custom:stack-in-card') {
 			const r = translateLayoutCard(card, visit);
 			return {
 				blocks: r.blocks,
 				reports: [
-					{ type: t, coverage: r.coverage, note: r.note, sourceIndex: idx },
+					{
+						type: t,
+						coverage: r.coverage,
+						note:
+							t === 'custom:stack-in-card'
+								? 'stack-in-card chrome dropped — children render flat-vertically.'
+								: r.note,
+						sourceIndex: idx
+					},
 					...r.childReports
 				]
 			};
