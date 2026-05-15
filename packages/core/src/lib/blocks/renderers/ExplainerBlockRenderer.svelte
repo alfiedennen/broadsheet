@@ -24,7 +24,7 @@
 
 	function inlineMd(s: string): string {
 		return s
-			.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]+)\)/g, '<a href="$2">$1</a>')
+			.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]*)\)/g, '<a href="$2">$1</a>')
 			.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 			.replace(/(^|[^*])\*([^*]+)\*([^*]|$)/g, '$1<em>$2</em>$3');
 	}

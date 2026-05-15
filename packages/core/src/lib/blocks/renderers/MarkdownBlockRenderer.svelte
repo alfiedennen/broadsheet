@@ -52,7 +52,8 @@
 			s
 				// [text](url) — only http/https/relative paths to avoid
 				// javascript: schemes; the URL is escaped inline already.
-				.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]+)\)/g, '<a href="$2">$1</a>')
+				// `[^)]*` (zero-or-more) so root href `(/)` still matches.
+				.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]*)\)/g, '<a href="$2">$1</a>')
 				// **bold**
 				.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 				// *italic* — careful not to grab ** by re-running
