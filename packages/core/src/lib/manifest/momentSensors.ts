@@ -68,33 +68,44 @@ export function highlightValues(clause: string): string {
 /* ── Indoor temp sensor resolution ────────────────────────────────── */
 
 /**
- * Pick the indoor-temp sensor. Curated override wins; otherwise scans
- * states for a sensor whose entity_id looks indoor + temp. Skips
- * obvious outdoor / weather / appliance temps.
+ * List every sensor that's a candidate for the indoor-temp clause —
+ * any temperature reading that isn't an obvious outdoor / appliance
+ * temp. Used by `/settings/house` to populate the Moment-sensors
+ * picker; the resolver below is just "first preference winning."
  */
-export function resolveIndoorTempSensor(
-	states: Record<string, State>,
-	curated: string | null | undefined
-): string | null {
-	if (curated && states[curated]) return curated;
-
-	const candidates: string[] = [];
+export function listIndoorTempCandidates(states: Record<string, State>): string[] {
+	const out: string[] = [];
 	for (const id of Object.keys(states)) {
 		if (!id.startsWith('sensor.')) continue;
 		const s = states[id];
 		const uom = (s.attributes?.unit_of_measurement ?? '').toString();
 		const devClass = (s.attributes?.device_class ?? '').toString();
-		// Must read temperature (°C / °F)
 		if (devClass !== 'temperature' && !/^°[CF]$/.test(uom)) continue;
-		// Skip outdoor / weather / appliance temps
 		if (/outdoor|outside|weather|forecast|fridge|freezer|oven|grill|cpu|battery_temp/i.test(id))
 			continue;
-		// Must produce a numeric reading
 		const n = Number(s.state);
 		if (!isFinite(n)) continue;
-		candidates.push(id);
+		out.push(id);
 	}
+	return out;
+}
 
+/**
+ * Pick the indoor-temp sensor. Curated override wins; otherwise scans
+ * states for a sensor whose entity_id looks indoor + temp. Skips
+ * obvious outdoor / weather / appliance temps.
+ *
+ * Sentinel: `curated === ''` means "explicitly off" — no clause
+ * renders. `null` / `undefined` means "auto-discover".
+ */
+export function resolveIndoorTempSensor(
+	states: Record<string, State>,
+	curated: string | null | undefined
+): string | null {
+	if (curated === '') return null; // explicitly off
+	if (curated && states[curated]) return curated;
+
+	const candidates = listIndoorTempCandidates(states);
 	if (candidates.length === 0) return null;
 
 	// Prefer hallway / landing / lounge / living room — public-room temps
@@ -140,19 +151,46 @@ export function indoorTempClause(
 /* ── Electricity rate sensor resolution ──────────────────────────── */
 
 /**
+ * List every sensor that's a candidate for the electricity-rate
+ * clause — entity_id contains an electricity / rate keyword AND has a
+ * currency-per-kWh-shaped UOM. Used by /settings/house picker.
+ */
+export function listElectricityRateCandidates(states: Record<string, State>): string[] {
+	const out: string[] = [];
+	for (const id of Object.keys(states)) {
+		if (!id.startsWith('sensor.')) continue;
+		const s = states[id];
+		if (!/(octopus_energy_electricity|electricity|electric|power|grid).*(current_rate|rate|tariff|cost)/i.test(id))
+			continue;
+		const uom = (s.attributes?.unit_of_measurement ?? '').toString();
+		const n = Number(s.state);
+		// Accept either an explicit currency/kWh UOM OR a plausible
+		// numeric value with no UOM (some installs strip the UOM).
+		const hasCurrencyUom = /\/kWh|p\/kWh|GBP\/kWh|\$\/kWh|kr\/kWh/i.test(uom);
+		const looksLikeRate = isFinite(n) && n >= 0 && n <= 100;
+		if (!hasCurrencyUom && !looksLikeRate) continue;
+		out.push(id);
+	}
+	return out;
+}
+
+/**
  * Pick the electricity-rate sensor. Curated override wins; otherwise
  * scans states for a sensor whose entity_id contains "electricity"
  * AND "current_rate" / "rate" / "tariff" AND reads a numeric currency-
  * per-kWh value. Designed to match Octopus Energy (HACS) by default
  * but also any custom rest sensor that follows the same convention.
+ *
+ * Sentinel: `curated === ''` means "explicitly off".
  */
 export function resolveElectricityRateSensor(
 	states: Record<string, State>,
 	curated: string | null | undefined
 ): string | null {
+	if (curated === '') return null;
 	if (curated && states[curated]) return curated;
 
-	const ids = Object.keys(states).filter((id) => id.startsWith('sensor.'));
+	const ids = listElectricityRateCandidates(states);
 
 	// Octopus convention first
 	const octopus = ids.find((id) =>
@@ -160,17 +198,7 @@ export function resolveElectricityRateSensor(
 	);
 	if (octopus) return octopus;
 
-	// Generic rate sensor — numeric reading + currency-per-kWh-ish UOM
-	for (const id of ids) {
-		if (!/(electricity|electric|power|grid).*(current_rate|rate|tariff|cost)/i.test(id)) continue;
-		const s = states[id];
-		const uom = (s.attributes?.unit_of_measurement ?? '').toString();
-		if (!/\/kWh|p\/kWh|GBP\/kWh|\$\/kWh|kr\/kWh/i.test(uom)) continue;
-		const n = Number(s.state);
-		if (!isFinite(n)) continue;
-		return id;
-	}
-	return null;
+	return ids[0] ?? null;
 }
 
 /**

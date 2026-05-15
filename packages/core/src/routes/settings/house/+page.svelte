@@ -23,8 +23,15 @@
 		renameDevice,
 		hideEntity,
 		renameEntity,
-		unhideEntity
+		unhideEntity,
+		setMomentSensor
 	} from '$lib/curation/store.svelte';
+	import {
+		listIndoorTempCandidates,
+		listElectricityRateCandidates,
+		resolveIndoorTempSensor,
+		resolveElectricityRateSensor
+	} from '$lib/manifest/momentSensors';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { updateEntityArea, updateDeviceArea, createArea } from '$lib/ha/registry';
@@ -495,6 +502,63 @@
 				};
 			default:
 				return null;
+		}
+	}
+
+	/* ─────────────── moment-sensor pickers ──────────────────────────
+	 * Two pickers that drive the moment-headline clauses on `/`. Each
+	 * has three states stored in `curation.momentSensors.<key>`:
+	 *
+	 *   undefined / null → auto-discover (fallback heuristic in
+	 *                      momentSensors.ts picks the first match)
+	 *   ''               → explicitly off (no clause renders)
+	 *   '<entity_id>'    → pinned
+	 *
+	 * UI sentinel uses 'auto' for the first state since <select> can't
+	 * distinguish a value of `null` from `undefined`. The change handler
+	 * maps 'auto' → undefined when calling setMomentSensor.
+	 */
+	const indoorTempCandidates = $derived(
+		listIndoorTempCandidates(discoveryStore.states).slice().sort((a, b) => a.localeCompare(b))
+	);
+	const rateCandidates = $derived(
+		listElectricityRateCandidates(discoveryStore.states).slice().sort((a, b) => a.localeCompare(b))
+	);
+	const autoIndoorTempPick = $derived(
+		resolveIndoorTempSensor(discoveryStore.states, undefined)
+	);
+	const autoRatePick = $derived(
+		resolveElectricityRateSensor(discoveryStore.states, undefined)
+	);
+	const indoorTempCurrent = $derived(
+		curationStore.current.momentSensors?.primaryIndoorTempSensorId ?? 'auto'
+	);
+	const rateCurrent = $derived(
+		curationStore.current.momentSensors?.primaryElectricityRateSensorId ?? 'auto'
+	);
+
+	function entityLabel(id: string): string {
+		const e = discovery.byEntityId(id);
+		const name = e?.name ?? id.replace(/^sensor\./, '').replace(/_/g, ' ');
+		const value = discoveryStore.states[id]?.state ?? '—';
+		const uom = discoveryStore.states[id]?.attributes?.unit_of_measurement ?? '';
+		return `${name} — ${value}${uom ? ` ${uom}` : ''}`;
+	}
+
+	async function pickMomentSensor(
+		key: 'primaryIndoorTempSensorId' | 'primaryElectricityRateSensorId',
+		value: string
+	) {
+		// '' = explicitly off; 'auto' = clear override; else = pin
+		if (value === 'auto') {
+			const ok = await setMomentSensor(key, undefined);
+			if (ok) showToast('Moment sensor set to auto');
+		} else if (value === '') {
+			const ok = await setMomentSensor(key, '');
+			if (ok) showToast('Clause turned off');
+		} else {
+			const ok = await setMomentSensor(key, value);
+			if (ok) showToast('Moment sensor pinned');
 		}
 	}
 </script>
@@ -1105,9 +1169,144 @@
 		{/each}
 	</ul>
 	</div>
+
+	<OutLine label="Moment sensors" />
+	<p class="ms-intro">
+		Two sensors that drive the headline on <strong>the moment</strong>.
+		Both are auto-picked from what's discovered; pin them when you have
+		multiple temp sensors or several electricity tariffs and the auto
+		choice doesn't match what you'd write yourself.
+	</p>
+	<div class="ms-grid">
+		<label class="ms-row">
+			<span class="ms-name">Indoor temp</span>
+			<span class="ms-hint">
+				"Hallway 17°C." Defaults to a public-room temp.
+			</span>
+			<select
+				class="ms-select"
+				value={indoorTempCurrent}
+				onchange={(e) =>
+					pickMomentSensor(
+						'primaryIndoorTempSensorId',
+						(e.target as HTMLSelectElement).value
+					)}
+			>
+				<option value="auto">
+					Auto{autoIndoorTempPick ? ` — ${entityLabel(autoIndoorTempPick)}` : ' — none discovered'}
+				</option>
+				<option value="">Off (skip clause)</option>
+				{#if indoorTempCandidates.length > 0}
+					<optgroup label="Pin to a sensor">
+						{#each indoorTempCandidates as id (id)}
+							<option value={id}>{entityLabel(id)}</option>
+						{/each}
+					</optgroup>
+				{/if}
+			</select>
+		</label>
+
+		<label class="ms-row">
+			<span class="ms-name">Electricity rate</span>
+			<span class="ms-hint">
+				"Electricity cheap at 8p." Octopus + similar HACS sensors auto-detect.
+			</span>
+			<select
+				class="ms-select"
+				value={rateCurrent}
+				onchange={(e) =>
+					pickMomentSensor(
+						'primaryElectricityRateSensorId',
+						(e.target as HTMLSelectElement).value
+					)}
+			>
+				<option value="auto">
+					Auto{autoRatePick ? ` — ${entityLabel(autoRatePick)}` : ' — none discovered'}
+				</option>
+				<option value="">Off (skip clause)</option>
+				{#if rateCandidates.length > 0}
+					<optgroup label="Pin to a sensor">
+						{#each rateCandidates as id (id)}
+							<option value={id}>{entityLabel(id)}</option>
+						{/each}
+					</optgroup>
+				{/if}
+			</select>
+		</label>
+	</div>
 </PageShell>
 
 <style>
+	/* ── Moment-sensor pickers ──────────────────────────────────────── */
+	.ms-intro {
+		max-width: 60ch;
+		color: var(--fg-muted);
+		font-style: italic;
+		line-height: var(--leading-snug);
+		margin: 0 0 var(--space-4);
+	}
+
+	.ms-intro strong {
+		font-style: normal;
+		color: var(--accent);
+		font-weight: 500;
+	}
+
+	.ms-grid {
+		display: grid;
+		gap: var(--space-4);
+		grid-template-columns: 1fr;
+		max-width: 720px;
+		margin-bottom: var(--space-12);
+	}
+
+	@media (min-width: 720px) {
+		.ms-grid {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
+
+	.ms-row {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3) var(--space-4);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+	}
+
+	.ms-name {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.1rem;
+		color: var(--accent);
+	}
+
+	.ms-hint {
+		font-family: var(--font-caption);
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+		line-height: var(--leading-snug);
+	}
+
+	.ms-select {
+		font-family: var(--font-mono);
+		font-size: var(--text-body);
+		padding: var(--space-2) var(--space-3);
+		background: var(--bg-raised);
+		color: var(--fg);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		min-height: 40px;
+		max-width: 100%;
+	}
+
+	.ms-select:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+
 	.new-room {
 		margin-bottom: var(--space-4);
 	}

@@ -27,14 +27,15 @@
 		Hero,
 		Eyebrow,
 		Explainer,
+		PresenceCards,
 		discovery,
 		pluginDataUrl,
 		useCurationField,
 		type DomainPerson,
-		type DomainArea
+		type DomainArea,
+		type PresenceCard
 	} from '@broadsheet/core';
 	import { base } from '$app/paths';
-	import MultiPersonPainting from '../renderers/MultiPersonPainting.svelte';
 
 	const persons = $derived(discovery.persons);
 
@@ -102,6 +103,9 @@
 	}
 
 	/* ── The cards: one per person, always ───────────────────────── */
+	// Internal Card carries the resolved presence slot too — needed
+	// later for the headline prose composition. The shared PresenceCards
+	// renderer just wants the flat shape, so we project at render time.
 	type Card = {
 		person: DomainPerson;
 		slot: PresenceSlot;
@@ -119,6 +123,15 @@
 				locationLabel: slot.kind === 'in-room' ? slot.area.name : 'Away'
 			};
 		})
+	);
+
+	const presenceCards = $derived.by((): PresenceCard[] =>
+		cards.map((c) => ({
+			person: c.person,
+			paintingUrl: c.paintingUrl,
+			locationLabel: c.locationLabel,
+			away: c.slot.kind === 'away'
+		}))
 	);
 
 	/* ── Headline prose — describe the whole household ───────────── */
@@ -168,25 +181,7 @@
 	</Hero>
 
 	{#if cards.length > 0}
-		<div class="cards" data-count={cards.length}>
-			{#each cards as card (card.person.id)}
-				<article class="card" class:away={card.slot.kind === 'away'}>
-					<div class="card-band">
-						<MultiPersonPainting
-							persons={[card.person]}
-							paintings={card.paintingUrl ? [card.paintingUrl] : []}
-						/>
-					</div>
-					<header class="card-meta">
-						<h3 class="card-name">{card.person.name}</h3>
-						<p class="card-loc">
-							<span class="dot" data-state={card.slot.kind}></span>
-							{card.locationLabel}
-						</p>
-					</header>
-				</article>
-			{/each}
-		</div>
+		<PresenceCards cards={presenceCards} />
 	{:else}
 		<p class="empty">No people discovered. Add a person in HA Settings → People.</p>
 	{/if}
@@ -213,85 +208,7 @@
 </PageShell>
 
 <style>
-	.cards {
-		display: grid;
-		gap: var(--space-4);
-		margin-bottom: var(--space-6);
-	}
-
-	/* 2 people → split 50/50 horizontally; 1 → full width; 3+ → grid wrap */
-	.cards[data-count='1'] {
-		grid-template-columns: 1fr;
-	}
-	.cards[data-count='2'] {
-		grid-template-columns: 1fr 1fr;
-	}
-	.cards:not([data-count='1']):not([data-count='2']) {
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-	}
-
-	.card {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-card);
-		overflow: hidden;
-		background: var(--bg-card);
-	}
-
-	.card.away {
-		opacity: 0.86;
-	}
-
-	.card-band {
-		position: relative;
-		width: 100%;
-		aspect-ratio: 16 / 9;
-		overflow: hidden;
-	}
-
-	.card-meta {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: var(--space-3);
-		padding: 0 var(--space-4) var(--space-3);
-	}
-
-	.card-name {
-		font-family: var(--font-display);
-		font-style: italic;
-		font-size: 1.4rem;
-		color: var(--accent);
-		margin: 0;
-		font-weight: 400;
-	}
-
-	.card-loc {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-family: var(--font-mono);
-		font-size: var(--text-eyebrow);
-		letter-spacing: var(--track-eyebrow);
-		text-transform: uppercase;
-		color: var(--fg-muted);
-		margin: 0;
-	}
-
-	.dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--state-on, #7aa37a);
-		display: inline-block;
-	}
-
-	.dot[data-state='away'] {
-		background: var(--fg-dim);
-	}
-
+	/* Cards live in @broadsheet/core PresenceCards now. */
 	.empty {
 		color: var(--fg-muted);
 		font-style: italic;

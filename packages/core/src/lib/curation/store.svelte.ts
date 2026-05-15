@@ -155,6 +155,30 @@ export async function unhideEntity(entityId: string, unhide: boolean): Promise<b
 	return setEntityOverride(entityId, { unhide });
 }
 
+/* ─────────────── moment-sensor mutators ─────────────── */
+
+/**
+ * Pin one of the moment-view manifest sensor sources.
+ *
+ *   value === undefined → delete the override → resume auto-discovery
+ *   value === ''        → explicitly off → no clause renders
+ *   value === '<id>'    → pin to this entity
+ */
+export async function setMomentSensor(
+	key: 'primaryIndoorTempSensorId' | 'primaryElectricityRateSensorId',
+	value: string | null | undefined
+): Promise<boolean> {
+	return update((c) => {
+		c.momentSensors = { ...c.momentSensors };
+		if (value === undefined) {
+			delete c.momentSensors[key];
+		} else {
+			c.momentSensors[key] = value;
+		}
+		return c;
+	});
+}
+
 /* ─────────────── pin mutators ─────────────── */
 
 export async function pinEntityToPage(

@@ -33,17 +33,12 @@
 	import { curationStore, useCurationField } from '$lib/curation/store.svelte';
 	import { callService, callToggle, getHardBannedDomains } from '$lib/ha/actions';
 	import { pluginDataUrl } from '$lib/plugins/assets';
-	import { useRenderer } from '$lib/plugins/renderers.svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import Explainer from '$lib/components/Explainer.svelte';
-
-	// Opportunistic upgrade: when @broadsheet/emanations is active, its
-	// renderer (MultiPersonPainting) is what fills each per-person card's
-	// band — gives us the procedural gradient + orbs for free as the
-	// fallback when no painting is mapped.
-	const painting = useRenderer('multi-person-painting');
+	import PresenceCards from '$lib/components/PresenceCards.svelte';
+	import type { PresenceCard } from '$lib/components/PresenceCards.types';
 
 	const personOverrides = $derived(
 		Object.fromEntries(
@@ -191,20 +186,14 @@
 		return awayFn ? pluginDataUrl('emanations', awayFn) : null;
 	}
 
-	type Card = {
-		person: DomainPerson;
-		slot: PresenceSlot;
-		paintingUrl: string | null;
-		locationLabel: string;
-	};
-	const cards = $derived.by((): Card[] =>
+	const cards = $derived.by((): PresenceCard[] =>
 		discovery.persons.map((p) => {
 			const slot = presenceFor(p);
 			return {
 				person: p,
-				slot,
 				paintingUrl: paintingsEnabled ? paintingForPerson(p, slot) : null,
-				locationLabel: slot.kind === 'in-room' ? slot.area.name : 'Away'
+				locationLabel: slot.kind === 'in-room' ? slot.area.name : 'Away',
+				away: slot.kind === 'away'
 			};
 		})
 	);
@@ -292,29 +281,8 @@
 		{/snippet}
 	</Hero>
 
-	{#if discovery.booted && cards.length > 0}
-		<div class="cards" data-count={cards.length}>
-			{#each cards as card (card.person.id)}
-				<article class="card" class:away={card.slot.kind === 'away'}>
-					<div class="card-band">
-						{#if painting.current}
-							{@const Painting = painting.current}
-							<Painting
-								persons={[card.person]}
-								paintings={card.paintingUrl ? [card.paintingUrl] : []}
-							/>
-						{/if}
-					</div>
-					<header class="card-meta">
-						<h3 class="card-name">{card.person.name}</h3>
-						<p class="card-loc">
-							<span class="dot" data-state={card.slot.kind}></span>
-							{card.locationLabel}
-						</p>
-					</header>
-				</article>
-			{/each}
-		</div>
+	{#if discovery.booted}
+		<PresenceCards {cards} />
 	{/if}
 
 	{#if discovery.booted && (hasLights || primaryTv || primaryLock)}
@@ -378,85 +346,8 @@
 </PageShell>
 
 <style>
-	/* ── Per-person painting cards (mirrors /emanations) ───────────────── */
-	.cards {
-		display: grid;
-		gap: var(--space-4);
-		margin: var(--space-2) 0 var(--space-6);
-	}
-
-	/* 1 → full width; 2 → split 50/50; 3+ → grid wrap */
-	.cards[data-count='1'] {
-		grid-template-columns: 1fr;
-	}
-	.cards[data-count='2'] {
-		grid-template-columns: 1fr 1fr;
-	}
-	.cards:not([data-count='1']):not([data-count='2']) {
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-	}
-
-	.card {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-card);
-		overflow: hidden;
-		background: var(--bg-card);
-	}
-
-	.card.away {
-		opacity: 0.86;
-	}
-
-	.card-band {
-		position: relative;
-		width: 100%;
-		aspect-ratio: 16 / 9;
-		overflow: hidden;
-	}
-
-	.card-meta {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: var(--space-3);
-		padding: 0 var(--space-4) var(--space-3);
-	}
-
-	.card-name {
-		font-family: var(--font-display);
-		font-style: italic;
-		font-size: 1.4rem;
-		color: var(--accent);
-		margin: 0;
-		font-weight: 400;
-	}
-
-	.card-loc {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-family: var(--font-mono);
-		font-size: var(--text-eyebrow);
-		letter-spacing: var(--track-eyebrow);
-		text-transform: uppercase;
-		color: var(--fg-muted);
-		margin: 0;
-	}
-
-	.dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--state-on, #7aa37a);
-		display: inline-block;
-	}
-
-	.dot[data-state='away'] {
-		background: var(--fg-dim);
-	}
+	/* Per-person painting cards now live in PresenceCards (shared with
+	   the @broadsheet/emanations plugin's /emanations page). */
 
 	/* Quick-reach: editorial chip row, not a control panel */
 	.quick-reach {
