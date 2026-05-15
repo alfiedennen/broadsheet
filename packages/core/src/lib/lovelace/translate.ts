@@ -445,9 +445,17 @@ function translateMushroomTemplate(card: LovelaceCard): { blocks: BlockDef[]; co
 			};
 		}
 	}
-	// Path 2 — text card (primary / secondary). Existing behaviour.
+	// Path 2 — decorative card (no text, no tap). Common as visual
+	// spacers in remote-control layouts (e.g. corners of a D-pad).
+	// Recognised but emits no blocks; classified 'partial' so the
+	// import isn't penalised in coverage stats but the user sees
+	// what was dropped.
 	if (!primary && !secondary) {
-		return { blocks: [], coverage: 'unsupported', note: 'no primary/secondary text + no actionable tap.' };
+		return {
+			blocks: [],
+			coverage: 'partial',
+			note: 'Decorative card (no text, no tap) — nothing to render.'
+		};
 	}
 	const body = [primary && `**${primary}**`, secondary].filter(Boolean).join('\n\n');
 	const hasJinja = /\{\{|\{%/.test(body);
