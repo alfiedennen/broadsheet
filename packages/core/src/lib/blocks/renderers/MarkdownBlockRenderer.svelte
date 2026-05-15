@@ -18,6 +18,7 @@
 	 */
 	import { base } from '$app/paths';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
+	import { render as renderJinja, looksLikeJinja } from '$lib/jinja';
 	import type { MarkdownBlockConfig } from '../types';
 
 	let { config }: { config: MarkdownBlockConfig } = $props();
@@ -34,16 +35,33 @@
 	}
 
 	/**
-	 * Resolve `{{entity.id}}` substitutions FIRST against raw input
-	 * (state values come pre-stringified, will get HTML-escaped in
-	 * the next pass). Unknown entities pass through literally so
-	 * authors notice typos.
+	 * Resolve template substitutions BEFORE the markdown pass. Two
+	 * stages:
+	 *
+	 *   1. Legacy shorthand `{{entity.id}}` (a single entity_id with
+	 *      no parens, no spaces, no operators). Direct state lookup.
+	 *      Authored as broadsheet's own register; pass-through if no
+	 *      such entity so authors notice typos.
+	 *   2. Jinja-subset evaluator (lib/jinja). Handles HA-style
+	 *      templates: `{{ states('entity_id') }}`, `{% if %}` blocks,
+	 *      `{% set %}` bindings, common filters. Lovelace
+	 *      mushroom-template-card content lands here.
+	 *
+	 * The legacy shorthand runs FIRST so `{{light.living_room}}`
+	 * (which Jinja would parse as `light.living_room` member access)
+	 * still resolves the obvious way.
 	 */
 	function interpolate(s: string): string {
-		return s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, id) => {
+		// Stage 1: legacy {{entity.id}} → state value
+		const stage1 = s.replace(/\{\{\s*([a-z_]+\.[a-z0-9_.]+)\s*\}\}/g, (_, id) => {
 			const state = discoveryStore.states[id];
 			if (!state) return `{{${id}}}`;
 			return state.state ?? `{{${id}}}`;
+		});
+		// Stage 2: Jinja eval (only if remaining content has Jinja syntax)
+		if (!looksLikeJinja(stage1)) return stage1;
+		return renderJinja(stage1, {
+			stateLookup: (id: string) => discoveryStore.states[id]
 		});
 	}
 

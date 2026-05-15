@@ -421,9 +421,12 @@ function translateMushroomTemplate(card: LovelaceCard): { blocks: BlockDef[]; co
 	const hasJinja = /\{\{|\{%/.test(body);
 	return {
 		blocks: [{ type: 'markdown', config: { body } }],
+		// Jinja templates DO evaluate at render time as of v0.2 commit 3
+		// (lib/jinja). Visual chrome — icon + grid layout — is still
+		// dropped, so this stays 'partial', not 'clean'.
 		coverage: 'partial',
 		note: hasJinja
-			? 'Jinja template syntax retained as text — not yet evaluated.'
+			? 'Card chrome dropped — Jinja templates evaluate at render time.'
 			: 'Mushroom card chrome (icon, layout) replaced with markdown.'
 	};
 }
