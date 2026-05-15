@@ -432,57 +432,70 @@ function translateMushroomTemplate(card: LovelaceCard): { blocks: BlockDef[]; co
 }
 
 /**
- * `custom:mushroom-chips-card` → action-grid (small). Each chip is
- * either an entity (toggle) or a template (markdown stub). The
- * action-grid renders chips small + horizontal-flowing.
+ * `custom:mushroom-chips-card` → action-grid (small) + markdown
+ * fallback for non-action chips (template chips, weather chips,
+ * conditional chips). Mixed-content chips emit BOTH blocks: an
+ * action-grid for the action chips, then a markdown summary line
+ * for the rest. Pure-template chips emit just the markdown.
  */
 function translateMushroomChips(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
 	const chips = (card.chips ?? []) as unknown[];
 	const actions: ActionGridItemSeed[] = [];
-	let droppedChips = 0;
+	const labels: string[] = [];
+	let dropped = 0;
 	for (const chip of chips) {
 		if (!chip || typeof chip !== 'object') {
-			droppedChips++;
+			dropped++;
 			continue;
 		}
 		const c = chip as Record<string, unknown>;
 		const entity = (c.entity ?? null) as string | null;
-		if (!entity) {
-			droppedChips++;
-			continue;
+		// Path 1: entity-bound chip → action tile
+		if (entity) {
+			const service = tapActionToServiceCall(c.tap_action, entity);
+			if (service) {
+				const label = (c.name ?? c.content ?? entity) as string;
+				actions.push({
+					label,
+					icon: (c.icon as string) ?? null,
+					service,
+					stateBinding: { entityId: entity }
+				});
+				continue;
+			}
 		}
-		const service = tapActionToServiceCall(c.tap_action, entity);
-		if (!service) {
-			droppedChips++;
-			continue;
-		}
-		const label = (c.name ?? c.content ?? entity) as string;
-		actions.push({
-			label,
-			icon: (c.icon as string) ?? null,
-			service,
-			stateBinding: { entityId: entity }
-		});
+		// Path 2: template / weather / conditional chip → markdown line.
+		// `content` is mushroom's primary template field for chips.
+		// Falls back to `name` then a generic chip-type label.
+		const content = (c.content ?? c.name ?? c.type ?? 'chip') as string;
+		labels.push(String(content));
 	}
-	if (actions.length === 0) {
+	const blocks: BlockDef[] = [];
+	if (actions.length > 0) {
+		blocks.push({ type: 'action-grid', config: { size: 'small', actions } });
+	}
+	if (labels.length > 0) {
+		blocks.push({ type: 'markdown', config: { body: labels.join(' · ') } });
+	}
+	if (blocks.length === 0) {
 		return {
 			blocks: [],
 			coverage: 'unsupported',
-			note: 'no chips translated to actions.'
+			note: 'no chips translated.'
 		};
 	}
+	const note =
+		actions.length > 0 && labels.length > 0
+			? `${labels.length} non-action chip${labels.length === 1 ? '' : 's'} rendered as markdown.`
+			: labels.length > 0
+				? 'All chips rendered as markdown (no entity-bound actions).'
+				: dropped > 0
+					? `${dropped} chip${dropped === 1 ? '' : 's'} dropped.`
+					: undefined;
 	return {
-		blocks: [
-			{
-				type: 'action-grid',
-				config: { size: 'small', actions }
-			}
-		],
-		coverage: droppedChips > 0 ? 'partial' : 'clean',
-		note:
-			droppedChips > 0
-				? `${droppedChips} chip${droppedChips === 1 ? '' : 's'} dropped (no entity / unrecognised tap_action).`
-				: undefined
+		blocks,
+		coverage: dropped > 0 ? 'partial' : labels.length > 0 ? 'partial' : 'clean',
+		note
 	};
 }
 
@@ -533,6 +546,280 @@ type ActionGridItemSeed = NonNullable<
 	Extract<BlockDef, { type: 'action-grid' }>['config']['actions']
 >[number];
 
+/**
+ * `conditional` card → recurses into its `card` child. The condition
+ * itself is dropped — the wrapped card always renders. v0.2 doesn't
+ * have a "conditional block" primitive yet, so this is the honest
+ * fallback: surface the content but lose the gating.
+ */
+function translateConditional(
+	card: LovelaceCard,
+	recurse: (c: LovelaceCard, idx: number) => { blocks: BlockDef[]; reports: TranslatorReport[] }
+): { blocks: BlockDef[]; coverage: Coverage; note?: string; childReports: TranslatorReport[] } {
+	const child = (card.card ?? null) as LovelaceCard | null;
+	if (!child) {
+		return {
+			blocks: [],
+			coverage: 'unsupported',
+			note: 'no `card` child found',
+			childReports: []
+		};
+	}
+	const r = recurse(child, 0);
+	return {
+		blocks: r.blocks,
+		coverage: 'partial',
+		note: 'Condition dropped — wrapped card always renders.',
+		childReports: r.reports
+	};
+}
+
+/**
+ * `custom:layout-card` → recurses into ALL of its child cards.
+ * The grid / masonry layout config is dropped; broadsheet renders
+ * children flat-vertically. Coverage is 'clean' for the wrapper
+ * itself; child coverage rolls up via the per-child reports.
+ */
+function translateLayoutCard(
+	card: LovelaceCard,
+	recurse: (c: LovelaceCard, idx: number) => { blocks: BlockDef[]; reports: TranslatorReport[] }
+): { blocks: BlockDef[]; coverage: Coverage; note?: string; childReports: TranslatorReport[] } {
+	const cards = (card.cards ?? []) as LovelaceCard[];
+	const blocks: BlockDef[] = [];
+	const childReports: TranslatorReport[] = [];
+	cards.forEach((c, i) => {
+		const r = recurse(c, i);
+		blocks.push(...r.blocks);
+		childReports.push(...r.reports);
+	});
+	return {
+		blocks,
+		coverage: 'clean',
+		note: 'Layout positioning dropped — children render flat-vertically.',
+		childReports
+	};
+}
+
+/**
+ * `custom:calendar-card-pro` (and similar HACS calendar cards)
+ * → markdown stub describing the calendar entity. The agenda view
+ * doesn't translate to a primitive yet — surface the entity_id so
+ * the user knows what was wrapped.
+ */
+function translateCalendarCardPro(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const entities = (card.entities ?? []) as unknown[];
+	const ids: string[] = entities
+		.map((e) => {
+			if (typeof e === 'string') return e;
+			if (e && typeof e === 'object' && typeof (e as { entity?: string }).entity === 'string')
+				return (e as { entity: string }).entity;
+			return null;
+		})
+		.filter((s): s is string => s !== null);
+	const title = (card.title ?? 'Calendar') as string;
+	const body =
+		ids.length > 0
+			? `**${title}** — ${ids.map((id) => `\`${id}\``).join(', ')}`
+			: `**${title}** — no calendars configured`;
+	return {
+		blocks: [{ type: 'markdown', config: { body } }],
+		coverage: 'partial',
+		note: 'Agenda view dropped — surfaced as markdown stub naming the calendar(s).'
+	};
+}
+
+/**
+ * `tile` card (built-in, newer) → action-grid item.
+ * Tile cards are HA's modern entity-tile UI — single state-bound
+ * tile with optional features (sliders, buttons). For v0.2 we
+ * translate to a simple state-bound action tile.
+ */
+function translateTile(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const entity = (card.entity ?? '') as string;
+	if (!entity) return { blocks: [], coverage: 'unsupported', note: 'entity field missing.' };
+	const service = tapActionToServiceCall(card.tap_action, entity);
+	if (!service)
+		return {
+			blocks: [],
+			coverage: 'unsupported',
+			note: 'tap_action not recognised + no domain default.'
+		};
+	const label = (card.name ?? entity) as string;
+	const features = Array.isArray(card.features) && card.features.length > 0;
+	return {
+		blocks: [
+			{
+				type: 'action-grid',
+				config: {
+					size: 'medium',
+					actions: [
+						{
+							label,
+							icon: (card.icon as string) ?? null,
+							service,
+							stateBinding: { entityId: entity }
+						}
+					]
+				}
+			}
+		],
+		coverage: 'partial',
+		note: features
+			? 'Tile features (sliders, buttons) dropped — single state-bound action only.'
+			: undefined
+	};
+}
+
+/**
+ * `media-control` card → action-grid with play/pause + next/prev
+ * buttons for the media player. Browse-media + volume-slider are
+ * dropped.
+ */
+function translateMediaControl(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const entity = (card.entity ?? '') as string;
+	if (!entity || !entity.startsWith('media_player.')) {
+		return { blocks: [], coverage: 'unsupported', note: 'entity must be media_player.*' };
+	}
+	const target = { entity_id: entity };
+	return {
+		blocks: [
+			{
+				type: 'action-grid',
+				config: {
+					size: 'small',
+					actions: [
+						{ label: '⏮', service: { domain: 'media_player', service: 'media_previous_track', target } },
+						{ label: '⏯', service: { domain: 'media_player', service: 'media_play_pause', target }, stateBinding: { entityId: entity, activeStates: ['playing'] } },
+						{ label: '⏭', service: { domain: 'media_player', service: 'media_next_track', target } }
+					]
+				}
+			}
+		],
+		coverage: 'partial',
+		note: 'Browse-media + volume slider dropped — playback controls only.'
+	};
+}
+
+/**
+ * `iframe` card → markdown link. We can't iframe arbitrary URLs
+ * inside broadsheet (CSP, addon ingress constraints), so the URL
+ * surfaces as a clickable link.
+ */
+function translateIframe(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const url = (card.url ?? '') as string;
+	if (!url) return { blocks: [], coverage: 'unsupported', note: 'url field missing.' };
+	const title = (card.title ?? 'External page') as string;
+	return {
+		blocks: [
+			{
+				type: 'markdown',
+				config: {
+					body: `[**${title}**](${url})`
+				}
+			}
+		],
+		coverage: 'partial',
+		note: 'iframe replaced with a link — broadsheet does not embed external URLs.'
+	};
+}
+
+/**
+ * `picture-glance` → markdown image (top) + entity-list (bottom).
+ * Lovelace's picture-glance is "image with state chips overlaid";
+ * broadsheet flattens to image + list.
+ */
+function translatePictureGlance(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const url = (card.image ?? '') as string;
+	const rawEntities = (card.entities ?? []) as unknown[];
+	const ids: string[] = [];
+	for (const row of rawEntities) {
+		if (typeof row === 'string') ids.push(row);
+		else if (row && typeof row === 'object') {
+			const r = row as { entity?: string };
+			if (r.entity) ids.push(r.entity);
+		}
+	}
+	const blocks: BlockDef[] = [];
+	if (url) {
+		blocks.push({ type: 'markdown', config: { body: `![${(card.title ?? 'image') as string}](${url})` } });
+	}
+	if (ids.length > 0) {
+		blocks.push({
+			type: 'entity-list',
+			config: { label: (card.title ?? null) as string | null, entities: ids, showIcon: true }
+		});
+	}
+	if (blocks.length === 0) {
+		return { blocks: [], coverage: 'unsupported', note: 'no image or entities resolved.' };
+	}
+	return {
+		blocks,
+		coverage: 'partial',
+		note: 'Glance overlay flattened — image then entity list.'
+	};
+}
+
+/**
+ * `picture-entity` → markdown image + entity status line. Similar to
+ * picture-glance but for a single entity.
+ */
+function translatePictureEntity(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const entity = (card.entity ?? '') as string;
+	if (!entity) return { blocks: [], coverage: 'unsupported', note: 'entity field missing.' };
+	const url = (card.image ?? card.image_entity ?? null) as string | null;
+	const name = (card.name ?? entity) as string;
+	const blocks: BlockDef[] = [];
+	if (url && typeof url === 'string') {
+		blocks.push({ type: 'markdown', config: { body: `![${name}](${url})` } });
+	}
+	blocks.push({
+		type: 'markdown',
+		config: { body: `**${name}**: \`{{${entity}}}\`` }
+	});
+	return {
+		blocks,
+		coverage: 'partial',
+		note: 'Image + state line — tap_action overlay dropped.'
+	};
+}
+
+/**
+ * `custom:button-card` (HACS) → action-grid item. Button-card is the
+ * Swiss army knife — supports templates, custom layouts, etc. We
+ * land it as a single action tile, the most-common shape.
+ */
+function translateButtonCard(card: LovelaceCard): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const entity = (card.entity ?? null) as string | null;
+	const service = tapActionToServiceCall(card.tap_action, entity);
+	if (!service)
+		return {
+			blocks: [],
+			coverage: 'unsupported',
+			note: 'no recognised tap_action + no entity domain default.'
+		};
+	const label = (card.label ?? card.name ?? entity ?? 'button') as string;
+	return {
+		blocks: [
+			{
+				type: 'action-grid',
+				config: {
+					size: 'medium',
+					actions: [
+						{
+							label,
+							icon: (card.icon as string) ?? null,
+							service,
+							stateBinding: entity ? { entityId: entity } : undefined
+						}
+					]
+				}
+			}
+		],
+		coverage: 'partial',
+		note: 'Custom layout + per-state styling dropped — single state-bound action tile.'
+	};
+}
+
 /* ── The dispatch table ───────────────────────────────────────────── */
 
 const TRANSLATORS: Record<string, true> = {
@@ -546,12 +833,21 @@ const TRANSLATORS: Record<string, true> = {
 	sensor: true,
 	'weather-forecast': true,
 	picture: true,
+	'picture-glance': true,
+	'picture-entity': true,
 	button: true,
 	light: true,
+	tile: true,
+	'media-control': true,
+	conditional: true,
+	iframe: true,
 	'custom:mushroom-template-card': true,
 	'custom:mushroom-chips-card': true,
 	'custom:mushroom-light-card': true,
-	'custom:mushroom-entity-card': true
+	'custom:mushroom-entity-card': true,
+	'custom:layout-card': true,
+	'custom:button-card': true,
+	'custom:calendar-card-pro': true
 };
 
 /** Public: which Lovelace card types we currently translate. */
@@ -605,6 +901,28 @@ export function translateView(view: LovelaceView): TranslatedView {
 			};
 		}
 
+		// Other recursive wrappers — `conditional` (one child), `layout-card` (many)
+		if (t === 'conditional') {
+			const r = translateConditional(card, visit);
+			return {
+				blocks: r.blocks,
+				reports: [
+					{ type: t, coverage: r.coverage, note: r.note, sourceIndex: idx },
+					...r.childReports
+				]
+			};
+		}
+		if (t === 'custom:layout-card') {
+			const r = translateLayoutCard(card, visit);
+			return {
+				blocks: r.blocks,
+				reports: [
+					{ type: t, coverage: r.coverage, note: r.note, sourceIndex: idx },
+					...r.childReports
+				]
+			};
+		}
+
 		// Single-card translators (no recursion)
 		const singleCardTranslators: Record<
 			string,
@@ -615,12 +933,19 @@ export function translateView(view: LovelaceView): TranslatedView {
 			sensor: translateSensor,
 			'weather-forecast': translateWeatherForecast,
 			picture: translatePicture,
+			'picture-glance': translatePictureGlance,
+			'picture-entity': translatePictureEntity,
 			button: translateButton,
 			light: translateLight,
+			tile: translateTile,
+			'media-control': translateMediaControl,
+			iframe: translateIframe,
 			'custom:mushroom-template-card': translateMushroomTemplate,
 			'custom:mushroom-chips-card': translateMushroomChips,
 			'custom:mushroom-light-card': translateMushroomEntity,
-			'custom:mushroom-entity-card': translateMushroomEntity
+			'custom:mushroom-entity-card': translateMushroomEntity,
+			'custom:button-card': translateButtonCard,
+			'custom:calendar-card-pro': translateCalendarCardPro
 		};
 		const fn = singleCardTranslators[t];
 		if (fn) {
