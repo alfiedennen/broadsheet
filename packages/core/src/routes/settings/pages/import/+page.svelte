@@ -69,14 +69,22 @@
 		loadingDashboards = false;
 	});
 
+	let configError = $state<string | null>(null);
+
 	async function pickDashboard(d: LovelaceDashboardEntry) {
 		pickedDashboard = d;
 		step = 'pick-view';
 		loadingConfig = true;
+		configError = null;
+		translated = null;
 		try {
 			const cfg = await getLovelaceConfig(d.url_path);
 			if (!cfg) {
-				showToast('Could not fetch dashboard config', 'error');
+				configError =
+					d.url_path === null
+						? 'HA returned no config for the default Overview. This usually means Overview is auto-generated and has never been saved as a customised dashboard — try one of your other dashboards instead.'
+						: 'HA returned no config for this dashboard. It may be in a mode broadsheet can\'t read (e.g. an external lovelace integration), or the WS call timed out.';
+				showToast('Could not load dashboard', 'error');
 				return;
 			}
 			translated = translateDashboard(cfg);
@@ -106,6 +114,7 @@
 			step = 'pick-dashboard';
 			pickedDashboard = null;
 			translated = null;
+			configError = null;
 		}
 	}
 
@@ -236,6 +245,9 @@
 		<OutLine label="Pick a view to import" />
 		{#if loadingConfig}
 			<p class="loading">Translating Lovelace cards…</p>
+		{:else if configError}
+			<p class="empty">{configError}</p>
+			<button class="action" type="button" onclick={back}>← Pick another dashboard</button>
 		{:else if translated && translated.views.length === 0}
 			<p class="empty">This dashboard has no views. Nothing to import.</p>
 		{:else if translated}
