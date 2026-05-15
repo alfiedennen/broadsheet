@@ -130,6 +130,29 @@ export interface BoostRowBlockConfig {
 	temperature?: number;
 }
 
+/**
+ * Entity list: a vertical list of entities with name + state. The
+ * Lovelace-importer landing zone for `entities` cards. Each row
+ * resolves the entity at render time so state stays live.
+ *
+ * Editorial register: italic display names + tabular-num states +
+ * separating rules between rows. NOT trying to be a control panel;
+ * if the user wants buttons, that's action-grid (Phase 1 commit 3).
+ */
+export interface EntityListBlockConfig {
+	label?: string | null;
+	/** Ordered list of entity_ids to display. */
+	entities: string[];
+	/** When true (default), prefix each row with the entity's icon. */
+	showIcon?: boolean;
+	/**
+	 * Override display name for an entity. Keys are entity_ids; values
+	 * are the friendly label. Falls back to the entity's friendly_name
+	 * attribute when absent.
+	 */
+	nameOverrides?: Record<string, string>;
+}
+
 /* ── The discriminated union ──────────────────────────────────── */
 
 /**
@@ -145,7 +168,8 @@ export type BlockDef =
 	| { type: 'macro-grid'; config: MacroGridBlockConfig }
 	| { type: 'room-toggle-grid'; config: RoomToggleGridBlockConfig }
 	| { type: 'scene-row'; config: SceneRowBlockConfig }
-	| { type: 'boost-row'; config: BoostRowBlockConfig };
+	| { type: 'boost-row'; config: BoostRowBlockConfig }
+	| { type: 'entity-list'; config: EntityListBlockConfig };
 
 /** Just the type discriminator — useful for builder UI listings. */
 export type BlockType = BlockDef['type'];
@@ -219,5 +243,10 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 			return { type: 'scene-row', config: { label: 'Scenes', maxScenes: 8 } };
 		case 'boost-row':
 			return { type: 'boost-row', config: { label: 'Boost', temperature: 21 } };
+		case 'entity-list':
+			return {
+				type: 'entity-list',
+				config: { label: null, entities: [], showIcon: true }
+			};
 	}
 }

@@ -41,7 +41,9 @@ const REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	'scene-row': () =>
 		import('./renderers/SceneRowBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	'boost-row': () =>
-		import('./renderers/BoostRowBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
+		import('./renderers/BoostRowBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	'entity-list': () =>
+		import('./renderers/EntityListBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
 };
 
 /** Look up a renderer thunk for a block type. Throws on unknown type. */
@@ -97,5 +99,9 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 	'boost-row': {
 		label: 'Boost row',
 		description: 'Per-climate-area "boost to N°" tile, tap to set temperature.'
+	},
+	'entity-list': {
+		label: 'Entity list',
+		description: 'Vertical list of entities with name + live state. The Lovelace `entities` card landing zone.'
 	}
 };

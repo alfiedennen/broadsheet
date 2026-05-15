@@ -211,9 +211,14 @@
 				</div>
 			</div>
 		{:else}
-			<button class="new-page-trigger" type="button" onclick={openCreate}>
-				+ New page
-			</button>
+			<div class="new-page-actions">
+				<button class="new-page-trigger" type="button" onclick={openCreate}>
+					+ New page
+				</button>
+				<a class="new-page-trigger" href="{base}/settings/pages/import/">
+					⇣ Import from Lovelace
+				</a>
+			</div>
 		{/if}
 	</div>
 
@@ -284,6 +289,12 @@
 		margin-bottom: var(--space-6);
 	}
 
+	.new-page-actions {
+		display: flex;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+
 	.new-page-trigger {
 		font-family: var(--font-mono);
 		font-size: var(--text-eyebrow);
@@ -300,6 +311,13 @@
 	.new-page-trigger:hover {
 		color: var(--accent);
 		border-color: var(--accent);
+	}
+
+	a.new-page-trigger {
+		text-decoration: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.new-page-form {

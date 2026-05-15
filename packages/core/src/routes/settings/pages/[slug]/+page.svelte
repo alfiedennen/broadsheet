@@ -510,6 +510,47 @@
 					})}
 			/>
 		</label>
+	{:else if block.type === 'entity-list'}
+		<label class="field">
+			<span class="field-label">Inline label</span>
+			<input
+				type="text"
+				class="field-input"
+				value={block.config.label ?? ''}
+				oninput={(e) =>
+					patchBlockConfig(i, {
+						label: (e.target as HTMLInputElement).value || null
+					})}
+			/>
+		</label>
+		<label class="field">
+			<span class="field-label">Entities (one per line)</span>
+			<textarea
+				class="field-input textarea"
+				rows="6"
+				value={block.config.entities.join('\n')}
+				oninput={(e) =>
+					patchBlockConfig(i, {
+						entities: (e.target as HTMLTextAreaElement).value
+							.split('\n')
+							.map((s) => s.trim())
+							.filter(Boolean)
+					})}
+			></textarea>
+			<span class="field-hint">
+				One <code>domain.entity_id</code> per line.
+				e.g. <code>sensor.hallway_temperature</code>.
+			</span>
+		</label>
+		<label class="field checkbox-field">
+			<input
+				type="checkbox"
+				checked={block.config.showIcon !== false}
+				onchange={(e) =>
+					patchBlockConfig(i, { showIcon: (e.target as HTMLInputElement).checked })}
+			/>
+			<span class="field-label">Show icon column</span>
+		</label>
 	{/if}
 {/snippet}
 
@@ -536,6 +577,11 @@
 			case 'scene-row':
 			case 'boost-row':
 				return block.config.label ?? '(no label)';
+			case 'entity-list': {
+				const n = block.config.entities.length;
+				const lbl = block.config.label;
+				return lbl ? `${lbl} — ${n} entit${n === 1 ? 'y' : 'ies'}` : `${n} entit${n === 1 ? 'y' : 'ies'}`;
+			}
 		}
 	}
 </script>
