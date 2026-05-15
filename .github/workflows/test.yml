@@ -1,0 +1,44 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @broadsheet/core check
+
+      - name: Build
+        run: pnpm --filter @broadsheet/core build
+
+      - name: Vitest unit + integration suite
+        run: pnpm --filter @broadsheet/core test
+
+      # The Vitest run includes:
+      # - 51 Jinja evaluator tests (P4-S2 gate)
+      # - 32 Lovelace translator tests (per-translator regression)
+      # - 27 moment-sensor heuristic tests (P1-S2 gate)
+      # - 22 block-contract tests (P1-S3 gate)
+      # - 9 importer integration tests (P4-S4 gate — must hit ≥80% coverage)
+      # - 1 brittleness-firewall scan (E6-S1 gate — fail on forbidden patterns)
+      #
+      # If any rubric story regresses, this workflow fails and the PR
+      # / push is blocked.
