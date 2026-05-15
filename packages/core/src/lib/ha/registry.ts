@@ -208,3 +208,61 @@ export async function createArea(
 		return { success: false, reason: 'ha-error', error: msg };
 	}
 }
+
+/**
+ * Create a new HA person — the "+ New person" affordance on
+ * /settings/people.
+ *
+ * Same model as createArea: writes to HA's registry via the stable
+ * WS API, audit-logged, not gated by read_only. Discovery's
+ * person-registry subscription picks the new entity up automatically.
+ *
+ * `device_trackers` is the list of tracker entity_ids that will
+ * aggregate into this person's `home`/`not_home` state. Optional —
+ * a person with zero trackers is valid HA, just won't have presence.
+ * The /settings/people picker can pin a presence sensor afterwards.
+ */
+export async function createPerson(
+	name: string,
+	deviceTrackers: string[] = []
+): Promise<ServiceCallResult & { personId?: string }> {
+	const conn = getConnection();
+	if (!conn) {
+		audit({
+			kind: 'registry-write',
+			note: `createPerson("${name}"): no connection`,
+			error: 'no active HA connection'
+		});
+		return { success: false, reason: 'not-connected', error: 'No active HA connection' };
+	}
+
+	audit({
+		kind: 'registry-write',
+		note: `createPerson: "${name}"${deviceTrackers.length ? ` with ${deviceTrackers.length} tracker(s)` : ''}`
+	});
+
+	try {
+		const message = {
+			type: 'person/create',
+			name,
+			device_trackers: deviceTrackers
+		};
+		const created = (await conn.sendMessagePromise(message)) as {
+			id?: string;
+			entity_id?: string;
+		};
+		// HA's person/create returns either {id} (new style) or {entity_id}
+		// depending on version — prefer entity_id, fall back to "person.<id>".
+		const personId =
+			created?.entity_id ?? (created?.id ? `person.${created.id}` : undefined);
+		return { success: true, personId };
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		audit({
+			kind: 'registry-write',
+			note: `createPerson: "${name}" FAILED`,
+			error: msg
+		});
+		return { success: false, reason: 'ha-error', error: msg };
+	}
+}
