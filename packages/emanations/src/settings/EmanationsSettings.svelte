@@ -147,9 +147,18 @@
 	/* ── Mapping (paintingSets) ───────────────────────────────────── */
 	type AreaMapping = Record<string, string | null>; // variantKey -> filename
 	type SetMapping = Record<string, AreaMapping>; // areaId -> AreaMapping
+	/**
+	 * personImages is parallel to per-area `sets` — keyed by personSlug,
+	 * holds the per-person away image (and could carry future per-person
+	 * states later, e.g. `sleeping`). Lives on the paintingSets root, NOT
+	 * inside `sets`, so it isn't part of the active painting-set rotation
+	 * — an "away" image means the same thing regardless of which set is
+	 * active.
+	 */
 	type PaintingSetsConfig = {
 		active: string;
 		sets: Record<string, SetMapping>;
+		personImages?: Record<string, { away?: string | null }>;
 	};
 	const ACTIVE_DEFAULT: PaintingSetsConfig = { active: 'default', sets: { default: {} } };
 
@@ -182,12 +191,31 @@
 		paintingSets.value = next;
 	}
 
-	/** Clear any mapping that references a deleted file. */
+	function getPersonAway(slug: string): string | null {
+		return paintingSets.value?.personImages?.[slug]?.away ?? null;
+	}
+
+	function setPersonAway(slug: string, filename: string | null) {
+		const cfg = paintingSets.value ?? ACTIVE_DEFAULT;
+		const personImages = { ...(cfg.personImages ?? {}) };
+		const entry = { ...(personImages[slug] ?? {}) };
+		if (!filename) delete entry.away;
+		else entry.away = filename;
+		if (Object.keys(entry).length === 0) delete personImages[slug];
+		else personImages[slug] = entry;
+		paintingSets.value = { ...cfg, personImages };
+	}
+
+	/** Clear any mapping that references a deleted file (sets + personImages). */
 	function cleanupMappingFor(filename: string) {
 		const cfg = paintingSets.value;
 		if (!cfg) return;
 		let dirty = false;
-		const next: PaintingSetsConfig = { ...cfg, sets: { ...cfg.sets } };
+		const next: PaintingSetsConfig = {
+			...cfg,
+			sets: { ...cfg.sets },
+			personImages: { ...(cfg.personImages ?? {}) }
+		};
 		for (const setName of Object.keys(next.sets)) {
 			next.sets[setName] = { ...next.sets[setName] };
 			for (const areaId of Object.keys(next.sets[setName])) {
@@ -200,6 +228,17 @@
 				}
 				next.sets[setName][areaId] = m;
 			}
+		}
+		for (const slug of Object.keys(next.personImages ?? {})) {
+			const entry = { ...(next.personImages![slug] ?? {}) };
+			for (const k of Object.keys(entry) as Array<keyof typeof entry>) {
+				if (entry[k] === filename) {
+					delete entry[k];
+					dirty = true;
+				}
+			}
+			if (Object.keys(entry).length === 0) delete next.personImages![slug];
+			else next.personImages![slug] = entry;
 		}
 		if (dirty) paintingSets.value = next;
 	}
@@ -377,6 +416,50 @@
 								{/if}
 							</div>
 						{/each}
+					</div>
+				</section>
+			{/each}
+		</div>
+	{/if}
+
+	<!-- ── Section 4 — When they're away (per-person) ──────────────── -->
+	{#if eligiblePersons.length > 0}
+		<h3 class="section-title">When they're away</h3>
+		<p class="section-hint">
+			For each person, pick the image to render when they aren't in any room
+			(sensor reads <code>not_home</code>, <code>away</code>, or <code>unknown</code>).
+			The /emanations page shows one card per person — when they're absent, this
+			image fills their card.
+		</p>
+		<div class="mapping">
+			{#each eligiblePersons as p (p.id)}
+				{@const slug = personSlug(p)}
+				{@const away = getPersonAway(slug)}
+				<section class="map-area">
+					<h4 class="area-name">{p.name}</h4>
+					<div class="variant-grid">
+						<div class="variant-cell">
+							<span class="variant-label">Away image</span>
+							<select
+								class="variant-pick"
+								value={away ?? ''}
+								onchange={(e) =>
+									setPersonAway(slug, (e.currentTarget as HTMLSelectElement).value || null)}
+							>
+								<option value="">— none —</option>
+								{#each files as f (f.filename)}
+									<option value={f.filename}>{f.filename}</option>
+								{/each}
+							</select>
+							{#if away}
+								<img
+									class="variant-thumb"
+									src={pluginDataUrl('emanations', away)}
+									alt={away}
+									loading="lazy"
+								/>
+							{/if}
+						</div>
 					</div>
 				</section>
 			{/each}
