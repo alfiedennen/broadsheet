@@ -1,49 +1,49 @@
 <script lang="ts">
 	/**
-	 * `/` — the landing. The moment.
+	 * `/` — the moment.
 	 *
-	 * Procedural ambient gradient as the visual centre. Single-line
-	 * manifest sentence over the top. People row underneath with their
-	 * presence rooms. KebabNav (rendered by layout) gets you anywhere.
+	 * Mirrors harold-home's `/` shape (newspaper landing) rather than the
+	 * full-bleed contemplative variant the earlier prototype shipped. The
+	 * earlier shape was, as the user put it, "a recapitulation of
+	 * /emanations" — same presence-as-imagery surface, same orbs. This
+	 * shape differentiates by being action-shaped:
 	 *
-	 * No control surfaces here on purpose — this page is for arrival,
-	 * not action. Tap the kebab to navigate, or scroll for status.
+	 *   1. Hero    — multi-clause manifest sentence (time-of-day +
+	 *                presence + outside weather)
+	 *   2. Band    — the procedural painting OR the emanations renderer
+	 *                if active, sized as a band, NOT full-bleed
+	 *   3. Quick   — three earned-their-place daily actions: lights off,
+	 *                TV toggle, unlock door. Each shows current state.
+	 *   4. Explainer — the cross-page link mesh (the IA in prose)
+	 *
+	 * /emanations remains the dedicated presence-as-imagery surface;
+	 * `/` is the moment-as-newspaper.
 	 */
-
 	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { composeManifest, resolvePresence } from '$lib/manifest';
 	import { connection } from '$lib/stores/connection.svelte';
 	import { curationStore } from '$lib/curation/store.svelte';
+	import { callService, callToggle, getHardBannedDomains } from '$lib/ha/actions';
 	import ProceduralPainting from '$lib/components/ProceduralPainting.svelte';
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
+	import PageShell from '$lib/components/PageShell.svelte';
+	import Hero from '$lib/components/Hero.svelte';
+	import Eyebrow from '$lib/components/Eyebrow.svelte';
+	import Explainer from '$lib/components/Explainer.svelte';
 
 	// Opportunistic upgrade: when @broadsheet/emanations is active, its
-	// `multi-person-painting` renderer takes the visual centre;
-	// otherwise core's procedural gradient holds. core never
-	// hard-depends on the plugin — `painting.current` is just null
-	// when it's off, and the {:else} branch covers it.
+	// renderer takes the painting band; otherwise core's procedural
+	// gradient holds.
 	const painting = useRenderer('multi-person-painting');
 
-	// Build the per-person override map from curation
 	const personOverrides = $derived(
 		Object.fromEntries(
 			curationStore.current.people.map((p) => [p.personId, p.presenceSensorId])
 		)
 	);
 
-	// Manifest sentence — recomputes whenever discovery, states, or curation tick
-	const manifest = $derived(
-		composeManifest({
-			persons: discovery.persons,
-			states: discoveryStore.states,
-			personOverrides,
-			voice: curationStore.current.voice
-		})
-	);
-
-	// Presence per person — for the people row
 	const presence = $derived(
 		resolvePresence({
 			persons: discovery.persons,
@@ -52,7 +52,61 @@
 		})
 	);
 
-	// Painting seed — first home person's room, or "empty" / "loading"
+	const presenceClause = $derived(
+		composeManifest({
+			persons: discovery.persons,
+			states: discoveryStore.states,
+			personOverrides,
+			voice: curationStore.current.voice
+		})
+	);
+
+	/* ── Time-of-day clause (refreshes every 30s) ────────────────────── */
+	let now = $state(new Date());
+	$effect(() => {
+		const t = setInterval(() => (now = new Date()), 30_000);
+		return () => clearInterval(t);
+	});
+
+	const todClause = $derived.by(() => {
+		const h = now.getHours();
+		const day = now.toLocaleDateString('en-GB', { weekday: 'long' });
+		const tod =
+			h < 12 ? 'morning' : h < 18 ? 'afternoon' : h < 22 ? 'evening' : 'small hours';
+		return `${day} ${tod}.`;
+	});
+
+	/* ── Weather discovery (first weather.* entity, prefer forecast_home) ──
+	 * No curation override yet — v0.1 picks generically. Future
+	 * /settings/integrations would add an explicit "primary weather"
+	 * field for installs with multiple weather entities.
+	 */
+	const weatherEntityId = $derived.by(() => {
+		const ids = discoveryStore.entities
+			.filter((e) => e.entity_id.startsWith('weather.') && !e.disabled_by)
+			.map((e) => e.entity_id);
+		if (ids.includes('weather.forecast_home')) return 'weather.forecast_home';
+		return ids[0] ?? null;
+	});
+	const weatherState = $derived(
+		weatherEntityId ? discoveryStore.states[weatherEntityId]?.state : null
+	);
+	const outsideTemp = $derived.by(() => {
+		if (!weatherEntityId) return null;
+		const v = discoveryStore.states[weatherEntityId]?.attributes?.temperature;
+		return typeof v === 'number' ? v : null;
+	});
+	const outsideClause = $derived.by(() => {
+		if (outsideTemp == null) return null;
+		const cond = (weatherState ?? '').replace(/_/g, '-');
+		return cond ? `Outside ${outsideTemp}°C, ${cond}.` : `Outside ${outsideTemp}°C.`;
+	});
+
+	const manifestClauses = $derived(
+		[todClause, presenceClause, outsideClause].filter(Boolean) as string[]
+	);
+
+	/* ── Painting seed for the procedural fallback ────────────────────── */
 	const paintingSeed = $derived.by(() => {
 		if (!discovery.booted) return 'loading';
 		const home = presence.find((s) => s.isHome);
@@ -60,232 +114,257 @@
 		return home.room ?? 'home';
 	});
 
-	// Time string for the dateline — refreshes every minute
-	let now = $state(new Date());
-	$effect(() => {
-		const interval = setInterval(() => {
-			now = new Date();
-		}, 30_000);
-		return () => clearInterval(interval);
-	});
+	/* ── Quick reach actions ──────────────────────────────────────────── */
+	// Discover the primary entities generically — first TV, first lock.
+	const allTvs = $derived(discovery.areas.flatMap((a) => a.tvs));
+	const allLocks = $derived(discovery.areas.flatMap((a) => a.locks));
+	const primaryTv = $derived(allTvs[0] ?? null);
+	const primaryLock = $derived(allLocks[0] ?? null);
+	const hasLights = $derived(discovery.areas.some((a) => a.lights.length > 0));
 
-	const dateline = $derived(
-		now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
-	);
+	const tvOn = $derived.by(() => {
+		const s = primaryTv?.state?.state ?? '';
+		return ['on', 'playing', 'paused', 'idle'].includes(s);
+	});
+	const lockState = $derived(primaryLock?.state?.state ?? null);
+	const isLocked = $derived(lockState === 'locked');
+	const lockBanned = $derived(getHardBannedDomains().includes('lock'));
+
+	let busy = $state<string | null>(null);
+	async function withBusy(label: string, fn: () => Promise<unknown>) {
+		busy = label;
+		try {
+			await fn();
+		} finally {
+			setTimeout(() => (busy = null), 800);
+		}
+	}
+
+	const fireLightsOff = () =>
+		withBusy('lights-off', () =>
+			callService('light', 'turn_off', { entity_id: 'all' })
+		);
+	const fireTv = () =>
+		withBusy('tv', () => (primaryTv ? callToggle(primaryTv.id) : Promise.resolve()));
+	const fireUnlock = () =>
+		withBusy('unlock', () =>
+			primaryLock
+				? callService('lock', 'unlock', { entity_id: primaryLock.id })
+				: Promise.resolve()
+		);
+
+	function tvLabel(): string {
+		if (!primaryTv) return 'TV — none';
+		return tvOn ? 'TV off' : 'TV on';
+	}
+	function tvSubtitle(): string {
+		if (!primaryTv) return 'no TV discovered';
+		const s = primaryTv.state?.state;
+		if (!s || s === 'unavailable') return 'not reporting';
+		return tvOn ? 'on now' : s;
+	}
+	function unlockSubtitle(): string {
+		if (!primaryLock) return 'no lock discovered';
+		if (lockBanned) return 'safety-rail blocked';
+		if (!lockState || lockState === 'unavailable') return 'not reporting';
+		if (!isLocked) return `already ${lockState}`;
+		return 'locked';
+	}
 </script>
 
 <svelte:head>
 	<title>broadsheet</title>
 </svelte:head>
 
-<div class="moment">
-	{#if painting.current}
-		{@const Painting = painting.current}
-		<Painting persons={discovery.persons} />
-	{:else}
-		<ProceduralPainting seed={paintingSeed} mood="warm" />
+<PageShell width="default">
+	<Hero size="md">
+		{#snippet eyebrow()}
+			<Eyebrow section="The moment" />
+		{/snippet}
+		{#snippet headline()}
+			{#if !discovery.booted}
+				Reading the house…
+			{:else if manifestClauses.length === 0}
+				Quiet.
+			{:else}
+				{#each manifestClauses as line, i (i)}{line}{#if i < manifestClauses.length - 1}
+						<br />
+					{/if}{/each}
+			{/if}
+		{/snippet}
+	</Hero>
+
+	<div class="painting-band">
+		{#if painting.current}
+			{@const Painting = painting.current}
+			<Painting persons={discovery.persons} />
+		{:else}
+			<ProceduralPainting seed={paintingSeed} mood="warm" />
+		{/if}
+	</div>
+
+	{#if discovery.booted && (hasLights || primaryTv || primaryLock)}
+		<section class="quick-reach" aria-label="Quick reach">
+			<header class="qr-eyebrow">quick reach</header>
+			<div class="qr-row">
+				{#if hasLights}
+					<button
+						type="button"
+						class="qr-chip"
+						class:busy={busy === 'lights-off'}
+						onclick={fireLightsOff}
+					>
+						<span class="qr-label">All lights off</span>
+						<span class="qr-state">whole house</span>
+					</button>
+				{/if}
+				{#if primaryTv}
+					<button
+						type="button"
+						class="qr-chip"
+						class:busy={busy === 'tv'}
+						onclick={fireTv}
+					>
+						<span class="qr-label">{tvLabel()}</span>
+						<span class="qr-state">{tvSubtitle()}</span>
+					</button>
+				{/if}
+				{#if primaryLock}
+					<button
+						type="button"
+						class="qr-chip"
+						class:busy={busy === 'unlock'}
+						onclick={fireUnlock}
+						disabled={lockBanned || !isLocked}
+					>
+						<span class="qr-label">Unlock the door</span>
+						<span class="qr-state">{unlockSubtitle()}</span>
+					</button>
+				{/if}
+			</div>
+		</section>
 	{/if}
 
-	<div class="vignette" aria-hidden="true"></div>
-
-	<article class="words">
-		<p class="dateline">{dateline}</p>
-
-		<h1 class="manifest">
-			{#if !discovery.booted}
-				<em>Reading the house…</em>
-			{:else}
-				<em>{manifest}</em>
-			{/if}
-		</h1>
-
-		{#if discovery.persons.length > 0 && discovery.booted}
-			<ul class="people">
-				{#each presence as p (p.person.id)}
-					<li class:home={p.isHome} class:away={!p.isHome}>
-						<span class="dot" aria-hidden="true"></span>
-						<span class="who">{p.person.name.split(' ')[0]}</span>
-						<span class="where">
-							{#if p.isHome}
-								{p.room ?? 'home'}
-							{:else}
-								away
-							{/if}
-						</span>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-
-		<!--
-			The site map in prose. This sentence is the broadsheet's IA
-			expressed editorially — every link goes to a sibling page,
-			arranged by parent / child / surrounding-context. Lifted from
-			harold-home's `/`. Intentionally subtle on the moment view so
-			the manifest leads.
-		-->
-		<p class="connections">
-			Who's home is the parent of <a href="{base}/long-take">the long take</a>,
-			<a href="{base}/emanations">the paintings on the wall</a>, and
-			<a href="{base}/body">the bodies behind it</a>. The day around them is described in
-			<a href="{base}/lights">light</a>, <a href="{base}/heat">heat</a>,
-			<a href="{base}/door">comings and goings</a>, and <a href="{base}/tv">tonight's screen</a>.
-		</p>
-	</article>
+	<Explainer>
+		Who's home is the parent of <a href="{base}/long-take">the long take</a>,
+		<a href="{base}/emanations">the paintings on the wall</a>, and
+		<a href="{base}/body">the bodies behind it</a>. The day around them is described in
+		<a href="{base}/lights">light</a>, <a href="{base}/heat">heat</a>,
+		<a href="{base}/door">comings and goings</a>, and <a href="{base}/tv">tonight's screen</a>.
+	</Explainer>
 
 	<footer class="colophon">
 		<span class="brand">broadsheet</span>
 		<span class="sep" aria-hidden="true">·</span>
-		<span class="version">№ 01 · the moment</span>
+		<span>№ 01 · the moment</span>
 		{#if connection.haVersion}
 			<span class="sep" aria-hidden="true">·</span>
-			<span class="ha">HA {connection.haVersion}</span>
+			<span>HA {connection.haVersion}</span>
 		{/if}
 	</footer>
-</div>
+</PageShell>
 
 <style>
-	.moment {
-		position: fixed;
-		inset: 0;
-		min-height: 100vh;
-		min-height: 100dvh;
+	.painting-band {
+		position: relative;
+		width: 100%;
+		aspect-ratio: 16 / 7;
+		margin: var(--space-2) 0 var(--space-6);
+		border-radius: var(--radius-card);
 		overflow: hidden;
+		border: 1px solid var(--rule);
 	}
 
-	.vignette {
-		position: absolute;
-		inset: 0;
-		background: radial-gradient(
-			ellipse at center,
-			transparent 30%,
-			rgba(0, 0, 0, 0.45) 90%
-		);
-		pointer-events: none;
-	}
-
-	.words {
-		position: absolute;
-		left: 0;
-		right: 0;
-		top: 50%;
-		transform: translateY(-50%);
-		padding: var(--space-6) var(--space-8);
-		max-width: 26ch;
-		margin-inline: auto;
-		text-align: center;
+	/* Quick-reach: editorial chip row, not a control panel */
+	.quick-reach {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-4);
+		gap: var(--space-2);
+		margin-bottom: var(--space-6);
 	}
 
-	@media (min-width: 640px) {
-		.words {
-			max-width: 32ch;
-			padding: var(--space-12);
-		}
-	}
-
-	.dateline {
+	.qr-eyebrow {
 		font-family: var(--font-mono);
 		font-size: var(--text-eyebrow);
 		letter-spacing: var(--track-eyebrow);
-		text-transform: uppercase;
-		color: var(--accent);
+		text-transform: lowercase;
+		color: var(--fg-dim);
 		margin: 0;
 	}
 
-	.manifest {
+	.qr-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: var(--space-3);
+	}
+
+	.qr-chip {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		justify-content: center;
+		gap: var(--space-1);
+		padding: var(--space-3) var(--space-4);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		cursor: pointer;
+		text-align: left;
+		min-height: 64px;
+		transition: border-color var(--ease-quick), background var(--ease-quick), color var(--ease-quick);
+	}
+
+	.qr-chip:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+
+	.qr-chip:active:not(:disabled) {
+		background: var(--bg-raised);
+	}
+
+	.qr-chip:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	.qr-chip.busy {
+		background: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.qr-label {
 		font-family: var(--font-display);
 		font-style: italic;
-		font-weight: 400;
-		font-size: var(--text-headline-lg);
-		line-height: 1.05;
-		letter-spacing: var(--track-tight);
+		font-size: 1.15rem;
 		color: var(--accent);
-		margin: 0;
-		text-shadow: 0 2px 30px rgba(0, 0, 0, 0.5);
+		line-height: 1;
 	}
 
-	.manifest em {
-		font-style: italic;
+	.qr-chip.busy .qr-label {
+		color: var(--bg);
 	}
 
-	.people {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-4);
-		justify-content: center;
-		margin: var(--space-6) 0 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.people li {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-family: var(--font-caption);
-		font-size: var(--text-caption);
-		color: var(--fg);
-	}
-
-	.people .dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--state-on);
-		box-shadow: 0 0 8px var(--state-on);
-	}
-
-	.people .away .dot {
-		background: var(--fg-dim);
-		box-shadow: none;
-	}
-
-	.people .who {
-		color: var(--fg);
-	}
-
-	.people .where {
+	.qr-state {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: lowercase;
 		color: var(--fg-muted);
-		font-style: italic;
 	}
 
-	.people .away .where {
-		color: var(--fg-dim);
-	}
-
-	.connections {
-		font-family: var(--font-body);
-		font-style: italic;
-		font-size: 0.85rem;
-		line-height: 1.5;
-		color: rgba(255, 255, 255, 0.62);
-		margin: var(--space-6) 0 0;
-		text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
-	}
-
-	.connections a {
-		color: var(--accent);
-		text-decoration: none;
-		border-bottom: 1px solid color-mix(in oklab, var(--accent), transparent 70%);
-		transition: border-color var(--ease-quick);
-	}
-
-	.connections a:hover {
-		border-bottom-color: var(--accent);
+	.qr-chip.busy .qr-state {
+		color: var(--bg);
+		opacity: 0.7;
 	}
 
 	.colophon {
-		position: absolute;
-		bottom: var(--space-4);
-		left: 0;
-		right: 0;
 		display: flex;
 		justify-content: center;
 		align-items: baseline;
 		gap: var(--space-2);
+		margin-top: var(--space-12);
+		padding-top: var(--space-4);
+		border-top: 1px solid var(--rule);
 		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		letter-spacing: var(--track-eyebrow);
