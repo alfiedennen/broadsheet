@@ -20,7 +20,15 @@
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
 
-	const sensors = $derived(discovery.crossAreaEntitiesForPage('body'));
+	// Filter out duplicate-label noise. Health Connect ships
+	// `basal_body_temperature` alongside `body_temperature`; both match
+	// the body_temperature regex and would render two tiles labeled
+	// "Body temperature" with the same `—` placeholder. Basal is rarely
+	// tracked; drop it from the default render — user can curation-unhide
+	// if they want it back.
+	const sensors = $derived(
+		discovery.crossAreaEntitiesForPage('body').filter((e) => !/_basal_/i.test(e.id))
+	);
 
 	// Per-sensor metadata: pretty label + honest "why empty" sub-label
 	type ValueKind = 'auto' | 'duration-min' | 'duration-ms';

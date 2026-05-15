@@ -59,10 +59,6 @@
 		</div>
 	{/each}
 </div>
-<p class="marker">
-	emanations · {paintingMode ? 'painting' : 'procedural'} · {persons.length}
-	{persons.length === 1 ? 'person' : 'people'}
-</p>
 
 <style>
 	.emanation {
@@ -161,17 +157,4 @@
 		}
 	}
 
-	.marker {
-		position: absolute;
-		left: var(--space-4);
-		bottom: var(--space-4);
-		margin: 0;
-		font-family: var(--font-mono);
-		font-size: var(--text-eyebrow);
-		letter-spacing: var(--track-eyebrow);
-		text-transform: uppercase;
-		color: var(--fg-muted);
-		opacity: 0.7;
-		z-index: 1;
-	}
 </style>
