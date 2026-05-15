@@ -31,7 +31,17 @@ const REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	markdown: () =>
 		import('./renderers/MarkdownBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	explainer: () =>
-		import('./renderers/ExplainerBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
+		import('./renderers/ExplainerBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	outline: () =>
+		import('./renderers/OutlineBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	'macro-grid': () =>
+		import('./renderers/MacroGridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	'room-toggle-grid': () =>
+		import('./renderers/RoomToggleGridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	'scene-row': () =>
+		import('./renderers/SceneRowBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	'boost-row': () =>
+		import('./renderers/BoostRowBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
 };
 
 /** Look up a renderer thunk for a block type. Throws on unknown type. */
@@ -65,5 +75,27 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 	explainer: {
 		label: 'Explainer',
 		description: 'Italic-muted footer paragraph with cross-page links.'
+	},
+	outline: {
+		label: 'Outline',
+		description: 'Caps-and-rule section divider. Use to visually separate sections.'
+	},
+	'macro-grid': {
+		label: 'Macro grid',
+		description:
+			'Three big tiles: All lights off · Boost heat · TVs off. Discovers targets.'
+	},
+	'room-toggle-grid': {
+		label: 'Room toggle grid',
+		description:
+			'One tile per discovered lighting area, tap to toggle every light in that room.'
+	},
+	'scene-row': {
+		label: 'Scene row',
+		description: 'Pill row of every discovered scene, tap to activate.'
+	},
+	'boost-row': {
+		label: 'Boost row',
+		description: 'Per-climate-area "boost to N°" tile, tap to set temperature.'
 	}
 };

@@ -16,6 +16,7 @@
 	 * Editorial register: body font, leading-snug, max-width 60ch so
 	 * paragraphs don't sprawl across wide screens.
 	 */
+	import { base } from '$app/paths';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import type { MarkdownBlockConfig } from '../types';
 
@@ -52,8 +53,16 @@
 			s
 				// [text](url) — only http/https/relative paths to avoid
 				// javascript: schemes; the URL is escaped inline already.
-				// `[^)]*` (zero-or-more) so root href `(/)` still matches.
-				.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]*)\)/g, '<a href="$2">$1</a>')
+				// Relative paths (starts with `/`) get the SvelteKit `base`
+				// prefix prepended so they resolve correctly under HA Ingress
+				// (where the SPA is served from /api/hassio_ingress/<token>/).
+				.replace(
+					/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]*)\)/g,
+					(_m, label, url) => {
+						const href = url.startsWith('/') ? `${base}${url}` : url;
+						return `<a href="${href}">${label}</a>`;
+					}
+				)
 				// **bold**
 				.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 				// *italic* — careful not to grab ** by re-running

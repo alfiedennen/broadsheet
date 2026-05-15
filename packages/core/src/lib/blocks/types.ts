@@ -68,6 +68,68 @@ export interface ExplainerBlockConfig {
 	body: string;
 }
 
+/**
+ * Outline block: the small caps label that divides sections.
+ *
+ *   ──────────  MACROS  ──────────
+ *
+ * Config is just the label. Used as a standalone block when the next
+ * block doesn't have its own label config (e.g. above a markdown
+ * block). Most action-y blocks also accept an inline `label` config
+ * field that renders an outline above them — cuts down on author
+ * boilerplate for the common case.
+ */
+export interface OutlineBlockConfig {
+	label: string;
+}
+
+/**
+ * Macro grid: three fixed action tiles for the most-used house-wide
+ * macros — All lights off / Boost heat / All TVs off. Discovers
+ * targets at render time (every light, every climate area, every TV)
+ * so authors don't have to enumerate them.
+ *
+ * Config is currently empty — the macros are hardcoded into the
+ * renderer because they're the universal three. If a user wants
+ * different macros they use action-grid (Phase 1 commit 3) with
+ * custom service-call specs.
+ */
+export interface MacroGridBlockConfig {
+	/** Optional inline section label rendered as an OutLine above the grid. */
+	label?: string | null;
+}
+
+/**
+ * Room toggle grid: one tile per discovered lighting area, tap to
+ * toggle every light in that room. Auto-discovers from
+ * `discovery.areasForPage('lights')` so the grid grows + shrinks
+ * with HA's area registry.
+ */
+export interface RoomToggleGridBlockConfig {
+	label?: string | null;
+}
+
+/**
+ * Scene row: pill row of every discovered scene (capped at 8 by
+ * default to keep the row under one line on a tablet). Tap →
+ * scene.turn_on.
+ */
+export interface SceneRowBlockConfig {
+	label?: string | null;
+	/** Cap on number of scenes shown. Default 8. */
+	maxScenes?: number;
+}
+
+/**
+ * Boost row: per-climate-area "set to N°" tile. Tap →
+ * climate.set_temperature on every climate entity in that area.
+ */
+export interface BoostRowBlockConfig {
+	label?: string | null;
+	/** Target temperature for the boost. Default 21. */
+	temperature?: number;
+}
+
 /* ── The discriminated union ──────────────────────────────────── */
 
 /**
@@ -78,7 +140,12 @@ export interface ExplainerBlockConfig {
 export type BlockDef =
 	| { type: 'hero'; config: HeroBlockConfig }
 	| { type: 'markdown'; config: MarkdownBlockConfig }
-	| { type: 'explainer'; config: ExplainerBlockConfig };
+	| { type: 'explainer'; config: ExplainerBlockConfig }
+	| { type: 'outline'; config: OutlineBlockConfig }
+	| { type: 'macro-grid'; config: MacroGridBlockConfig }
+	| { type: 'room-toggle-grid'; config: RoomToggleGridBlockConfig }
+	| { type: 'scene-row'; config: SceneRowBlockConfig }
+	| { type: 'boost-row'; config: BoostRowBlockConfig };
 
 /** Just the type discriminator — useful for builder UI listings. */
 export type BlockType = BlockDef['type'];
@@ -142,5 +209,15 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 					body: 'For more, see [the moment](/) or [settings](/settings).'
 				}
 			};
+		case 'outline':
+			return { type: 'outline', config: { label: 'Section' } };
+		case 'macro-grid':
+			return { type: 'macro-grid', config: { label: 'Macros' } };
+		case 'room-toggle-grid':
+			return { type: 'room-toggle-grid', config: { label: 'Rooms' } };
+		case 'scene-row':
+			return { type: 'scene-row', config: { label: 'Scenes', maxScenes: 8 } };
+		case 'boost-row':
+			return { type: 'boost-row', config: { label: 'Boost', temperature: 21 } };
 	}
 }

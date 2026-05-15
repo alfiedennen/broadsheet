@@ -6,6 +6,7 @@
 	 * register: a single paragraph, accent-bordered links, smaller
 	 * size, intended as the page's footer prose.
 	 */
+	import { base } from '$app/paths';
 	import Explainer from '$lib/components/Explainer.svelte';
 	import type { ExplainerBlockConfig } from '../types';
 
@@ -24,7 +25,10 @@
 
 	function inlineMd(s: string): string {
 		return s
-			.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]*)\)/g, '<a href="$2">$1</a>')
+			.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]*)\)/g, (_m, label, url) => {
+				const href = url.startsWith('/') ? `${base}${url}` : url;
+				return `<a href="${href}">${label}</a>`;
+			})
 			.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 			.replace(/(^|[^*])\*([^*]+)\*([^*]|$)/g, '$1<em>$2</em>$3');
 	}
