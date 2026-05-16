@@ -20,6 +20,22 @@
 
 	let open = $state(false);
 
+	// V0.2 architecture: broadsheet serves on its own host port (default
+	// 8124), HA on its own port (default 8123). The kebab's "Open Home
+	// Assistant" link used to be href="/" + target="_top" (correct in
+	// v0.1 ingress mode where broadsheet shared HA's origin). In v0.2
+	// "/" resolves to broadsheet's OWN root since we're on a different
+	// origin — so the link just reloaded broadsheet itself. Compute the
+	// HA URL from window.location.hostname + standard HA port 8123.
+	// Edge case: user runs HA on a custom port → link points at the
+	// wrong place. v0.2.x polish: read HA URL from runtime-env.js
+	// instead of assuming 8123. For most installs this works.
+	let haUrl = $state('/');
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		haUrl = `${window.location.protocol}//${window.location.hostname}:8123/`;
+	});
+
 	function close() {
 		open = false;
 	}
@@ -83,22 +99,17 @@
 			label: 'Settings',
 			active: currentPath.startsWith(`${base}/settings`)
 		},
-		// Drops the user out of broadsheet's ingress iframe into HA's
-		// own dashboard root — gives them the full HA sidebar +
-		// dashboard, from which they can navigate anywhere HA exposes
-		// (Settings, Developer Tools, integration setup wizards,
-		// advanced YAML, debug snapshots, network config,
-		// hardware-specific HA OS settings, etc). Landing on the
-		// dashboard rather than directly on /config/ matches the user's
-		// expectation of "open HA": they expect HA proper, not
-		// specifically the settings section.
-		// target="_top" breaks out of the iframe. Returning to
-		// broadsheet is one tap of the broadsheet panel in HA's sidebar
-		// (which surfaces on edge-hover when collapsed via the sidebar
-		// takeover). See docs/plans/plan-sidebar-takeover.md +
-		// docs/plans/plan-ha-settings-native-uis.md.
+		// Cross-origin navigation back to HA proper. In v0.2 broadsheet
+		// serves on its own host port, so this leaves broadsheet's
+		// origin entirely and lands on HA's dashboard root. From there
+		// the user has full HA sidebar + dashboard + everywhere HA
+		// exposes (Settings, Developer Tools, integration setup
+		// wizards, advanced YAML, debug snapshots, hardware-specific
+		// HA OS settings, etc). Returning to broadsheet is one tap of
+		// the Lovelace launcher entry the addon registered. See
+		// docs/plans/plan-theme-G-frontend-not-panel.md.
 		{
-			href: '/',
+			href: haUrl,
 			label: 'Open Home Assistant',
 			active: false,
 			kind: 'external' as const,
