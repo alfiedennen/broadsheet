@@ -21,6 +21,7 @@
 	import KebabNav from '$lib/components/KebabNav.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 	import ConnectionIndicator from '$lib/components/ConnectionIndicator.svelte';
+	import TakeoverBanner from '$lib/components/TakeoverBanner.svelte';
 
 	let { children } = $props();
 
@@ -154,6 +155,17 @@
 	so users see "Connecting…" on cold start instead of a blank screen.
 -->
 <ConnectionIndicator />
+
+<!--
+	TakeoverBanner appears bottom-centre on the FIRST visit after the
+	addon has applied the HA frontend takeover (sidebar collapsed +
+	broadsheet set as the default landing surface). Self-suppresses
+	via localStorage on first dismiss + when not in addon mode. See
+	docs/plans/plan-sidebar-takeover.md.
+-->
+{#if booted}
+	<TakeoverBanner />
+{/if}
 
 <div class="app">
 	{#if booted}

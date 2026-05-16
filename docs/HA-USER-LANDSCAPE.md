@@ -308,8 +308,6 @@ This is the rubric Phase D will turn into stories.
   multi-line is a frequent pattern broadsheet doesn't yet match.
 - **Floor-plan / picture-elements** — wow-factor pattern broadsheet
   intentionally omits.
-- **Voice-first surface** — broadsheet is visual-first. The Voice PE
-  cohort has different needs.
 - **eInk / low-power display rendering** — emerging niche broadsheet
   doesn't address; static-render mode might be a future plugin.
 - **Two-dashboard pattern** — broadsheet doesn't help users
@@ -318,6 +316,51 @@ This is the rubric Phase D will turn into stories.
 - **Native template-card library** — Mushroom-template-card is
   enormously popular. broadsheet's markdown-with-Jinja covers some
   of this but not the icon-led visual register.
+
+### v0.1.0 scope expansion (2026-05-16) — two omissions captured
+
+The fresh-user dogfood V2 review surfaced two product-shaped
+omissions the original landscape research missed. Both were added
+to v0.1.0 scope (see RUBRIC.md Epics 7 + 8):
+
+- **Peer-frontend, not THE frontend** — the V1 landscape treated
+  broadsheet as a Lovelace-style frontend that lives alongside HA's
+  native UI. In practice, every other "frontend" project (Mushroom,
+  Tile, Bubble, etc) is a CARD set rendered inside HA's UI, so the
+  peer-frontend story is correct for them. broadsheet is shaped
+  differently — it's a full-page editorial register, not a card set.
+  A peer-frontend that the user has to remember to open alongside
+  HA's main sidebar is a worst-of-both-worlds outcome. Pain point #6
+  (config tree) becomes "two config trees" for broadsheet users.
+  **v0.1.0 fix**: broadsheet TAKES OVER on install — sidebar
+  collapses, broadsheet ingress becomes the landing surface, the
+  6-8 most-touched HA settings render natively in broadsheet's
+  editorial register. Pain point #6 collapses to one editorial
+  surface; pain point #10 (per-user dashboards) is unaffected but
+  the rest of E1/E2/E3's surface story improves substantially.
+  Plan: `docs/plans/plan-sidebar-takeover.md` + `docs/plans/plan-ha-settings-native-uis.md`.
+
+- **Voice was out-of-scope** — the original landscape's "Voice PE
+  cohort" line was a single bullet under "Where broadsheet misses".
+  But the actual HA install base has voice EVERYWHERE — every
+  install above HA 2024.x has STT/TTS + a conversation pipeline +
+  Atom Echo / Wyoming-protocol satellites. The HA-native intent
+  matcher is fast + free + already deployed; pairing it with a
+  fall-through LLM is the well-established pattern. broadsheet's
+  editorial register is uniquely well-shaped for the
+  moment-of-spoken-response surface (italic display, prose-shaped,
+  legible at glance). Shipping without voice IS shipping a
+  visual-only home dashboard in a voice-aware era.
+  **v0.1.0 fix**: a `@broadsheet/voice` generic plugin that
+  discovers your installed HA conversation agents + TTS providers
+  and routes utterances HA-native-first, LLM-fallback. Plus
+  `@broadsheet/harold-preset` as the opinionated one-tap bundle
+  (Hitchcock register, Claude Haiku, ElevenLabs Flash v2.5, the
+  "Hey Harold" wakeword, meeting-mode, Italian detection, garbled-
+  input filter, conversational memory). Users without paid APIs
+  pair voice with Ollama + Piper (both local, both free) and still
+  get a working pipeline.
+  Plan: `docs/plans/plan-voice-substrate.md` + `docs/plans/plan-harold-preset.md`.
 
 ### Where broadsheet's existing surfaces partially address user needs
 

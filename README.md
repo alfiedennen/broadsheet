@@ -76,7 +76,43 @@ no editing.
 | **`/tv`** | Remote + a launch button per app the TV exposes (`source_list`). With the tmdb-tv plugin: Trending / New content rows | `media_player.*` with TV device class + `remote.*` |
 | **`/body`** | Health-data panels with honest sub-labels ("once daily" / "measured during sleep") so empty panels explain themselves | Health Connect `sensor.*` pattern matching (Pixel) — Apple Health bridge planned |
 | **`/wall`** | A deliberately dense action grid for a hallway tablet — same app, surface-specific landing | Areas with anything actionable |
-| **`/settings`** | In-app curation: House, People, Voice, Plugins | — |
+| **`/settings`** | In-app curation: House, People, Voice, Plugins, **Integrations, Add-ons, Devices, Logs** — broadsheet-native UIs over HA's WS APIs, written in the editorial register | — |
+
+### One frontend, not two
+
+On install broadsheet **takes over the HA frontend** — the HA sidebar
+collapses, the broadsheet ingress becomes your landing surface, and
+the eight to ten settings broadsheet renders natively (People / Areas
+/ Entities / Voice / Plugins / Integrations / Add-ons / Devices /
+Logs) read like prose, not a config tree. A single "Open HA settings"
+affordance in the kebab nav drops you into HA's own UI for the
+unusual flows (initial integration setup wizards, debug snapshots,
+advanced YAML). HA stays whole; broadsheet just stops being a peer
+frontend you have to remember to visit.
+
+Roll back: the addon's `sidebar_takeover` option is on by default but
+flip it to `false` to keep HA's sidebar in place and run broadsheet
+as a peer frontend instead.
+
+### Voice — Harold, or your own
+
+A built-in voice substrate (`@broadsheet/voice` plugin) wires a
+WebSocket-streamed STT + LLM + TTS pipeline through HA's existing
+conversation framework. Discovers your installed HA conversation
+agents (HA-native intent matcher, Whisper, OpenAI Conversation,
+Anthropic, etc) and your TTS providers (HA Cloud, Piper, ElevenLabs,
+OpenAI). HA-native intent matching gets first attempt on every
+utterance (lights, scenes, climate — sub-200ms response, zero LLM
+spend); only unmatched intents fall through to your LLM of choice.
+
+Ships with **Harold** as the opinionated preset
+(`@broadsheet/harold-preset`) — Hitchcock-register British baritone,
+Claude Haiku for the conversational layer, ElevenLabs Flash v2.5 for
+TTS, the "Hey Harold" custom wake-word model + Atom Echo satellite
+configuration, the meeting-mode hard-mute, the
+Italian-when-spoken-Italian detection, the garbled-input filter, and
+the conversational memory layer. Tap to install on first launch, or
+ignore it and pair voice with whatever LLM/TTS you already pay for.
 
 If your HA install has things broadsheet doesn't know how to render
 (custom integrations, exotic device classes), they show up in an
@@ -185,8 +221,12 @@ Everything else lives in the
 
 ## Status
 
-**v0.1 — in production-canary.** Running daily against the author's real
-HA across three surfaces (phone, desktop, wall tablet).
+**v0.1 — in production-canary, ship target ~3 weeks (2026-06-06).**
+Running daily against the author's real HA across three surfaces
+(phone, desktop, wall tablet). Scope expanded 2026-05-16 after the
+V2 fresh-user dogfood surfaced two product-shaped omissions — the
+"frontend takeover" and "voice + Harold" stories below. Both land
+before ship.
 
 What's done:
 - The eight core surfaces (`/`, `/lights`, `/heat`, `/door`, `/tv`,
@@ -197,6 +237,23 @@ What's done:
   broadsheet HA theme.
 - The plugin system + all three first-class plugins
   (emanations / ghost-cloud / tmdb-tv).
+- Lovelace importer (27 translators, 98% real-world coverage).
+- Full markdown renderer (CommonMark + GFM via marked + DOMPurify).
+
+What's in flight (v0.1.0 ship blockers):
+- **Frontend takeover** — broadsheet collapses HA's sidebar on
+  install + becomes the landing surface, with broadsheet-native
+  UIs for the 6-8 most-touched HA settings (People / Areas /
+  Entities / Integrations / Add-ons / Devices / Logs / Voice). See
+  `docs/plans/plan-sidebar-takeover.md` + `docs/plans/plan-ha-settings-native-uis.md`.
+- **Voice substrate** — `@broadsheet/voice` plugin discovering HA's
+  installed conversation agents + TTS providers; HA-native intent
+  matcher first, LLM fall-through. See
+  `docs/plans/plan-voice-substrate.md`.
+- **Harold preset** — `@broadsheet/harold-preset` one-tap install
+  of Hitchcock register + Claude Haiku + ElevenLabs Flash v2.5 +
+  the "Hey Harold" wakeword + meeting-mode + Italian detection +
+  conversational memory. See `docs/plans/plan-harold-preset.md`.
 
 What's still raw:
 - `aarch64` is built but not yet hardware-verified (see Requirements).
@@ -208,6 +265,9 @@ What needs help:
 - Translations beyond English.
 - Apple Health bridge for `/body` (Pixel / Health Connect only today).
 - ARM hardware testing.
+- Local-only voice testing (Ollama + Piper combinations) — the
+  voice plugin is designed to support this, real-world coverage is
+  the open question.
 
 ---
 

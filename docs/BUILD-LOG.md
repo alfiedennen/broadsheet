@@ -2743,3 +2743,95 @@ Remaining v0.2 work:
 - HA-user-landscape research → epics → automated rubric tests →
   gap analysis → ship-readiness synthesis artefact (precedes
   v0.1.0 release-prep gates)
+
+---
+
+## v0.1.0 scope expansion — frontend takeover + voice (2026-05-16)
+
+After the V2 fresh-user dogfood cleared the 17-bug burst (3 blockers
+fixed, 5/6 seriouses fixed + 1 reclassified, 7/8 minors fixed + 1
+deferred, 188/188 tests pass, factory-fresh re-walk clean), a design
+review surfaced two product-shaped omissions the V1 landscape research
+had missed. Both are now v0.1.0 ship-blockers:
+
+### 1. Frontend takeover
+
+**Omission**: broadsheet shipped as a peer frontend alongside HA's
+native Lovelace UI. Pain point #6 from `HA-USER-LANDSCAPE.md` ("config
+tree, not UI") became "two config trees" for broadsheet users — they
+had to remember to bounce between broadsheet (for the editorial
+surfaces) and HA's sidebar (for settings, integrations, devices,
+logs). Worst-of-both-worlds.
+
+**Fix in v0.1.0**:
+- Addon `sidebar_takeover: true` by default — on first install, HA's
+  sidebar collapses globally and broadsheet's ingress becomes the
+  user's landing surface.
+- Broadsheet-native UIs for the 6-8 most-touched HA settings —
+  People / Areas / Entities / Voice (already half-done) plus
+  Integrations / Add-ons / Devices / Logs (new). Each lives at
+  `/settings/*` inside broadsheet, talks to HA's WS APIs directly,
+  reads in the editorial register rather than the config tree.
+- "Open HA settings →" affordance in the kebab nav drops the user
+  into HA's own UI for the unusual flows (initial integration setup
+  wizards, debug snapshots, advanced YAML).
+- Roll-back path: `sidebar_takeover: false` keeps HA's sidebar in
+  place and runs broadsheet as a peer frontend (V0.0 behaviour).
+
+Design plans: `docs/plans/plan-sidebar-takeover.md` +
+`docs/plans/plan-ha-settings-native-uis.md`.
+
+Rubric: new Epic 7 (5 stories: P7-S1 through P7-S5).
+
+### 2. Voice + Harold
+
+**Omission**: V1 landscape's "Voice PE cohort" line was a single
+bullet under "Where broadsheet misses". But every HA install above
+2024.x has STT/TTS + a conversation pipeline + Atom Echo / Wyoming-
+protocol satellites in the wild. Shipping a visual-only home dashboard
+in a voice-aware era is shipping with eyes closed. broadsheet's
+editorial register is uniquely well-shaped for the moment-of-spoken-
+response surface (italic display + concise prose = legible at glance).
+
+**Fix in v0.1.0**:
+- `@broadsheet/voice` generic plugin — discovers your HA conversation
+  agents (HA-native intent matcher, Whisper, OpenAI Conversation,
+  Anthropic, custom) + your TTS providers (HA Cloud, Piper,
+  ElevenLabs, OpenAI). HA-native intent gets first attempt on every
+  utterance (sub-200ms, free); only unmatched intents fall through to
+  the user-configured LLM.
+- Voice transcript pane visible inside broadsheet — slim chrome,
+  editorial register, last N utterances + replies.
+- `@broadsheet/harold-preset` opinionated bundle — one-tap install of
+  the Hitchcock prompt suffix, meeting-mode hard-mute, Italian
+  detection, garbled-input filter, "Hey Harold" wakeword model + Atom
+  Echo config, conversational memory layer, Claude Haiku + ElevenLabs
+  Flash v2.5 wiring with user-supplied keys.
+- Local-only path supported by design: pair voice substrate with
+  Ollama + Piper (both free, both run locally) for a working voice
+  pipeline without paid subscriptions.
+
+Design plans: `docs/plans/plan-voice-substrate.md` +
+`docs/plans/plan-harold-preset.md`.
+
+Rubric: new Epic 8 (5 stories: P8-S1 through P8-S5).
+
+### Ship timeline
+
+Target ship 2026-06-06 (~3 weeks from now). v0.1.0 scope locked at:
+- All 8 core surfaces (shipped)
+- All 3 first-class plugins (shipped)
+- Lovelace importer (shipped)
+- Full markdown renderer (shipped 2026-05-15)
+- 12 fixes from V2 dogfood burst (shipped 2026-05-15)
+- Frontend takeover + 6-8 native HA settings UIs (in flight)
+- Voice substrate + Harold preset (in flight)
+
+What v0.1.0 explicitly does NOT include (v0.1.x or v0.2):
+- Per-user dashboard variants (E3-S1)
+- Conditional visibility primitives
+- Slider primitive
+- Multi-series chart
+- eInk render mode
+- Pop-up / modal navigation
+- Re-import to update an existing custom page

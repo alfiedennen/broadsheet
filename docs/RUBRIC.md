@@ -22,9 +22,19 @@ stories. ~30 stories total. Each story has:
 | E4 — Power User / Templater | 5 | 3 | 1 | 1 |
 | E5 — Ambient Enthusiast | 5 | 2 | 2 | 1 |
 | E6 — Cross-cutting platform | 5 | 4 | 1 | 0 |
-| **Total** | **30** | **17 (57%)** | **9 (30%)** | **4 (13%)** |
+| **E7 — Frontend takeover (NEW v0.1)** | 5 | 0 | 0 | 5 |
+| **E8 — Voice + Harold (NEW v0.1)** | 5 | 0 | 0 | 5 |
+| **Total** | **40** | **17 (43%)** | **9 (23%)** | **14 (35%)** |
 
-87% of stories pass or partial. Of the 4 gaps:
+**v0.1 scope expansion 2026-05-16**: epics E7 and E8 added after the
+fresh-user dogfood V2 review surfaced two product-shaped omissions —
+broadsheet was a peer frontend living alongside HA's, and voice was
+out-of-scope. Both will land in v0.1.0 ship (~2-3 weeks of further
+work). All 10 stories below open as `gap` until the four design
+plans (`docs/plans/plan-{sidebar-takeover,ha-settings-native-uis,voice-substrate,harold-preset}.md`)
+are coded.
+
+Of the 4 pre-existing gaps in E1-E6:
 - 2 in E3 (per-user dashboard variants; conditional visibility)
 - 1 in E4 (re-import to update an existing custom page)
 - 1 in E5 (e-ink / low-power surface render mode)
@@ -480,6 +490,85 @@ System-wide invariants that touch every persona.
 **Test fixture:** Manual install on a fresh HA OS VM, timed.
 
 **Notes:** PUBLIC-README's install instructions match the actual flow.
+
+---
+
+## Epic 7 — Frontend takeover (NEW v0.1 scope, 2026-05-16)
+
+Added after the V2 fresh-user dogfood. The omission: broadsheet
+shipped as a peer frontend alongside HA's native UI, leaving the user
+to remember TWO frontends and bounce between them for settings,
+integrations, and devices. The v0.1.0 ship needs to make broadsheet
+THE frontend — HA's sidebar collapses, broadsheet becomes the landing
+surface, and the routine settings broadsheet can render natively all
+live inside broadsheet's editorial register rather than HA's
+material-design config tree.
+
+Spec: `docs/plans/plan-sidebar-takeover.md` + `docs/plans/plan-ha-settings-native-uis.md`.
+
+### P7-S1 · Install collapses HA sidebar globally
+> *Given a user installs broadsheet, when they first open HA, broadsheet's ingress IS the landing surface and HA's sidebar is collapsed/hidden across all dashboards.*
+
+**Status:** gap (design plan in flight) · **Test fixture:** `e2e/takeover-install.spec.ts`
+
+### P7-S2 · Roll back to peer-frontend mode with one toggle
+> *Given the user wants HA's sidebar back, when they flip the addon's `sidebar_takeover: false` option, sidebar returns within a HA restart.*
+
+**Status:** gap · **Test fixture:** addon-config integration test
+
+### P7-S3 · Native /settings/people built on HA's `person.*` WS API
+> *Given the user opens /settings/people, they see broadsheet's editorial UI over HA's actual person registry — create, rename, assign tracker, delete.*
+
+**Status:** partial (read-side exists at /settings/people; write surfaces are gap)
+
+### P7-S4 · Native /settings/integrations built on HA's `config_entries.*` WS API
+> *Given the user wants to add or configure an integration, /settings/integrations lets them browse + add + reconfigure without dropping into HA's UI.*
+
+**Status:** gap (biggest single new build) · **Test fixture:** `e2e/integrations-add.spec.ts`
+
+### P7-S5 · "Open HA settings" affordance always one tap away
+> *Given any unusual flow broadsheet doesn't render natively (debug snapshots, advanced YAML, exotic integration setup wizards), an "Open HA settings →" CTA in the kebab nav drops the user into HA's own UI.*
+
+**Status:** gap · **Test fixture:** `e2e/ha-fallback-link.spec.ts`
+
+---
+
+## Epic 8 — Voice + Harold (NEW v0.1 scope, 2026-05-16)
+
+Added in the same V2 review. The omission: broadsheet had no voice
+story at all, even though every HA install above v2024.x has STT/TTS
++ a conversation pipeline + Atom Echo or Wyoming-protocol satellites
+in the wild. Broadsheet's editorial register is uniquely well-shaped
+to be a voice UI surface (italic display + concise prose = legible at
+glance, perfect for a moment-of-spoken-response paragraph).
+
+Spec: `docs/plans/plan-voice-substrate.md` (generic plugin) +
+`docs/plans/plan-harold-preset.md` (opinionated bundle).
+
+### P8-S1 · Voice plugin discovers + lists installed HA conversation agents + TTS providers
+> *Given the user enables @broadsheet/voice, /settings/voice shows every HA conversation agent (HA native, Whisper, OpenAI, Anthropic, custom) and every TTS provider (HA Cloud, Piper, ElevenLabs, OpenAI) with provider status + last-used.*
+
+**Status:** gap · **Test fixture:** `e2e/voice-discovery.spec.ts`
+
+### P8-S2 · HA-native intent matcher gets first attempt on every utterance
+> *Given a user says "turn on the kitchen lights", HA-native intent matches sub-200ms, fires the call, returns silent — no LLM round-trip, no cost. Only unmatched utterances fall through to the configured LLM.*
+
+**Status:** gap · **Test fixture:** `e2e/voice-intent-routing.spec.ts`
+
+### P8-S3 · Voice transcript pane visible inside broadsheet
+> *Given the user has voice enabled, a slim transcript pane (call it /voice or a kebab affordance) shows the last N utterances + replies in editorial register — same surface as the moment view, not a chat-bot tile.*
+
+**Status:** gap · **Test fixture:** `e2e/voice-transcript.spec.ts`
+
+### P8-S4 · Harold preset installs the Hitchcock register + Claude + ElevenLabs in one tap
+> *Given the user picks Harold on first-launch onboarding, @broadsheet/harold-preset installs the Hitchcock prompt suffix, the meeting-mode hard-mute, the Italian-when-spoken-Italian detection, the garbled-input filter, the "Hey Harold" wakeword model + Atom Echo config, and wires Claude Haiku + ElevenLabs Flash v2.5 with the user-supplied keys.*
+
+**Status:** gap (preset depends on substrate landing first) · **Test fixture:** `e2e/harold-preset-install.spec.ts`
+
+### P8-S5 · Voice survives without paid APIs
+> *Given the user doesn't want Anthropic or ElevenLabs subscriptions, they can pair broadsheet's voice substrate with Ollama + Piper (both free, both run locally) and still get a working voice pipeline.*
+
+**Status:** gap — explicitly designed-for so the open-source story isn't "you must pay Anthropic" · **Test fixture:** `e2e/voice-local-only.spec.ts`
 
 ---
 

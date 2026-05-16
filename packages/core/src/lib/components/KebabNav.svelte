@@ -83,6 +83,22 @@
 			label: 'Settings',
 			active: currentPath.startsWith(`${base}/settings`)
 		},
+		// Drops the user out of broadsheet's ingress iframe into HA's
+		// own /config/ page — for the 5-10% of flows broadsheet doesn't
+		// render natively (initial integration setup wizards, advanced
+		// YAML, debug snapshots, network config, hardware-specific HA OS
+		// settings). target="_top" breaks out of the iframe. Returning
+		// to broadsheet is one tap of the broadsheet panel in HA's
+		// sidebar (which surfaces on edge-hover when collapsed via the
+		// sidebar takeover). See docs/plans/plan-sidebar-takeover.md +
+		// docs/plans/plan-ha-settings-native-uis.md.
+		{
+			href: '/config/',
+			label: 'Open HA settings',
+			active: false,
+			kind: 'external' as const,
+			target: '_top' as const
+		},
 		{
 			href: `${base}/setup/`,
 			label: 'Forget token',
@@ -127,12 +143,17 @@
 				<li>
 					<a
 						href={item.href}
+						target={'target' in item ? item.target : undefined}
 						class:active={item.active}
 						class:destructive={'kind' in item && item.kind === 'destructive'}
+						class:external={'kind' in item && item.kind === 'external'}
 						onclick={close}
 					>
 						<span class="num">№ {String(i + 2).padStart(2, '0')}</span>
 						<span class="lbl">{item.label}</span>
+						{#if 'kind' in item && item.kind === 'external'}
+							<span class="ext-glyph" aria-hidden="true">↗</span>
+						{/if}
 					</a>
 				</li>
 			{/each}
@@ -259,6 +280,21 @@
 
 	.sheet-list a.destructive {
 		color: var(--state-alert);
+	}
+
+	.sheet-list a.external {
+		opacity: 0.75;
+	}
+
+	.sheet-list a.external:hover {
+		opacity: 1;
+	}
+
+	.sheet-list .ext-glyph {
+		margin-left: var(--space-2);
+		font-family: var(--font-mono);
+		font-size: 0.85em;
+		color: var(--fg-muted);
 	}
 
 	.sheet-list .num {
