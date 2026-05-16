@@ -12,6 +12,15 @@
 import { discovery } from '$lib/discovery';
 import { curationStore } from './store.svelte';
 import { connection } from '$lib/stores/connection.svelte';
+import { base } from '$app/paths';
+
+// SvelteKit's $app/paths.base is the URL prefix all internal links must
+// carry. Empty string in dev / standalone, but under HA Ingress it
+// resolves to "/api/hassio_ingress/<token>". V3 manual dogfood (BUG B-2):
+// every alert href below was a bare absolute path like "/settings/house/"
+// which resolved against the HA-Core origin root instead of broadsheet's
+// ingress prefix — 404 on every click. Prefix once via this helper.
+const href = (path: string) => `${base}${path}`;
 
 export type AlertSeverity = 'info' | 'attention' | 'urgent';
 
@@ -66,7 +75,7 @@ export function computeAlerts(): Alert[] {
 				body:
 					`${one ? 'A device-backed entity' : 'Device-backed entities'} HA hasn't been ` +
 					`told a room for — assign ${one ? 'it' : 'them'} in House.${helpers}`,
-				cta: { label: 'Fix in House', href: '/settings/house/' }
+				cta: { label: 'Fix in House', href: href('/settings/house/') }
 			});
 		}
 	}
@@ -82,7 +91,7 @@ export function computeAlerts(): Alert[] {
 				severity: 'attention',
 				title: `${p.name}'s presence sensor isn't picked yet`,
 				body: `broadsheet defaulted to nothing — pick a tracker or sensor for this person.`,
-				cta: { label: 'Fix in People', href: '/settings/people/' }
+				cta: { label: 'Fix in People', href: href('/settings/people/') }
 			});
 		}
 	}
@@ -99,7 +108,7 @@ export function computeAlerts(): Alert[] {
 					severity: 'info',
 					title: `${p.name}'s presence may go stale`,
 					body: `iOS Companion App suspends GPS in deep-sleep — readings can stick on "home" for hours after leaving. Prefer a BLE tracker or server-side committed_room sensor.`,
-					cta: { label: 'Pick a different sensor', href: '/settings/people/' }
+					cta: { label: 'Pick a different sensor', href: href('/settings/people/') }
 				});
 			}
 		}
@@ -117,7 +126,7 @@ export function computeAlerts(): Alert[] {
 			severity: 'info',
 			title: `${hiddenCount} entities are hidden`,
 			body: `Hidden by their integration, or auto-hidden by broadsheet (duplicates, system plumbing). Unhide individually in House if needed.`,
-			cta: { label: 'Browse all entities', href: '/settings/house/' }
+			cta: { label: 'Browse all entities', href: href('/settings/house/') }
 		});
 	}
 
@@ -128,7 +137,7 @@ export function computeAlerts(): Alert[] {
 			severity: 'urgent',
 			title: 'Connection has been unstable',
 			body: `${connection.reconnectAttempts} reconnects detected. Check your HA + network.`,
-			cta: { label: 'Diagnose', href: '/settings/about/' }
+			cta: { label: 'Diagnose', href: href('/settings/about/') }
 		});
 	}
 
@@ -139,7 +148,7 @@ export function computeAlerts(): Alert[] {
 			severity: 'urgent',
 			title: 'Connection failed',
 			body: connection.lastError ?? 'Unknown error.',
-			cta: { label: 'Re-setup', href: '/setup/' }
+			cta: { label: 'Re-setup', href: href('/setup/') }
 		});
 	}
 
@@ -150,7 +159,7 @@ export function computeAlerts(): Alert[] {
 			severity: 'urgent',
 			title: 'Last settings change failed to save',
 			body: curationStore.lastError,
-			cta: { label: 'Retry from About', href: '/settings/about/' }
+			cta: { label: 'Retry from About', href: href('/settings/about/') }
 		});
 	}
 

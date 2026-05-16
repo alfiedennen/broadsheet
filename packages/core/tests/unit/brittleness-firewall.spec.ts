@@ -29,6 +29,24 @@ const SCAN_DIRS = [
 ];
 
 /**
+ * Documented exceptions. Each entry is a path pattern (substring match
+ * against the relative file path) — matching files are excluded from
+ * the firewall scan. Each exception MUST carry a comment block in the
+ * file itself explaining why the forbidden pattern is necessary +
+ * what the failure mode is if HA renames/restructures the dependency.
+ *
+ *   - routes/+layout.svelte — Plan 1 sidebar takeover dispatches
+ *     `hass-dock-sidebar` on the parent frame's <home-assistant> root
+ *     to force HA chrome re-render after localStorage write. No
+ *     alternative API exists (events on descendants don't bubble INTO
+ *     home-assistant's shadow DOM where ha-sidebar's listener lives).
+ *     Risk: if HA renames the element, takeover silently no-ops on
+ *     existing browsers (server-side user_data still applies for new
+ *     browsers). Acceptable.
+ */
+const PATH_EXCEPTIONS = ['routes/+layout.svelte'];
+
+/**
  * Patterns forbidden in runtime code. Each entry is:
  *   - regex: what to grep for
  *   - rationale: human-readable reason
@@ -95,6 +113,8 @@ describe('brittleness firewall', () => {
 		for (const scanDir of SCAN_DIRS) {
 			const fullDir = join(REPO_ROOT, scanDir);
 			for (const relPath of walk(fullDir, REPO_ROOT)) {
+				// Skip documented exceptions — see PATH_EXCEPTIONS rationale
+				if (PATH_EXCEPTIONS.some((ex) => relPath.includes(ex))) continue;
 				const content = readFileSync(join(REPO_ROOT, relPath), 'utf8');
 				for (const { regex, rationale } of FORBIDDEN) {
 					if (regex.test(content)) {

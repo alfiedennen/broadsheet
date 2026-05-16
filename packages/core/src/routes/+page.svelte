@@ -179,9 +179,25 @@
 		const sensor = discovery.byEntityId(sensorId);
 		const stateValue = (sensor?.state?.state ?? '').toString().trim();
 		if (!stateValue || NOT_PRESENT.has(stateValue.toLowerCase())) return { kind: 'away' };
-		const area = discovery.areas.find(
-			(a) => a.id !== '__unsorted__' && a.name.toLowerCase() === stateValue.toLowerCase()
-		);
+		// V3 manual dogfood (BUG B-6): templated presence sensors like
+		// sensor.alfie_committed_room can report EITHER the area's display
+		// name ("Office") OR its slug ("alfies_office") depending on how the
+		// HA-side template was written. Matching only on area.name would
+		// silently fall through to 'away' for any sensor that reports slugs
+		// — which then bypasses the user's uploaded room painting AND
+		// renders "AWAY" on the person tile even though the user is
+		// demonstrably home. Match either form, case-insensitive, with the
+		// slug-normalised version of the display name too as a fallback
+		// (covers sensors that report 'living_room' against an area whose
+		// display name is 'Living Room').
+		const needle = stateValue.toLowerCase();
+		const area = discovery.areas.find((a) => {
+			if (a.id === '__unsorted__') return false;
+			if (a.name.toLowerCase() === needle) return true;
+			if (a.id.toLowerCase() === needle) return true;
+			if (a.name.toLowerCase().replace(/\s+/g, '_') === needle) return true;
+			return false;
+		});
 		return area ? { kind: 'in-room', area } : { kind: 'away' };
 	}
 

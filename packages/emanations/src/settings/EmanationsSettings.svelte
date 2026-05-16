@@ -453,7 +453,7 @@
 							</select>
 							{#if away}
 								<img
-									class="variant-thumb"
+									class="away-preview"
 									src={pluginDataUrl('emanations', away)}
 									alt={away}
 									loading="lazy"
@@ -773,5 +773,22 @@
 		object-fit: cover;
 		border-radius: var(--radius-card);
 		background: #000;
+	}
+
+	/* V3 manual dogfood (BUG B-7): the away-image preview was using
+	   .variant-thumb (80px max-height + object-fit:cover), which crops to
+	   a thin letterbox slice of the full image — making the away image
+	   appear broken even when it had loaded correctly. Away preview gets
+	   its own class: full-width, larger max-height, contain (no crop) so
+	   the user sees the actual image they uploaded. */
+	.away-preview {
+		display: block;
+		margin-top: var(--space-2);
+		width: 100%;
+		max-width: 24rem;
+		max-height: 280px;
+		object-fit: contain;
+		border-radius: var(--radius-card);
+		background: var(--bg-raised);
 	}
 </style>

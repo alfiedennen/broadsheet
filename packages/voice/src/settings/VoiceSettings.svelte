@@ -16,7 +16,7 @@
 	 */
 
 	import { onMount } from 'svelte';
-	import { SettingsRow, useCurationField, getConnection } from '@broadsheet/core';
+	import { SettingsRow, useCurationField, getConnection, discovery as coreDiscovery } from '@broadsheet/core';
 	import { pullVoiceDiscovery, pipelineSummary, resolveActivePipeline } from '../lib/discovery';
 	import { DEFAULT_VOICE_CONFIG, type VoiceConfig, type VoiceDiscovery } from '../lib/types';
 
@@ -52,12 +52,27 @@
 		discovery && resolvedActive ? pipelineSummary(resolvedActive, discovery) : ''
 	);
 
-	const ttsTargetOptions = $derived.by(() => {
-		// 'browser' always available. Otherwise: derived from HA's
-		// media_player entities — but those live on the core's
-		// discovery, not voice's. For v0.1 we accept user typing an
-		// entity_id; v0.1.x adds a picker driven by core's media list.
-		return ['browser'];
+	// V3 manual dogfood (BUG B-5): pull every media_player entity from
+	// core's discovery so the TTS target is a real dropdown, not a free-text
+	// input the user has to know the entity_id syntax to use. Reactive to
+	// discovery — if a new media_player is added in HA it shows up here on
+	// the next discovery tick without a panel reload.
+	type MediaPlayerOption = { id: string; name: string; area: string | null };
+
+	const mediaPlayerOptions = $derived.by<MediaPlayerOption[]>(() => {
+		// Reading coreDiscovery.areas establishes the reactive dep — every
+		// discovery refresh produces a fresh areas snapshot via $derived.
+		// DomainArea pre-buckets media_player entities into .media (non-TV)
+		// and .tvs (TV-class) — pull both since either is a valid TTS sink.
+		const out: MediaPlayerOption[] = [];
+		for (const area of coreDiscovery.areas) {
+			for (const e of [...area.media, ...area.tvs]) {
+				out.push({ id: e.id, name: e.name, area: area.name });
+			}
+		}
+		// Alphabetical by display name
+		out.sort((a, b) => a.name.localeCompare(b.name));
+		return out;
 	});
 
 	function asNumberOrEmpty(v: unknown): string {
@@ -139,22 +154,31 @@
 
 		<SettingsRow
 			label="TTS target"
-			hint="Where broadsheet's voice replies play. 'browser' plays in this tab; or type an entity_id like media_player.kitchen_display."
+			hint="Where broadsheet's voice replies play. 'browser' plays in this tab; pick a media_player entity to play through that speaker instead."
 		>
-			<input
-				class="text"
-				type="text"
+			<select
+				class="picker"
 				value={ttsTarget.value ?? 'browser'}
-				placeholder="browser"
-				list="tts-targets"
 				onchange={(e) =>
-					(ttsTarget.value = (e.currentTarget as HTMLInputElement).value.trim() || 'browser')}
-			/>
-			<datalist id="tts-targets">
-				{#each ttsTargetOptions as opt (opt)}
-					<option value={opt}></option>
-				{/each}
-			</datalist>
+					(ttsTarget.value =
+						(e.currentTarget as HTMLSelectElement).value || 'browser')}
+			>
+				<option value="browser">Browser (this tab)</option>
+				{#if mediaPlayerOptions.length > 0}
+					<optgroup label="HA media players ({mediaPlayerOptions.length})">
+						{#each mediaPlayerOptions as opt (opt.id)}
+							<option value={opt.id}>
+								{opt.name}{opt.area ? ` — ${opt.area}` : ''}
+							</option>
+						{/each}
+					</optgroup>
+				{:else}
+					<option disabled>(no media_player entities discovered)</option>
+				{/if}
+			</select>
+			{#if ttsTarget.value && ttsTarget.value !== 'browser'}
+				<span class="summary-line">Playing through <code>{ttsTarget.value}</code></span>
+			{/if}
 		</SettingsRow>
 
 		<SettingsRow
@@ -227,8 +251,7 @@
 		color: var(--state-alert, #bf3a30);
 	}
 
-	.picker,
-	.text {
+	.picker {
 		padding: var(--space-2) var(--space-3);
 		font-family: var(--font-mono);
 		font-size: var(--text-caption);
@@ -239,8 +262,7 @@
 		width: min(28rem, 70vw);
 	}
 
-	.picker:focus,
-	.text:focus {
+	.picker:focus {
 		outline: none;
 		border-color: var(--accent);
 	}

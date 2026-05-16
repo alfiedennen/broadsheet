@@ -1,8 +1,15 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { env } from '$env/dynamic/public';
-	import { saveLLAT, isValidHaUrl, looksLikeLLAT, normaliseUrl } from '$lib/ha/auth';
+	import {
+		saveLLAT,
+		isValidHaUrl,
+		looksLikeLLAT,
+		normaliseUrl,
+		detectAuthMode
+	} from '$lib/ha/auth';
 	import { connect } from '$lib/ha/client';
 
 	// Pre-fill from env in dev — env.PUBLIC_HA_URL points at production HA
@@ -12,6 +19,24 @@
 	let urlError = $state<string | null>(null);
 	let tokenError = $state<string | null>(null);
 	let submitError = $state<string | null>(null);
+
+	// Guard: when the user is already authenticated (add-on mode = SUPERVISOR_TOKEN
+	// injected, OR LLAT mode = credentials in localStorage), the setup form is
+	// not just useless — it's actively dangerous. Submitting it would call
+	// saveLLAT() and then connect() with whatever the user typed, OVERWRITING
+	// the live addon-mode connection with an unauthorised one and dropping any
+	// open WS subscriptions.
+	//
+	// V3 manual dogfood caught this: a back-button slip landed the user here
+	// after navigating through the kebab, and they reported "everything's gone"
+	// after the form's connect() call killed their session. Spec: BUG B-3.
+	//
+	// Redirect to home immediately on mount when any credential path exists.
+	onMount(() => {
+		if (detectAuthMode() !== 'none') {
+			goto(`${base}/`);
+		}
+	});
 
 	async function handleSubmit(e: Event) {
 		e.preventDefault();

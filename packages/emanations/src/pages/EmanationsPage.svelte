@@ -78,9 +78,17 @@
 		const sensor = discovery.byEntityId(sensorId);
 		const stateValue = (sensor?.state?.state ?? '').toString().trim();
 		if (!stateValue || NOT_PRESENT.has(stateValue.toLowerCase())) return { kind: 'away' };
-		const area = discovery.areas.find(
-			(a) => a.id !== '__unsorted__' && a.name.toLowerCase() === stateValue.toLowerCase()
-		);
+		// V3 manual dogfood (BUG B-6): match slug OR display name OR
+		// slug-normalised display name. Kept in sync with routes/+page.svelte
+		// — extract to a shared helper if a third copy ever needs it.
+		const needle = stateValue.toLowerCase();
+		const area = discovery.areas.find((a) => {
+			if (a.id === '__unsorted__') return false;
+			if (a.name.toLowerCase() === needle) return true;
+			if (a.id.toLowerCase() === needle) return true;
+			if (a.name.toLowerCase().replace(/\s+/g, '_') === needle) return true;
+			return false;
+		});
 		return area ? { kind: 'in-room', area } : { kind: 'away' };
 	}
 
