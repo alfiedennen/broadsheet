@@ -49,6 +49,43 @@
 				: env.PUBLIC_BROADSHEET_READONLY !== 'false'
 		});
 
+		// Plan 1 client-side completion: when sidebar takeover is on, write
+		// HA's `dockedSidebar` localStorage key. The server-side
+		// `frontend/set_user_data` call from init/sidebar.py only takes
+		// effect on a fresh-browser FIRST login — HA frontend reads
+		// `dockedSidebar` from localStorage on every subsequent load and
+		// the localStorage copy wins. Without this, takeover only ever
+		// hides the sidebar for brand-new browsers; existing users see
+		// the sidebar return as soon as the server-side flag is
+		// out-of-sync with whatever HA wrote to their localStorage
+		// previously.
+		//
+		// HA JSON-encodes scalar localStorage values — `dockedSidebar`
+		// is stored as the literal string `"always_hidden"` (with the
+		// quote characters), not the bare word. The event dispatch fires
+		// HA frontend's own listener so the live page chrome updates
+		// without a refresh; on direct ingress URLs (no parent HA frame)
+		// the event is a no-op and the next HA page load picks up the
+		// new value.
+		if (addonEnv?.sidebarTakeover === true && typeof window !== 'undefined') {
+			try {
+				const target = window.self !== window.top ? window.parent : window;
+				const desired = JSON.stringify('always_hidden');
+				if (target.localStorage.getItem('dockedSidebar') !== desired) {
+					target.localStorage.setItem('dockedSidebar', desired);
+					target.dispatchEvent(
+						new CustomEvent('hass-dock-sidebar', { detail: { dock: 'always_hidden' } })
+					);
+					audit({ kind: 'auth-event', note: 'sidebar takeover: dockedSidebar localStorage set' });
+				}
+			} catch (e) {
+				// Same-origin sandboxing or storage blocked — bail silently.
+				// The server-side user_data fallback still applies for fresh logins.
+				// eslint-disable-next-line no-console
+				console.warn('[broadsheet] sidebar-takeover localStorage write failed:', e);
+			}
+		}
+
 		// 3. Detect auth mode + try to connect
 		const mode = detectAuthMode();
 		audit({ kind: 'auth-event', note: `boot — auth mode = ${mode}` });
