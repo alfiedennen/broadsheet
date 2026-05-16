@@ -174,14 +174,22 @@ export function computeAlerts(): Alert[] {
 		};
 		const active = paintingSets.active ?? 'default';
 		const sets = paintingSets.sets?.[active] ?? {};
+		// paintingSets shape (per home-page paintingForPerson):
+		//   sets.<setName>.<areaId>.<personSlug> = filename | null
+		// Outer Object.values iterates setName → areaMap;
+		// Inner Object.values iterates areaId → personMap;
+		// personMap[personSlug] is the filename (or null/undefined).
 		let missing = 0;
 		for (const p of discovery.persons) {
 			const personSlug = p.id.replace(/^person\./, '');
 			let hasAny = false;
-			for (const areaMap of Object.values(sets)) {
-				if (areaMap?.[personSlug]) {
-					hasAny = true;
-					break;
+			outer: for (const areaMap of Object.values(sets)) {
+				for (const personMap of Object.values(areaMap ?? {})) {
+					const pm = personMap as Record<string, string | null> | null | undefined;
+					if (pm?.[personSlug]) {
+						hasAny = true;
+						break outer;
+					}
 				}
 			}
 			if (!hasAny) missing++;
