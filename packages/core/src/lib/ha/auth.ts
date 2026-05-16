@@ -78,17 +78,6 @@ interface BroadsheetEnv {
 	 * (`lock.*` stays hard-banned regardless — see ha/actions.ts.)
 	 */
 	readOnly?: boolean;
-	/**
-	 * Add-on `sidebar_takeover` option. When `true` the addon's
-	 * init/sidebar.py sets `defaultPanel='broadsheet'` +
-	 * `dockedSidebar='always_hidden'` in each user's HA user_data on
-	 * boot, AND broadsheet's +layout.svelte writes the same
-	 * `dockedSidebar` value into HA frontend's localStorage (which
-	 * actually controls the live sidebar render — user_data alone is
-	 * only read on a fresh-browser first login). TakeoverBanner also
-	 * gates its first-launch advisory on this flag.
-	 */
-	sidebarTakeover?: boolean;
 }
 
 declare global {

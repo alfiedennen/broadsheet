@@ -21,7 +21,6 @@
 	import KebabNav from '$lib/components/KebabNav.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 	import ConnectionIndicator from '$lib/components/ConnectionIndicator.svelte';
-	import TakeoverBanner from '$lib/components/TakeoverBanner.svelte';
 
 	let { children } = $props();
 
@@ -49,66 +48,15 @@
 				: env.PUBLIC_BROADSHEET_READONLY !== 'false'
 		});
 
-		// Plan 1 client-side completion: when sidebar takeover is on, write
-		// HA's `dockedSidebar` localStorage key AND force HA frontend to
-		// re-render its chrome. The server-side `frontend/set_user_data`
-		// call from init/sidebar.py only takes effect on a fresh-browser
-		// FIRST login — HA frontend reads `dockedSidebar` from localStorage
-		// on every subsequent load and the localStorage copy wins.
-		//
-		// HA JSON-encodes scalar localStorage values — `dockedSidebar` is
-		// stored as the literal string `"always_hidden"` (with the quote
-		// characters), not the bare word.
-		//
-		// V3 manual dogfood (BUG B-1): writing localStorage alone is
-		// insufficient because HA's parent frame has already rendered the
-		// sidebar by the time the addon's iframe boots. The fix is to fire
-		// the same `hass-dock-sidebar` event HA's own Profile UI fires when
-		// the user toggles "Hide sidebar" — bubbles + composed so it
-		// crosses shadow DOM boundaries, dispatched on the parent frame's
-		// `home-assistant` root element (which has the listener).
-		//
-		// We're inside an iframe at /api/hassio_ingress/<token>/, same-origin
-		// with the parent HA frame, so direct DOM access to the parent works.
-		// On direct ingress URLs (no parent HA frame) the event dispatch is
-		// a no-op and the next HA page load picks up the new value naturally.
-		if (addonEnv?.sidebarTakeover === true && typeof window !== 'undefined') {
-			try {
-				const inIframe = window.self !== window.top;
-				const target = inIframe ? window.parent : window;
-				const desired = JSON.stringify('always_hidden');
-
-				if (target.localStorage.getItem('dockedSidebar') !== desired) {
-					target.localStorage.setItem('dockedSidebar', desired);
-
-					// Fire the dock event the way HA frontend's own Profile UI does.
-					// Without bubbles+composed it can't cross the shadow DOM into
-					// ha-sidebar's listener; without targeting the home-assistant root
-					// element the event never reaches the right listener.
-					const haRoot = inIframe
-						? target.document.querySelector('home-assistant')
-						: document.querySelector('home-assistant');
-					const evtTarget = haRoot ?? target;
-					evtTarget.dispatchEvent(
-						new CustomEvent('hass-dock-sidebar', {
-							detail: { dock: 'always_hidden' },
-							bubbles: true,
-							composed: true
-						})
-					);
-
-					audit({
-						kind: 'auth-event',
-						note: `sidebar takeover: dockedSidebar set${haRoot ? ' + event fired on home-assistant root' : ' (no haRoot — event fired on window)'}`
-					});
-				}
-			} catch (e) {
-				// Same-origin sandboxing or storage blocked — bail silently.
-				// The server-side user_data fallback still applies for fresh logins.
-				// eslint-disable-next-line no-console
-				console.warn('[broadsheet] sidebar-takeover localStorage write failed:', e);
-			}
-		}
+		// v0.2 architecture: broadsheet serves on a dedicated host port,
+		// NOT through HA ingress, so there's no HA chrome wrapping any
+		// page. v0.1's Plan 1 sidebar takeover (writing dockedSidebar
+		// localStorage on the parent HA frame + firing hass-dock-sidebar
+		// event) is no longer needed — there is no parent HA frame to
+		// manage. Sidebar entry into broadsheet is handled by the addon-
+		// registered Lovelace launcher dashboard (see
+		// docs/plans/plan-theme-G-frontend-not-panel.md); exit back to HA
+		// is the kebab's "Open Home Assistant" link (target="_top" → /).
 
 		// 3. Detect auth mode + try to connect
 		const mode = detectAuthMode();
@@ -218,15 +166,12 @@
 <ConnectionIndicator />
 
 <!--
-	TakeoverBanner appears bottom-centre on the FIRST visit after the
-	addon has applied the HA frontend takeover (sidebar collapsed +
-	broadsheet set as the default landing surface). Self-suppresses
-	via localStorage on first dismiss + when not in addon mode. See
-	docs/plans/plan-sidebar-takeover.md.
+	v0.2: TakeoverBanner retired. v0.1's banner advised users that
+	broadsheet had collapsed HA's sidebar on their behalf — in v0.2
+	there's no HA chrome to manipulate (broadsheet runs on its own
+	dedicated port), so no advisory is needed. See
+	docs/plans/plan-theme-G-frontend-not-panel.md.
 -->
-{#if booted}
-	<TakeoverBanner />
-{/if}
 
 <div class="app">
 	{#if booted}
