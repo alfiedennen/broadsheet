@@ -1,0 +1,15 @@
+{
+	"name": "@broadsheet/voice",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Voice substrate plugin for broadsheet — discovers HA conversation agents + TTS/STT providers, routes utterances HA-native-first with LLM fall-through, surfaces a transcript pane + push-to-talk inside broadsheet.",
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"build": "echo 'voice is built THROUGH @broadsheet/core (core imports it via the plugin registry) — no standalone build' && exit 0"
+	},
+	"peerDependencies": {
+		"@broadsheet/core": "workspace:*",
+		"svelte": "^5.1.0"
+	}
+}

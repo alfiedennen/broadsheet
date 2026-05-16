@@ -19,6 +19,9 @@ importers:
       '@broadsheet/tmdb-tv':
         specifier: workspace:*
         version: link:../tmdb-tv
+      '@broadsheet/voice':
+        specifier: workspace:*
+        version: link:../voice
       dompurify:
         specifier: ^3.4.3
         version: 3.4.3
@@ -91,6 +94,15 @@ importers:
         version: 5.55.5
 
   packages/tmdb-tv:
+    dependencies:
+      '@broadsheet/core':
+        specifier: workspace:*
+        version: link:../core
+      svelte:
+        specifier: ^5.1.0
+        version: 5.55.5
+
+  packages/voice:
     dependencies:
       '@broadsheet/core':
         specifier: workspace:*

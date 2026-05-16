@@ -43,6 +43,7 @@
     "@broadsheet/emanations": "workspace:*",
     "@broadsheet/ghost-cloud": "workspace:*",
     "@broadsheet/tmdb-tv": "workspace:*",
+    "@broadsheet/voice": "workspace:*",
     "dompurify": "^3.4.3",
     "home-assistant-js-websocket": "^9.4.0",
     "marked": "^18.0.3"

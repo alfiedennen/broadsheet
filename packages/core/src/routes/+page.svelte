@@ -40,6 +40,14 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 	import PresenceCards from '$lib/components/PresenceCards.svelte';
 	import type { PresenceCard } from '$lib/components/PresenceCards.types';
+	import { useRenderer } from '$lib/plugins/renderers.svelte';
+
+	// Voice plugin's mic pill. Renders bottom-right when the user
+	// has enabled @broadsheet/voice AND not opted out via the
+	// pillOnMoment curation flag. The renderer self-gates on the
+	// flag; if the plugin is off, .current is null and nothing
+	// mounts. See packages/voice/src/renderers/VoicePillRenderer.svelte.
+	const voicePill = useRenderer('voice-pill');
 
 	const personOverrides = $derived(
 		Object.fromEntries(
@@ -349,6 +357,11 @@
 			<span>HA {connection.haVersion}</span>
 		{/if}
 	</footer>
+
+	{#if voicePill.current}
+		{@const Pill = voicePill.current}
+		<Pill />
+	{/if}
 </PageShell>
 
 <style>

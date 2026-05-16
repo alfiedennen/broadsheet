@@ -88,3 +88,14 @@ export {
 // `useCurationField` and lays them out with `SettingsRow`.
 export { useCurationField } from './curation/store.svelte';
 export { default as SettingsRow } from './components/SettingsRow.svelte';
+
+/* ── HA connection surface (for plugins that need WS access) ─────── */
+// Most plugins read state via discovery + curation. The @broadsheet/voice
+// substrate needs WS-level access to discover HA's assist_pipeline +
+// conversation agents + TTS engines, AND to drive conversation/process
+// + tts/get_url calls at runtime. Exporting the connection accessor here
+// keeps the access path explicit + documented; plugin lazy-thunk
+// components import it; plugin index.ts files MUST NOT (per
+// import-type-only rule for the eager-loaded plugin object).
+export { getConnection } from './ha/client';
+export { audit } from './ha/audit';

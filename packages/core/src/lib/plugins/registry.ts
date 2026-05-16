@@ -30,10 +30,19 @@ import type { BroadsheetPlugin } from './types';
 import { plugin as emanations } from '@broadsheet/emanations';
 import { plugin as ghostCloud } from '@broadsheet/ghost-cloud';
 import { plugin as tmdbTv } from '@broadsheet/tmdb-tv';
+import { plugin as voice } from '@broadsheet/voice';
 
 /**
- * The bundled first-class plugins — the full trio, all ported. v0.2's
- * runtime-install path extends THIS file (and only this file) with a
- * second source for third-party plugins; the trio stays bundled.
+ * The bundled first-class plugins. v0.1.0 ships four:
+ *   - emanations  (presence painting)
+ *   - ghost-cloud (radar event playback)
+ *   - tmdb-tv     (Trending + New content rows on /tv)
+ *   - voice       (push-to-talk + transcript pane + HA-native-first
+ *                  conversation routing; pairs with @broadsheet/harold-preset
+ *                  for the opinionated Hitchcock-register variant)
+ *
+ * v0.2's runtime-install path extends THIS file (and only this file)
+ * with a second source for third-party plugins; the bundled set stays
+ * bundled.
  */
-export const BUNDLED_PLUGINS: BroadsheetPlugin[] = [emanations, ghostCloud, tmdbTv];
+export const BUNDLED_PLUGINS: BroadsheetPlugin[] = [emanations, ghostCloud, tmdbTv, voice];
