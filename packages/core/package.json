@@ -42,6 +42,7 @@
   "dependencies": {
     "@broadsheet/emanations": "workspace:*",
     "@broadsheet/ghost-cloud": "workspace:*",
+    "@broadsheet/harold-preset": "workspace:*",
     "@broadsheet/tmdb-tv": "workspace:*",
     "@broadsheet/voice": "workspace:*",
     "dompurify": "^3.4.3",

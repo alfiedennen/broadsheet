@@ -28,7 +28,13 @@
  * Spec: docs/plans/plan-voice-substrate.md.
  */
 
-import type { AssistPipeline, ConversationResult, TranscriptTurn } from './types';
+import type {
+	AssistPipeline,
+	ConversationResult,
+	MiddlewareContext,
+	TranscriptTurn
+} from './types';
+import { assemblePromptPrefix, fireOnTurn, runPreFilters } from './middleware.svelte';
 
 interface HassConnectionLike {
 	sendMessagePromise<T>(message: Record<string, unknown>): Promise<T>;
@@ -104,6 +110,14 @@ export interface RouteOptions {
 	haNativeFirst?: boolean;
 	/** beginTurn handle from the transcript bus — caller's responsibility. */
 	turn: TranscriptTurn;
+	/** Free-form tags forwarded to middleware (e.g. surface = 'pill' | '/voice'). */
+	tags?: Record<string, string>;
+	/**
+	 * If true (default), runs registered VoiceMiddleware around the
+	 * call: preFilter / wrapSystemPrompt / memoryInject / onTurn.
+	 * Set false in test code to keep the router pure.
+	 */
+	useMiddleware?: boolean;
 }
 
 /**
@@ -119,11 +133,49 @@ export async function routeUtterance(opts: RouteOptions): Promise<ConversationRe
 		text,
 		conversationId = null,
 		language,
-		haNativeFirst = true
+		haNativeFirst = true,
+		tags,
+		useMiddleware = true
 	} = opts;
+
+	const lang = language ?? pipeline.conversation_language;
+	const ctx: MiddlewareContext = {
+		text,
+		pipeline,
+		language: lang,
+		tags
+	};
+
+	// ── Middleware: preFilter ─────────────────────────────────────
+	// Presets can short-circuit (return null → silent reply) or
+	// rewrite the utterance (Italian detection → prepend a Sistema
+	// directive) before any HA call.
+	let effectiveText = text;
+	if (useMiddleware) {
+		const filtered = await runPreFilters(ctx);
+		if (filtered === null) {
+			const silentTurn = {
+				...opts.turn,
+				reply: '',
+				via: 'ha-native' as const,
+				spoke: false,
+				error: null
+			};
+			if (useMiddleware) await fireOnTurn(silentTurn, ctx);
+			return { turn: silentTurn };
+		}
+		effectiveText = filtered;
+		ctx.text = filtered;
+	}
 
 	const useNative =
 		haNativeFirst && pipeline.conversation_engine !== HA_NATIVE_AGENT_ID;
+
+	// Helper to finalise + fire onTurn observers
+	const finalise = async (result: ConversationResult): Promise<ConversationResult> => {
+		if (useMiddleware) await fireOnTurn(result.turn, ctx);
+		return result;
+	};
 
 	// Step 1: HA-native attempt (when applicable)
 	if (useNative) {
@@ -131,17 +183,14 @@ export async function routeUtterance(opts: RouteOptions): Promise<ConversationRe
 			const native = await callAgent(
 				conn,
 				HA_NATIVE_AGENT_ID,
-				text,
+				effectiveText,
 				conversationId,
-				language ?? pipeline.conversation_language
+				lang
 			);
 			const respType = native.response?.response_type;
 			if (respType === 'action_done') {
 				const speech = speechFrom(native);
-				// `action_done` with EMPTY speech = device side-effect (Harold
-				// convention: silent reply). With speech = a query that
-				// matched ("what time is it"). Mirror that.
-				return {
+				return finalise({
 					turn: {
 						...opts.turn,
 						reply: speech || '',
@@ -150,11 +199,11 @@ export async function routeUtterance(opts: RouteOptions): Promise<ConversationRe
 						error: null
 					},
 					speech: speech ? { text: speech } : undefined
-				};
+				});
 			}
 			if (respType === 'query_answer') {
 				const speech = speechFrom(native);
-				return {
+				return finalise({
 					turn: {
 						...opts.turn,
 						reply: speech,
@@ -163,13 +212,13 @@ export async function routeUtterance(opts: RouteOptions): Promise<ConversationRe
 						error: null
 					},
 					speech: speech ? { text: speech } : undefined
-				};
+				});
 			}
 			if (isDeviceError(native)) {
 				// Device-control guard: HA understood, couldn't act. Return
 				// HA's friendly error WITHOUT falling through to the LLM.
 				const speech = speechFrom(native);
-				return {
+				return finalise({
 					turn: {
 						...opts.turn,
 						reply: speech,
@@ -178,33 +227,30 @@ export async function routeUtterance(opts: RouteOptions): Promise<ConversationRe
 						error: native.response?.data?.code ?? 'ha-error'
 					},
 					speech: speech ? { text: speech } : undefined
-				};
+				});
 			}
 			// Otherwise (no_intent_match): fall through to LLM step
 			if (!isNoIntentMatch(native)) {
-				// Defensive — unknown response shape; log + fall through
 				// eslint-disable-next-line no-console
 				console.warn('[@broadsheet/voice] unknown HA-native response', native);
 			}
 		} catch (err) {
-			// HA-native is the cheap fast path; failures here aren't
-			// terminal — fall through to the LLM agent anyway.
 			// eslint-disable-next-line no-console
 			console.warn('[@broadsheet/voice] HA-native error, falling through', err);
 		}
 	}
 
-	// Step 2: configured LLM agent
+	// Step 2: configured LLM agent — middleware can prepend system
+	// prompts + memory injections via assemblePromptPrefix.
+	let llmInput = effectiveText;
+	if (useMiddleware) {
+		const prefix = await assemblePromptPrefix(ctx);
+		if (prefix) llmInput = `${prefix}\n\n${effectiveText}`;
+	}
 	try {
-		const llm = await callAgent(
-			conn,
-			pipeline.conversation_engine,
-			text,
-			conversationId,
-			language ?? pipeline.conversation_language
-		);
+		const llm = await callAgent(conn, pipeline.conversation_engine, llmInput, conversationId, lang);
 		const speech = speechFrom(llm);
-		return {
+		return finalise({
 			turn: {
 				...opts.turn,
 				reply: speech,
@@ -216,10 +262,10 @@ export async function routeUtterance(opts: RouteOptions): Promise<ConversationRe
 						: null
 			},
 			speech: speech ? { text: speech } : undefined
-		};
+		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
-		return {
+		return finalise({
 			turn: {
 				...opts.turn,
 				reply: null,
@@ -227,6 +273,6 @@ export async function routeUtterance(opts: RouteOptions): Promise<ConversationRe
 				spoke: false,
 				error: msg
 			}
-		};
+		});
 	}
 }

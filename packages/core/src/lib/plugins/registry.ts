@@ -31,18 +31,29 @@ import { plugin as emanations } from '@broadsheet/emanations';
 import { plugin as ghostCloud } from '@broadsheet/ghost-cloud';
 import { plugin as tmdbTv } from '@broadsheet/tmdb-tv';
 import { plugin as voice } from '@broadsheet/voice';
+import { plugin as haroldPreset } from '@broadsheet/harold-preset';
 
 /**
- * The bundled first-class plugins. v0.1.0 ships four:
- *   - emanations  (presence painting)
- *   - ghost-cloud (radar event playback)
- *   - tmdb-tv     (Trending + New content rows on /tv)
- *   - voice       (push-to-talk + transcript pane + HA-native-first
- *                  conversation routing; pairs with @broadsheet/harold-preset
- *                  for the opinionated Hitchcock-register variant)
+ * The bundled first-class plugins. v0.1.0 ships five:
+ *   - emanations    (presence painting)
+ *   - ghost-cloud   (radar event playback)
+ *   - tmdb-tv       (Trending + New content rows on /tv)
+ *   - voice         (push-to-talk + transcript pane + HA-native-first
+ *                    conversation routing — the generic substrate)
+ *   - harold-preset (opinionated Hitchcock-register bundle on top of
+ *                    voice: prompts + filters + Italian detection +
+ *                    conversational memory + wakeword + meeting-mode
+ *                    blueprint. Tap to install Anthropic + ElevenLabs
+ *                    keys.)
  *
  * v0.2's runtime-install path extends THIS file (and only this file)
  * with a second source for third-party plugins; the bundled set stays
  * bundled.
  */
-export const BUNDLED_PLUGINS: BroadsheetPlugin[] = [emanations, ghostCloud, tmdbTv, voice];
+export const BUNDLED_PLUGINS: BroadsheetPlugin[] = [
+	emanations,
+	ghostCloud,
+	tmdbTv,
+	voice,
+	haroldPreset
+];

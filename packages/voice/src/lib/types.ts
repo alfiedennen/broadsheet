@@ -134,3 +134,47 @@ export interface ConversationResult {
 		audioUrl?: string; // present when target=browser
 	};
 }
+
+/* ── Middleware contract — opinionated presets plug here ───────────── */
+
+/**
+ * Context passed to every middleware hook. Captures the utterance + the
+ * pipeline + the language + any tags the calling surface set (e.g.
+ * `surface: 'pill'` vs `surface: '/voice'` vs `surface: 'wall'` so
+ * Harold's per-surface prompts can switch).
+ */
+export interface MiddlewareContext {
+	text: string;
+	pipeline: AssistPipeline;
+	language: string;
+	/** Free-form tags the caller passes (e.g. surface origin). */
+	tags?: Record<string, string>;
+}
+
+/**
+ * Voice middleware. Presets register an object of these hooks at boot
+ * via `registerVoiceMiddleware()`. The voice router calls them in order:
+ *
+ *   1. preFilter   — chance to short-circuit before any HA call
+ *      (returns the (possibly-rewritten) text to use, OR null to
+ *      reply with the silent sentinel `~` without ever hitting HA)
+ *   2. wrapSystemPrompt — prepends a system-prompt block to the
+ *      LLM-only call (HA-native is unaffected; native intent matching
+ *      can't take a system prompt)
+ *   3. memoryInject — returns text to prepend to the LLM call AFTER the
+ *      system prompt; presets use this for "retrieved past
+ *      conversations" injection
+ *   4. onTurn — called once after the turn completes with the final
+ *      TranscriptTurn (writers persist to memory here)
+ *
+ * Every hook is optional. Presets implement only what they need.
+ * Multiple presets can register; hooks run in registration order
+ * (FIFO).
+ */
+export interface VoiceMiddleware {
+	id: string;
+	preFilter?: (ctx: MiddlewareContext) => string | null | Promise<string | null>;
+	wrapSystemPrompt?: (ctx: MiddlewareContext) => string | Promise<string>;
+	memoryInject?: (ctx: MiddlewareContext) => string | Promise<string>;
+	onTurn?: (turn: TranscriptTurn, ctx: MiddlewareContext) => void | Promise<void>;
+}

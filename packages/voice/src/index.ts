@@ -26,6 +26,23 @@
 
 import type { BroadsheetPlugin } from '@broadsheet/core';
 
+/* Re-export the middleware registry + types so presets (Harold and
+ * friends) can register hooks against the voice substrate without
+ * reaching into voice's internal modules. The voice plugin object
+ * itself is import-type-only per the BroadsheetPlugin contract; these
+ * runtime imports are explicit "voice's plug points" for presets.
+ *
+ * See docs/plans/plan-harold-preset.md for the consumer side. */
+export { voiceMiddleware } from './lib/middleware.svelte';
+export type {
+	VoiceMiddleware,
+	MiddlewareContext,
+	TranscriptTurn,
+	AssistPipeline,
+	ConversationAgent,
+	VoiceDiscovery
+} from './lib/types';
+
 export const plugin: BroadsheetPlugin = {
 	id: 'voice',
 	version: '0.1.0',

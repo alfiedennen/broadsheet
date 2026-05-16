@@ -79,7 +79,8 @@ describe('voice routing: HA-native first', () => {
 			conn: { sendMessagePromise },
 			pipeline: fakePipeline('conversation.openai'),
 			text: 'turn on kitchen lights',
-			turn: fakeTurn('turn on kitchen lights')
+			turn: fakeTurn('turn on kitchen lights'),
+			useMiddleware: false
 		});
 		expect(sendMessagePromise).toHaveBeenCalledTimes(1);
 		expect(sendMessagePromise.mock.calls[0][0].agent_id).toBe('conversation.home_assistant');
@@ -97,7 +98,8 @@ describe('voice routing: HA-native first', () => {
 			conn: { sendMessagePromise },
 			pipeline: fakePipeline('conversation.openai'),
 			text: 'turn on kitchen lights',
-			turn: fakeTurn('turn on kitchen lights')
+			turn: fakeTurn('turn on kitchen lights'),
+			useMiddleware: false
 		});
 		expect(sendMessagePromise).toHaveBeenCalledTimes(1);
 		expect(r.turn.via).toBe('ha-native');
