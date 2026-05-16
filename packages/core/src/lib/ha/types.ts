@@ -144,6 +144,7 @@ export interface AuditEntry {
 		| 'dry-run' // dry-run mode returned fake success
 		| 'call-service-error' // call was made but HA returned error
 		| 'registry-write' // area/entity/device registry mutation
+		| 'admin-write' // settings-surface mutation (integration reload/disable/remove, addon start/stop, log clear)
 		| 'connection-status' // connection lifecycle event
 		| 'auth-event'; // setup, token saved, token cleared
 	domain?: string;

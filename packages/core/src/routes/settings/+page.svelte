@@ -63,6 +63,37 @@
 				const n = (curationStore.current.customPages ?? []).length;
 				return n === 0 ? 'none yet' : `${n} custom page${n === 1 ? '' : 's'}`;
 			}
+		},
+		// HA-native settings surfaces (v0.1.0 scope expansion — see
+		// docs/plans/plan-ha-settings-native-uis.md). These read +
+		// mutate HA's own registries / supervisor, surfacing the most-
+		// touched config flows in broadsheet's editorial register
+		// rather than HA's material-design config tree. "Open HA settings →"
+		// in the kebab nav covers anything we don't render natively.
+		{
+			slug: 'integrations',
+			label: 'Integrations',
+			tagline: 'Every integration HA has installed. Reload, configure, remove.',
+			// Count is async (needs WS call); shown as ellipsis until /settings/integrations is opened
+			count: () => '—'
+		},
+		{
+			slug: 'devices',
+			label: 'Devices',
+			tagline: 'Grouped by integration. Rename, reassign rooms, disable.',
+			count: () => '—'
+		},
+		{
+			slug: 'addons',
+			label: 'Add-ons',
+			tagline: 'Start, stop, update. Uninstall stays in HA.',
+			count: () => '—'
+		},
+		{
+			slug: 'logs',
+			label: 'Logs',
+			tagline: "HA's recent warnings + errors, grouped by integration.",
+			count: () => '—'
 		}
 	];
 </script>

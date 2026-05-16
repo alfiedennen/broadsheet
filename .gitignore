@@ -38,3 +38,4 @@ apps/addon/broadsheet/www/
 
 # Local temp files used during commit-message authoring
 .git-commit-msg.txt
+.dogfood/
