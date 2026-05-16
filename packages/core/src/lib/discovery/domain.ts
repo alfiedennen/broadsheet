@@ -88,6 +88,16 @@ export interface DomainEntity {
 export interface DomainArea {
 	id: string; // area_id
 	name: string;
+	/**
+	 * Theme H: did broadsheet humanize a raw HA slug into this name?
+	 * True when the HA-side area never had a friendly name and we
+	 * fell back to title-casing the slug (e.g. `alfies_office` →
+	 * `Alfies Office`). Used to surface a "low confidence — your HA
+	 * area has no proper name, click to override" indicator on the
+	 * editorial register. False when the user has either set a
+	 * friendly name in HA OR a curation rename in broadsheet.
+	 */
+	wasHumanized: boolean;
 	icon: string | null;
 	picture: string | null;
 	floorId: string | null;
@@ -289,12 +299,27 @@ export function projectDomain(input: {
 			// area name (alfies_office → Alfies Office, library → Library)
 			// so the editorial register doesn't expose raw IDs in hero
 			// italic. See lib/utils/humanize.ts (BUG-005).
+			const humanized = humanizeAreaName(a.name);
+			const finalName = override?.rename || humanized;
+			// Theme H: wasHumanized = true when broadsheet had to humanize
+			// a slug (HA-side area never given a friendly name) AND user
+			// has not curated a rename. Used by RoomReveal + others to
+			// surface a low-confidence indicator on the area-name pencil.
+			const wasHumanized = !override?.rename && humanized !== a.name;
 			const decorated: RawArea = {
 				...a,
-				name: override?.rename || humanizeAreaName(a.name),
+				name: finalName,
 				icon: override?.iconOverride !== undefined ? override.iconOverride : a.icon
 			};
-			return buildArea(decorated, recs, hiddenRecs, toDomain, input.states, deviceById);
+			return buildArea(
+				decorated,
+				recs,
+				hiddenRecs,
+				toDomain,
+				input.states,
+				deviceById,
+				wasHumanized
+			);
 		});
 
 	const unsortedRecs = visibleByArea.get(UNSORTED_ID) ?? [];
@@ -498,7 +523,8 @@ function buildArea(
 	hiddenRecs: ComposedRec[],
 	toDomain: (r: ComposedRec) => DomainEntity,
 	states: Record<string, State>,
-	_deviceById: Map<string, RawDevice>
+	_deviceById: Map<string, RawDevice>,
+	wasHumanized: boolean = false
 ): DomainArea {
 	const lights: DomainEntity[] = [];
 	const switches: DomainEntity[] = [];
@@ -574,6 +600,7 @@ function buildArea(
 	return {
 		id: raw.area_id,
 		name: raw.name,
+		wasHumanized,
 		icon: raw.icon,
 		picture: raw.picture,
 		floorId: raw.floor_id,

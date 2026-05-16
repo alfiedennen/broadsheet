@@ -35,8 +35,13 @@
 		onclick,
 		href
 	}: {
-		/** The auto-inferred value to display. */
-		value: string;
+		/**
+		 * The auto-inferred value to display. Optional — omit when
+		 * the pencil should sit alone (e.g. trailing affordance after
+		 * already-rendered prose like the moment-line clauses, which
+		 * are HTML-escaped + highlighted server-side).
+		 */
+		value?: string;
 		/** a11y label for the pencil affordance. */
 		label: string;
 		/** Visual indicator of how trustworthy the auto-pick is. */
@@ -64,7 +69,7 @@
 </script>
 
 <span class="inline-pin" data-confidence={confidence}>
-	<span class="pin-value">{value}</span>
+	{#if value !== undefined}<span class="pin-value">{value}</span>{/if}
 	{#if children}
 		<details class="pin-popover" bind:open={popoverOpen}>
 			<summary

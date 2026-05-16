@@ -39,6 +39,7 @@
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import Explainer from '$lib/components/Explainer.svelte';
 	import PresenceCards from '$lib/components/PresenceCards.svelte';
+	import InlinePin from '$lib/components/InlinePin.svelte';
 	import type { PresenceCard } from '$lib/components/PresenceCards.types';
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
 
@@ -273,13 +274,25 @@
 				: slot.kind === 'away' && p.rankedPresenceSensors.length > 0
 					? 'low'
 					: 'auto';
+			const resolvedPainting = paintingsEnabled ? paintingForPerson(p, slot) : null;
+			// Theme H: when paintings are enabled, the person is
+			// in-room, AND there's no painting mapped for this
+			// (person, room) combo — surface a pin pointing at the
+			// emanations config so the user can upload one.
+			// (Out-of-room "away" image is a different upload path;
+			// keep that to the emanations config flow for now.)
+			const paintingPinHref =
+				paintingsEnabled && slot.kind === 'in-room' && !resolvedPainting
+					? `/settings/plugins/emanations/config/`
+					: undefined;
 			return {
 				person: p,
-				paintingUrl: paintingsEnabled ? paintingForPerson(p, slot) : null,
+				paintingUrl: resolvedPainting,
 				locationLabel: slot.kind === 'in-room' ? slot.area.name : 'Away',
 				away: slot.kind === 'away',
 				locationPinHref: `/settings/people/#${encodeURIComponent(p.id)}`,
-				locationConfidence: confidence
+				locationConfidence: confidence,
+				paintingPinHref
 			};
 		})
 	);
@@ -360,12 +373,25 @@
 			{:else if manifestClauses.length === 0}
 				Quiet.
 			{:else}
-				<!-- highlightValues HTML-escapes input then wraps numeric
-				     values + rate-band descriptors in <em>; safe to {@html}. -->
-				{#each manifestClauses as line, i (i)}<!--
-					-->{@html highlightValues(line)}{#if i < manifestClauses.length - 1}
-						<br />
-					{/if}{/each}
+				<!-- Theme H: render each clause individually so the
+				     indoor-temp + electricity-rate clauses get their own
+				     InlinePin → navigate to /settings/house at the
+				     relevant ms-row. Other clauses (tod, presence,
+				     outside) have no picker target so render bare.
+				     highlightValues HTML-escapes input then wraps
+				     numeric values + rate-band descriptors in <em>;
+				     safe to {@html}. -->
+				{#if todClause}{@html highlightValues(todClause)}<br />{/if}
+				{#if presenceClause}{@html highlightValues(presenceClause)}<br />{/if}
+				{#if indoorClause}{@html highlightValues(indoorClause)}<InlinePin
+						label="Change indoor temp sensor"
+						href="/settings/house/#moment-sensors-primaryIndoorTempSensorId"
+					/><br />{/if}
+				{#if rateClause}{@html highlightValues(rateClause)}<InlinePin
+						label="Change electricity rate sensor"
+						href="/settings/house/#moment-sensors-primaryElectricityRateSensorId"
+					/><br />{/if}
+				{#if outsideClause}{@html highlightValues(outsideClause)}{/if}
 			{/if}
 		{/snippet}
 	</Hero>

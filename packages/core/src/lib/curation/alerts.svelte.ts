@@ -130,6 +130,112 @@ export function computeAlerts(): Alert[] {
 		});
 	}
 
+	// Theme H: auto-inference gaps. The "everything broadsheet
+	// auto-decided that the user might want to override" inventory.
+	// Each surfaces with a CTA that navigates to the relevant
+	// settings surface with the right row pre-flashed
+	// (via hash-navigate target ids).
+
+	// 4a. Areas auto-humanized from raw HA slugs (low confidence).
+	const slugAreas = discovery.areas.filter(
+		(a) => a.id !== '__unsorted__' && a.wasHumanized
+	);
+	if (slugAreas.length > 0) {
+		const one = slugAreas.length === 1;
+		const sample = slugAreas
+			.slice(0, 3)
+			.map((a) => a.name)
+			.join(', ');
+		out.push({
+			id: 'slug-area-names',
+			severity: 'info',
+			title: `${slugAreas.length} ${one ? 'room could use a friendlier name' : 'rooms could use friendlier names'}`,
+			body: `${sample}${slugAreas.length > 3 ? ` + ${slugAreas.length - 3} more` : ''}. broadsheet's title-cased the underlying slugs; rename in House for the editorial register.`,
+			cta: {
+				label: one ? 'Rename in House' : 'Browse rooms',
+				href: href('/settings/house/')
+			}
+		});
+	}
+
+	// 4b. Persons home but in-room with no painting mapped, when
+	// emanations is enabled. Encourages users to actually populate
+	// the painting set after enabling the plugin.
+	const emanationsEnabled =
+		curationStore.current.plugins?.['emanations']?.enabled === true;
+	if (emanationsEnabled && discovery.persons.length > 0) {
+		// Reuse paintingSets curation shape from the home page logic.
+		// Best-effort lookup; if curation is missing the field, treat
+		// as "no paintings".
+		const paintingSets = (curationStore.current.plugins?.['emanations']?.config
+			?.paintingSets ?? {}) as {
+			active?: string;
+			sets?: Record<string, Record<string, Record<string, string | null>>>;
+		};
+		const active = paintingSets.active ?? 'default';
+		const sets = paintingSets.sets?.[active] ?? {};
+		let missing = 0;
+		for (const p of discovery.persons) {
+			const personSlug = p.id.replace(/^person\./, '');
+			let hasAny = false;
+			for (const areaMap of Object.values(sets)) {
+				if (areaMap?.[personSlug]) {
+					hasAny = true;
+					break;
+				}
+			}
+			if (!hasAny) missing++;
+		}
+		if (missing > 0) {
+			const one = missing === 1;
+			out.push({
+				id: 'missing-paintings',
+				severity: 'info',
+				title: `${missing} ${one ? 'person has' : 'people have'} no paintings yet`,
+				body: `@broadsheet/emanations is enabled but no per-room paintings are mapped. Procedural orange fields render as a fallback; upload paintings to give each room its own face.`,
+				cta: {
+					label: 'Configure Emanations',
+					href: href('/settings/plugins/emanations/config/')
+				}
+			});
+		}
+	}
+
+	// 4c. Plugin enabled but missing required config — keyed by
+	// well-known fields. Catches: harold-preset (Anthropic key),
+	// tmdb-tv (TMDB API key).
+	const plugins = curationStore.current.plugins ?? {};
+	if (plugins['harold-preset']?.enabled) {
+		const hpCfg = (plugins['harold-preset'].config ?? {}) as Record<string, unknown>;
+		if (!hpCfg.anthropicKey) {
+			out.push({
+				id: 'harold-preset-no-key',
+				severity: 'attention',
+				title: 'Harold needs an Anthropic API key',
+				body: 'The @broadsheet/harold-preset plugin is enabled but won\'t reach Claude until you paste a key (sk-ant-…) in its settings.',
+				cta: {
+					label: 'Add the key',
+					href: href('/settings/plugins/harold-preset/config/')
+				}
+			});
+		}
+	}
+	if (plugins['tmdb-tv']?.enabled) {
+		const tmdbIntegration = curationStore.current.integrations?.tmdb;
+		if (!tmdbIntegration?.apiKey) {
+			out.push({
+				id: 'tmdb-no-key',
+				severity: 'attention',
+				title: 'TMDB needs an API key',
+				body: 'The @broadsheet/tmdb-tv plugin is enabled but Trending + New content rows on /tv won\'t populate without a free TMDB v4 read token.',
+				cta: {
+					label: 'Add the key',
+					href: href('/settings/plugins/tmdb-tv/config/')
+				}
+			});
+		}
+	}
+
 	// 5. Connection unstable (5+ reconnects)
 	if (connection.reconnectAttempts >= 5) {
 		out.push({

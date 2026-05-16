@@ -64,6 +64,18 @@
 							mood={card.away ? 'cool' : 'warm'}
 						/>
 					{/if}
+					{#if card.paintingPinHref}
+						<!-- Theme H: painting slot is empty (procedural
+						     fallback rendered above). Surface a small
+						     "upload a painting" affordance overlaid on
+						     the band so the user can fix it from here. -->
+						<a
+							class="painting-pin"
+							href={card.paintingPinHref}
+							aria-label="Upload a painting for {card.person.name} in this room"
+							title="Upload a painting for this room"
+						>✏️</a>
+					{/if}
 				</div>
 				<header class="card-meta">
 					<h3 class="card-name">{card.person.name}</h3>
@@ -123,6 +135,30 @@
 		width: 100%;
 		aspect-ratio: 16 / 9;
 		overflow: hidden;
+	}
+
+	/* Theme H: small painting-upload affordance overlaid bottom-right
+	 * of the card-band. Subtle by default, picks up on hover. */
+	.painting-pin {
+		position: absolute;
+		bottom: var(--space-2);
+		right: var(--space-2);
+		opacity: 0.45;
+		font-size: 0.9rem;
+		line-height: 1;
+		padding: 0.3em 0.5em;
+		border-radius: var(--radius-pill);
+		background: rgba(0, 0, 0, 0.4);
+		color: var(--fg);
+		text-decoration: none;
+		backdrop-filter: blur(4px);
+		transition: opacity var(--ease-quick), background var(--ease-quick);
+	}
+	.painting-pin:hover,
+	.painting-pin:focus {
+		opacity: 1;
+		background: rgba(0, 0, 0, 0.7);
+		outline: none;
 	}
 
 	.card-meta {

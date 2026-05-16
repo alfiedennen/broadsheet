@@ -72,14 +72,12 @@
 
 	// Theme H: confidence indicator for area-name
 	//   'overridden' → user has curated a rename
-	//   'low'        → area.name looks like a raw HA slug (lowercase_with_underscores)
-	//   'auto'       → friendly name from HA, looks human
+	//   'low'        → broadsheet auto-humanized a slug (HA-side has no
+	//                  friendly name; "alfies_office" → "Alfies Office")
+	//   'auto'       → friendly name from HA, looks human as-is
 	const curated = $derived(curationStore.current.areas[area.id]?.rename);
-	const looksLikeSlug = $derived(
-		!curated && /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(area.name)
-	);
 	const confidence = $derived<'auto' | 'low' | 'overridden'>(
-		curated ? 'overridden' : looksLikeSlug ? 'low' : 'auto'
+		curated ? 'overridden' : area.wasHumanized ? 'low' : 'auto'
 	);
 </script>
 

@@ -35,10 +35,18 @@
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { updateEntityArea, updateDeviceArea, createArea } from '$lib/ha/registry';
+	import { onMount } from 'svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import { wireHashHighlight } from '$lib/utils/hashNavigate';
+
+	// Theme H: support InlinePin navigate-with-context arrivals from
+	// /lights /heat /wall area pencils + home-page moment-clause pencils.
+	// Fragments: #area-<id> for area rows, #moment-sensors-<key> for the
+	// pickers ('primaryIndoorTempSensorId' or 'primaryElectricityRateSensorId').
+	onMount(() => wireHashHighlight());
 
 	const sortedAreas = $derived.by(() => {
 		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
@@ -842,7 +850,16 @@
 			{@const visibleGroups = groupByDevice(visibleEntitiesIn(area))}
 			{@const hiddenGroups = groupByDevice(area.hiddenEntities)}
 			{@const showingHidden = showHiddenInAreaId === area.id}
-			<li class="area-row" class:expanded class:hidden class:unsorted={isUnsorted}>
+			<!-- id is the Theme H hash-navigate target for area-name pencils
+			     on /lights /heat /wall (#area-<id>). wireHashHighlight()
+			     above flashes this row on arrival. -->
+			<li
+				class="area-row"
+				id="area-{area.id}"
+				class:expanded
+				class:hidden
+				class:unsorted={isUnsorted}
+			>
 				<header class="area-head">
 					{#if renaming}
 						<div class="title-block rename-mode">
@@ -1221,7 +1238,10 @@
 		choice doesn't match what you'd write yourself.
 	</p>
 	<div class="ms-grid">
-		<label class="ms-row">
+		<!-- ids are Theme H hash-navigate targets for moment-clause
+		     pencils on the home page (#moment-sensors-<key>).
+		     wireHashHighlight() flashes the row on arrival. -->
+		<label class="ms-row" id="moment-sensors-primaryIndoorTempSensorId">
 			<span class="ms-name">Indoor temp</span>
 			<span class="ms-hint">
 				"Hallway 17°C." Defaults to a public-room temp.
@@ -1249,7 +1269,7 @@
 			</select>
 		</label>
 
-		<label class="ms-row">
+		<label class="ms-row" id="moment-sensors-primaryElectricityRateSensorId">
 			<span class="ms-name">Electricity rate</span>
 			<span class="ms-hint">
 				"Electricity cheap at 8p." Octopus + similar HACS sensors auto-detect.
