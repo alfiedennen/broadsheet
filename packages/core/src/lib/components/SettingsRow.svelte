@@ -29,9 +29,21 @@
 </div>
 
 <style>
+	/* Grid layout, not flex.
+	 *
+	 * V3.2 dogfood found the flex version crushed the label column to
+	 * per-character width when the control side was wide (e.g.
+	 * password input + "Get a key" link side-by-side). Labels like
+	 * "TMDB API key" rendered as "TM / API / key" stacked vertically,
+	 * and the hint text below stacked the same way.
+	 *
+	 * Grid gives predictable column widths: label gets a min 10rem /
+	 * max 18rem column that can grow with content, control takes the
+	 * rest. Both columns can wrap their internal text naturally.
+	 */
 	.settings-row {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: 1fr;
 		gap: var(--space-2);
 		padding: var(--space-4) 0;
 		border-bottom: 1px solid var(--rule);
@@ -39,10 +51,9 @@
 
 	@media (min-width: 540px) {
 		.settings-row {
-			flex-direction: row;
-			align-items: baseline;
-			justify-content: space-between;
+			grid-template-columns: minmax(10rem, 18rem) 1fr;
 			gap: var(--space-6);
+			align-items: baseline;
 		}
 	}
 
@@ -54,7 +65,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
-		min-width: 0;
 	}
 
 	.label {
@@ -75,6 +85,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		flex: 0 0 auto;
+		min-width: 0;
+		flex-wrap: wrap;
 	}
 </style>

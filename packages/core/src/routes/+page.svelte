@@ -176,8 +176,19 @@
 	function presenceFor(p: DomainPerson): PresenceSlot {
 		const sensorId = effectiveSensorFor(p);
 		if (!sensorId) return { kind: 'away' };
-		const sensor = discovery.byEntityId(sensorId);
-		const stateValue = (sensor?.state?.state ?? '').toString().trim();
+		// V3.2 dogfood split-brain bug: `discovery.byEntityId(sensorId)`
+		// reads from the entity-registry projection. Template sensors
+		// like `sensor.alfie_committed_room` (defined via `template:` in
+		// configuration.yaml) live in HA's state machine but aren't
+		// always registered in the entity registry — so byEntityId
+		// returns null, this function falls through to 'away', and the
+		// person tile shows AWAY while the moment-text manifest
+		// (which reads directly from `discoveryStore.states`) shows
+		// the correct room. Fix: prefer the registry entity when
+		// available, but fall back to the raw state-machine record.
+		const fromRegistry = discovery.byEntityId(sensorId)?.state?.state;
+		const fromStates = discoveryStore.states[sensorId]?.state;
+		const stateValue = (fromRegistry ?? fromStates ?? '').toString().trim();
 		if (!stateValue || NOT_PRESENT.has(stateValue.toLowerCase())) return { kind: 'away' };
 		// V3 manual dogfood (BUG B-6): templated presence sensors like
 		// sensor.alfie_committed_room can report EITHER the area's display

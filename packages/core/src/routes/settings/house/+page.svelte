@@ -537,12 +537,55 @@
 		curationStore.current.momentSensors?.primaryElectricityRateSensorId ?? 'auto'
 	);
 
+	/* Humanise an entity into an editorial label.
+	 *
+	 * V3.2 dogfood: the raw `${name} — ${value} ${uom}` shape produced
+	 * dumps like "Current Rate Electricity (22M0332453 1900034316579) —
+	 * 0.250215 GBP/kWh" or "Hallway TRV — 17 °C" — accurate but ugly.
+	 *
+	 * Transforms:
+	 *   - Strip parenthetical noise from the friendly name
+	 *     (meter point IDs, technical suffixes)
+	 *   - Strip generic " TRV" / " Sensor" trailers (their reading IS
+	 *     the temperature, no extra word needed)
+	 *   - GBP/kWh values → "25p/kWh" (multiply by 100, round)
+	 *   - Temperature → "17°C" with at most 1 dp, no spurious space
+	 *   - Other numerics → trim trailing zeros to 3 sig figs
+	 */
+	function humanizeEntityName(raw: string): string {
+		return raw
+			.replace(/\s*\([^)]*\)\s*/g, '') // strip "(22M...)" segments
+			.replace(/\s+(?:TRV|Sensor)$/i, '') // strip noise suffixes
+			.trim();
+	}
+	function humanizeValue(value: unknown, uom: string): string {
+		if (value === '—' || value === '' || value == null) return '—';
+		const str = String(value);
+		if (str === '—' || str === '') return '—';
+		const num = Number(str);
+		if (!isFinite(num)) return `${str}${uom ? ` ${uom}` : ''}`;
+		// Currency-per-energy: convert GBP/kWh → p/kWh
+		if (/^GBP\/k?Wh$/i.test(uom)) {
+			const pence = num * 100;
+			return `${pence.toFixed(pence < 10 ? 1 : 0)}p/kWh`;
+		}
+		// Temperature: tight format, 1 dp max
+		if (uom === '°C' || uom === '°F' || uom === 'K') {
+			const rounded = Number.isInteger(num) ? num : Number(num.toFixed(1));
+			return `${rounded}${uom}`;
+		}
+		// Generic numeric: trim trailing zeros, max 3 sig figs
+		const trimmed = num.toPrecision(3).replace(/\.?0+$/, '');
+		return `${trimmed}${uom ? ` ${uom}` : ''}`;
+	}
 	function entityLabel(id: string): string {
 		const e = discovery.byEntityId(id);
-		const name = e?.name ?? id.replace(/^sensor\./, '').replace(/_/g, ' ');
-		const value = discoveryStore.states[id]?.state ?? '—';
-		const uom = discoveryStore.states[id]?.attributes?.unit_of_measurement ?? '';
-		return `${name} — ${value}${uom ? ` ${uom}` : ''}`;
+		const rawName = e?.name ?? id.replace(/^sensor\./, '').replace(/_/g, ' ');
+		const name = humanizeEntityName(rawName);
+		const stateRecord = discoveryStore.states[id];
+		const value: unknown = stateRecord?.state ?? '—';
+		const uom = String(stateRecord?.attributes?.unit_of_measurement ?? '');
+		return `${name} · ${humanizeValue(value, uom)}`;
 	}
 
 	async function pickMomentSensor(

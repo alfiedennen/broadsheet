@@ -14,6 +14,7 @@
 	import { connect, getConnection } from '$lib/ha/client';
 	import { callService } from '$lib/ha/actions';
 	import { discovery, bootDiscovery } from '$lib/discovery';
+	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { bootCuration, curationStore } from '$lib/curation/store.svelte';
 	import { bootPlugins, pluginLoader } from '$lib/plugins/loader.svelte';
 	import { bootContributors } from '$lib/plugins/contributors.svelte';
@@ -25,6 +26,12 @@
 	let { children } = $props();
 
 	let booted = $state(false);
+	// V3.2 dogfood: the bare "Connecting…" ellipsis on the bootscreen
+	// gave the user zero indication that anything was happening. Stage
+	// it instead so they see actual progress: connect → discover →
+	// ready. The discovery stage surfaces live counts the moment
+	// they're available.
+	let bootStage = $state<'auth' | 'connecting' | 'discovering' | 'plugins' | 'ready'>('auth');
 
 	onMount(async () => {
 		// 1. Restore audit-log tail (so reload preserves the last hour)
@@ -83,6 +90,7 @@
 			return;
 		}
 
+		bootStage = 'connecting';
 		try {
 			await connect(creds);
 		} catch (err) {
@@ -97,12 +105,14 @@
 		// Curation can be loaded before HA is even queried (it's local
 		// state); discovery needs HA. We await both before declaring
 		// booted so first paint has both layers ready.
+		bootStage = 'discovering';
 		try {
 			await Promise.all([bootCuration(), bootDiscovery()]);
 		} catch (err) {
 			// eslint-disable-next-line no-console
 			console.error('[broadsheet] discovery / curation boot failed', err);
 		}
+		bootStage = 'plugins';
 
 		// Plugin loader: pure static validation of the bundled plugins.
 		// Runs unconditionally — even if discovery/curation had a hiccup
@@ -178,7 +188,28 @@
 		{@render children()}
 	{:else}
 		<div class="bootscreen">
-			<p class="loading">Connecting to the house…</p>
+			<p class="loading">
+				{#if bootStage === 'auth'}
+					Checking credentials…
+				{:else if bootStage === 'connecting'}
+					Connecting to Home Assistant…
+					{#if connection.status === 'reconnecting'}
+						<span class="dim">(retrying)</span>
+					{/if}
+				{:else if bootStage === 'discovering'}
+					Reading the house…
+					{#if discovery.areas.length || discoveryStore.entities.length}
+						<span class="dim">
+							{discovery.areas.length} areas · {discoveryStore.entities.length} entities
+							{#if discovery.persons.length} · {discovery.persons.length} people{/if}
+						</span>
+					{/if}
+				{:else if bootStage === 'plugins'}
+					Wiring plugins…
+				{:else}
+					Almost ready…
+				{/if}
+			</p>
 		</div>
 	{/if}
 </div>
@@ -215,6 +246,16 @@
 		font-family: 'JetBrains Mono', ui-monospace, monospace;
 		font-size: 0.85rem;
 		letter-spacing: 0.05em;
+		text-align: center;
+		max-width: 36rem;
+		padding: 0 var(--space-4);
+	}
+
+	.loading .dim {
+		display: block;
+		margin-top: var(--space-2);
+		opacity: 0.6;
+		font-size: 0.75rem;
 	}
 
 	.status-pill {
