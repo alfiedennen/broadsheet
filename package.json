@@ -17,13 +17,5 @@
     "pnpm": ">=10"
   },
   "packageManager": "pnpm@11.1.1",
-  "license": "MIT",
-  "pnpm": {
-    "//onlyBuiltDependencies": "pnpm 11 ignores postinstall scripts of unknown deps unless explicitly allowlisted. esbuild is here for completeness (vite needs it); protobufjs + sharp pulled in transitively by @xenova/transformers (Plan 4 memory embeddings). Without this, CI install fails with ERR_PNPM_IGNORED_BUILDS.",
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "protobufjs",
-      "sharp"
-    ]
-  }
+  "license": "MIT"
 }
