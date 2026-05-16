@@ -202,14 +202,43 @@
 		// (covers sensors that report 'living_room' against an area whose
 		// display name is 'Living Room').
 		const needle = stateValue.toLowerCase();
-		const area = discovery.areas.find((a) => {
+		const slugNeedle = needle.replace(/\s+/g, '_');
+		// Strategy 1: exact match on name / id / slugged-name. Catches
+		// the common case where the HA area is friendly-named (e.g.
+		// "Living Room") and the sensor reports the same string.
+		const exact = discovery.areas.find((a) => {
 			if (a.id === '__unsorted__') return false;
 			if (a.name.toLowerCase() === needle) return true;
-			if (a.id.toLowerCase() === needle) return true;
-			if (a.name.toLowerCase().replace(/\s+/g, '_') === needle) return true;
+			if (a.id.toLowerCase() === slugNeedle) return true;
+			if (a.name.toLowerCase().replace(/\s+/g, '_') === slugNeedle) return true;
 			return false;
 		});
-		return area ? { kind: 'in-room', area } : { kind: 'away' };
+		if (exact) return { kind: 'in-room', area: exact };
+
+		// Strategy 2: suffix match on area_id. Catches the case where
+		// the HA area is slug-named ("alfies_office") and the sensor
+		// reports just the room part ("Office"). Multiple areas can
+		// match (alfies_office + elenas_office both endWith "_office")
+		// — prefer the one whose id starts with the person's first
+		// name (or its possessive form). Example: needle="office",
+		// candidates=[alfies_office, elenas_office], person Alfie →
+		// prefer alfies_office because "alfies" startsWith "alfie".
+		const suffix = `_${slugNeedle}`;
+		const suffixMatches = discovery.areas.filter(
+			(a) => a.id !== '__unsorted__' && a.id.toLowerCase().endsWith(suffix)
+		);
+		if (suffixMatches.length === 0) return { kind: 'away' };
+		if (suffixMatches.length === 1) {
+			return { kind: 'in-room', area: suffixMatches[0] };
+		}
+		// Disambiguate by person-affiliation
+		const firstName = p.name.split(' ')[0].toLowerCase();
+		const affiliated = suffixMatches.find(
+			(a) =>
+				a.id.toLowerCase().startsWith(firstName + '_') ||
+				a.id.toLowerCase().startsWith(firstName + 's_')
+		);
+		return { kind: 'in-room', area: affiliated ?? suffixMatches[0] };
 	}
 
 	function paintingForPerson(p: DomainPerson, slot: PresenceSlot): string | null {
