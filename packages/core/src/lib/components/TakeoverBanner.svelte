@@ -77,9 +77,10 @@
 			<p class="banner-body">
 				<em>broadsheet is now your Home Assistant frontend.</em>
 				The HA sidebar has collapsed; broadsheet is your landing surface.
-				For the HA flows broadsheet doesn't render natively (initial
-				integration setup, advanced YAML, debug snapshots), tap
-				<strong>Open HA settings</strong> in the kebab menu (top right).
+				For anything broadsheet doesn't render natively (initial
+				integration setup, advanced YAML, debug snapshots, hardware
+				config), tap <strong>Open Home Assistant</strong> in the kebab
+				menu (top right) to drop into HA proper.
 			</p>
 			<p class="banner-body banner-revert">
 				Not what you wanted? Settings → Add-ons → broadsheet → Configuration,

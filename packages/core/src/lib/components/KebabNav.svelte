@@ -84,17 +84,22 @@
 			active: currentPath.startsWith(`${base}/settings`)
 		},
 		// Drops the user out of broadsheet's ingress iframe into HA's
-		// own /config/ page — for the 5-10% of flows broadsheet doesn't
-		// render natively (initial integration setup wizards, advanced
-		// YAML, debug snapshots, network config, hardware-specific HA OS
-		// settings). target="_top" breaks out of the iframe. Returning
-		// to broadsheet is one tap of the broadsheet panel in HA's
-		// sidebar (which surfaces on edge-hover when collapsed via the
-		// sidebar takeover). See docs/plans/plan-sidebar-takeover.md +
+		// own dashboard root — gives them the full HA sidebar +
+		// dashboard, from which they can navigate anywhere HA exposes
+		// (Settings, Developer Tools, integration setup wizards,
+		// advanced YAML, debug snapshots, network config,
+		// hardware-specific HA OS settings, etc). Landing on the
+		// dashboard rather than directly on /config/ matches the user's
+		// expectation of "open HA": they expect HA proper, not
+		// specifically the settings section.
+		// target="_top" breaks out of the iframe. Returning to
+		// broadsheet is one tap of the broadsheet panel in HA's sidebar
+		// (which surfaces on edge-hover when collapsed via the sidebar
+		// takeover). See docs/plans/plan-sidebar-takeover.md +
 		// docs/plans/plan-ha-settings-native-uis.md.
 		{
-			href: '/config/',
-			label: 'Open HA settings',
+			href: '/',
+			label: 'Open Home Assistant',
 			active: false,
 			kind: 'external' as const,
 			target: '_top' as const

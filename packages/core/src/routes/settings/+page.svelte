@@ -68,7 +68,7 @@
 		// docs/plans/plan-ha-settings-native-uis.md). These read +
 		// mutate HA's own registries / supervisor, surfacing the most-
 		// touched config flows in broadsheet's editorial register
-		// rather than HA's material-design config tree. "Open HA settings →"
+		// rather than HA's material-design config tree. "Open Home Assistant ↗"
 		// in the kebab nav covers anything we don't render natively.
 		{
 			slug: 'integrations',

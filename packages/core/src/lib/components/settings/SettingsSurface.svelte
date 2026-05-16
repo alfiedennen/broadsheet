@@ -5,7 +5,8 @@
 	 *
 	 * Three-part composition: hero (eyebrow + headline + dek), body
 	 * (the page's actual content via the {children} snippet), and an
-	 * optional footer for the "Open HA settings →" deep-link affordance.
+	 * optional footer for the deep-link affordance back into HA proper
+	 * (the per-surface "Open this in HA ↗" link).
 	 *
 	 * Used by /settings/integrations, /settings/devices, /settings/addons,
 	 * /settings/logs — every Plan 2 surface composes through this. The
