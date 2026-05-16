@@ -88,6 +88,13 @@ export {
 // `useCurationField` and lays them out with `SettingsRow`.
 export { useCurationField } from './curation/store.svelte';
 export { default as SettingsRow } from './components/SettingsRow.svelte';
+// Theme H: inline-pin primitive + hash-navigate helper. Plugins use
+// InlinePin to surface "this was auto-decided" affordances on their
+// own pages/renderers; wireHashHighlight is for settings surfaces
+// that should flash the right row when a navigate-with-context link
+// arrives. Spec: docs/plans/plan-theme-H-inline-overrides.md
+export { default as InlinePin } from './components/InlinePin.svelte';
+export { wireHashHighlight } from './utils/hashNavigate';
 
 /* ── HA connection surface (for plugins that need WS access) ─────── */
 // Most plugins read state via discovery + curation. The @broadsheet/voice

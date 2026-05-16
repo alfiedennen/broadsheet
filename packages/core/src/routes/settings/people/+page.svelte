@@ -14,17 +14,22 @@
 	 *     broadsheet for HA Settings.
 	 */
 
-	import { tick } from 'svelte';
+	import { tick, onMount } from 'svelte';
 	import { discovery } from '$lib/discovery';
 	import type { DomainPerson } from '$lib/discovery';
 	import { curationStore, setPersonPresenceSensor } from '$lib/curation/store.svelte';
 	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { createPerson } from '$lib/ha/registry';
 	import { showToast } from '$lib/stores/toast.svelte';
+	import { wireHashHighlight } from '$lib/utils/hashNavigate';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+
+	// Theme H: when a home-tile InlinePin sends the user here with a
+	// fragment like #person.alfie_dennen, scroll to + flash that row.
+	onMount(() => wireHashHighlight());
 
 	// Resolve effective sensor per person (curation override OR heuristic suggestion)
 	function effectiveSensor(p: DomainPerson): string | null {
@@ -279,7 +284,10 @@
 		{@const dc = effectiveDeviceClass(person)}
 		<OutLine label={person.name} />
 
-		<section class="person-card">
+		<!-- id={person.id} is the hash-navigate target for InlinePin
+		     navigate-with-context from home tiles (#person.alfie_dennen
+		     etc). See wireHashHighlight() onMount above. -->
+		<section class="person-card" id={person.id}>
 			<dl class="meta">
 				<dt>Person ID</dt>
 				<dd><code>{person.id}</code></dd>

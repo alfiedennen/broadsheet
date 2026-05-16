@@ -294,3 +294,28 @@ select:focus {
 	background: var(--accent);
 	color: var(--bg);
 }
+
+/* Theme H: hash-navigate target flash.
+ *
+ * When an InlinePin navigate-with-context link arrives at a target
+ * page, wireHashHighlight() (from $lib/utils/hashNavigate) finds the
+ * element with the matching id, scrolls it into view, and adds
+ * .bs-highlighted for 2.5s. This rule supplies the flash treatment:
+ * a transient warm-accent ring + soft background tint that says
+ * "this is the row you came to override". Subtle, brief, intentional
+ * — fades back to the page's resting state.
+ */
+.bs-highlighted {
+	animation: bs-flash 2.5s ease-out;
+	border-radius: var(--radius-card, 4px);
+}
+@keyframes bs-flash {
+	0% {
+		box-shadow: 0 0 0 2px var(--accent), 0 0 24px 4px var(--accent-glow, rgba(192, 138, 74, 0.25));
+		background-color: var(--accent-glow, rgba(192, 138, 74, 0.08));
+	}
+	100% {
+		box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent;
+		background-color: transparent;
+	}
+}

@@ -256,11 +256,30 @@
 	const cards = $derived.by((): PresenceCard[] =>
 		discovery.persons.map((p) => {
 			const slot = presenceFor(p);
+			// Theme H: every person tile gets an InlinePin pointing at
+			// /settings/people with the person's row pre-highlighted via
+			// hash. The confidence indicator distinguishes:
+			//   - 'overridden' → user has curated a specific sensor in
+			//     curation.people for this person; ★ they own this
+			//   - 'low' → person resolved to 'away' but discovery has a
+			//     ranked sensor list available (suggests auto-pick was
+			//     wrong or sensor reports a value we don't recognise)
+			//   - 'auto' → auto-pick is working and resolved to a room
+			const hasCuratedOverride = curationStore.current.people.some(
+				(x) => x.personId === p.id && x.presenceSensorId !== undefined
+			);
+			const confidence: 'auto' | 'low' | 'overridden' = hasCuratedOverride
+				? 'overridden'
+				: slot.kind === 'away' && p.rankedPresenceSensors.length > 0
+					? 'low'
+					: 'auto';
 			return {
 				person: p,
 				paintingUrl: paintingsEnabled ? paintingForPerson(p, slot) : null,
 				locationLabel: slot.kind === 'in-room' ? slot.area.name : 'Away',
-				away: slot.kind === 'away'
+				away: slot.kind === 'away',
+				locationPinHref: `/settings/people/#${encodeURIComponent(p.id)}`,
+				locationConfidence: confidence
 			};
 		})
 	);

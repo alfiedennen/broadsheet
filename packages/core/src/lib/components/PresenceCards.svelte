@@ -31,6 +31,7 @@
 
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
 	import ProceduralPainting from './ProceduralPainting.svelte';
+	import InlinePin from './InlinePin.svelte';
 	import type { PresenceCard } from './PresenceCards.types';
 
 	let { cards }: { cards: PresenceCard[] } = $props();
@@ -68,7 +69,16 @@
 					<h3 class="card-name">{card.person.name}</h3>
 					<p class="card-loc">
 						<span class="dot" data-state={card.away ? 'away' : 'in-room'}></span>
-						{card.locationLabel}
+						{#if card.locationPinHref}
+							<InlinePin
+								value={card.locationLabel}
+								label="Change {card.person.name.split(' ')[0]}'s presence sensor"
+								confidence={card.locationConfidence ?? 'auto'}
+								href={card.locationPinHref}
+							/>
+						{:else}
+							{card.locationLabel}
+						{/if}
 					</p>
 				</header>
 			</article>
