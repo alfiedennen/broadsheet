@@ -30,13 +30,19 @@
 	 */
 
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
+	import ProceduralPainting from './ProceduralPainting.svelte';
 	import type { PresenceCard } from './PresenceCards.types';
 
 	let { cards }: { cards: PresenceCard[] } = $props();
 
 	// Opportunistic upgrade: when @broadsheet/emanations is active, its
-	// renderer (MultiPersonPainting) fills each card's band — gives us
-	// the procedural gradient + person orbs as the painting fallback.
+	// renderer (MultiPersonPainting) fills each card's band with the
+	// proper axonometric painting + multi-person orbs. When the plugin
+	// is OFF (fresh-install default), we fall back to the in-core
+	// ProceduralPainting — a hash-seeded warm gradient — so the band
+	// reads as intentional ambient art, not as a missing image. See
+	// BUG-007: previously the band rendered as an empty box on fresh
+	// installs.
 	const painting = useRenderer('multi-person-painting');
 </script>
 
@@ -50,6 +56,11 @@
 						<Painting
 							persons={[card.person]}
 							paintings={card.paintingUrl ? [card.paintingUrl] : []}
+						/>
+					{:else}
+						<ProceduralPainting
+							seed={card.person.id}
+							mood={card.away ? 'cool' : 'warm'}
 						/>
 					{/if}
 				</div>

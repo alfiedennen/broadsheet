@@ -28,6 +28,7 @@
 		electricityRateClause,
 		highlightValues
 	} from '$lib/manifest/momentSensors';
+	import { humanizeWeatherState } from '$lib/utils/humanize';
 	import type { DomainArea, DomainPerson } from '$lib/discovery';
 	import { connection } from '$lib/stores/connection.svelte';
 	import { curationStore, useCurationField } from '$lib/curation/store.svelte';
@@ -100,7 +101,9 @@
 	});
 	const outsideClause = $derived.by(() => {
 		if (outsideTemp == null) return null;
-		const cond = (weatherState ?? '').replace(/_/g, '-');
+		// HA weather states ship as run-together IDs (`partlycloudy`,
+		// `clear-night`); humanize for editorial prose. See BUG-014.
+		const cond = humanizeWeatherState(weatherState);
 		return cond ? `Outside ${outsideTemp}°C, ${cond}.` : `Outside ${outsideTemp}°C.`;
 	});
 
@@ -249,7 +252,10 @@
 	}
 	function unlockSubtitle(): string {
 		if (!primaryLock) return 'no lock discovered';
-		if (lockBanned) return 'safety-rail blocked';
+		// Lock writes are intentionally banned in v0.1 — see /door for the
+		// full message. We keep the tile visible for shape but make the
+		// disabled state read like a deliberate choice, not a broken button.
+		if (lockBanned) return 'view-only — open /door';
 		if (!lockState || lockState === 'unavailable') return 'not reporting';
 		if (!isLocked) return `already ${lockState}`;
 		return 'locked';

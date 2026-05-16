@@ -19,7 +19,7 @@
 <div class="panel">
 	<SettingsRow
 		label="TMDB API key"
-		hint="A free TMDB v4 read access token — themoviedb.org → Settings → API. Stored in broadsheet.json on your HA host."
+		hint="A free TMDB v4 read access token. Stored in broadsheet.json on your HA host."
 	>
 		<input
 			class="text"
@@ -29,6 +29,14 @@
 			value={apiKey.value ?? ''}
 			onchange={(e) => (apiKey.value = e.currentTarget.value.trim() || null)}
 		/>
+		<a
+			class="get-key"
+			href="https://www.themoviedb.org/settings/api"
+			target="_blank"
+			rel="noopener noreferrer"
+		>
+			Get a key from themoviedb.org →
+		</a>
 	</SettingsRow>
 
 	<SettingsRow
@@ -77,5 +85,20 @@
 		width: 4.5rem;
 		text-transform: uppercase;
 		text-align: center;
+	}
+
+	.get-key {
+		display: inline-block;
+		margin-top: var(--space-2);
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		color: var(--accent);
+		text-decoration: none;
+		border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+		transition: border-color var(--ease-quick);
+	}
+
+	.get-key:hover {
+		border-bottom-color: var(--accent);
 	}
 </style>

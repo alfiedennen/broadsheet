@@ -49,6 +49,36 @@ export interface PresetBuilder {
 	build: (ctx: PresetContext, opts: { personId?: string; label: string }) => Omit<CustomPageDef, 'slug'>;
 }
 
+/* ── Preset 0: Blank canvas (always available) ───────────────────── */
+
+/**
+ * The "I want to compose from scratch" starting point. Always applicable.
+ * Acts as a defensive fallback when none of the data-dependent presets
+ * (person/wall/family/energy) qualify on a fresh install — guarantees
+ * the picker always renders at least one chip so the user can proceed.
+ */
+const blankCanvas: PresetBuilder = {
+	meta: {
+		id: 'blank',
+		label: 'Blank canvas',
+		description: 'A starter Hero block — compose the rest yourself.'
+		// no applicableWhen → always applicable
+	},
+	build: (_ctx, opts) => ({
+		label: opts.label,
+		blocks: [
+			{
+				type: 'hero',
+				config: {
+					eyebrow: opts.label,
+					headline: opts.label,
+					size: 'md'
+				}
+			}
+		]
+	})
+};
+
 /* ── Preset 1: Person page ───────────────────────────────────────── */
 
 /**
@@ -283,6 +313,7 @@ function pickHallwayOrLivingRoomTemp(ctx: PresetContext): string | null {
 /* ── Registry ─────────────────────────────────────────────────────── */
 
 export const PRESETS: PresetBuilder[] = [
+	blankCanvas,
 	personPage,
 	wallMorning,
 	familyStatus,

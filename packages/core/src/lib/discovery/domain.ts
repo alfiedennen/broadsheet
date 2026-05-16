@@ -25,6 +25,7 @@ import type {
 	Person as RawPerson,
 	State
 } from '$lib/ha/types';
+import { humanizeAreaName } from '$lib/utils/humanize';
 import {
 	isLightingSwitch,
 	isTV,
@@ -284,9 +285,13 @@ export function projectDomain(input: {
 			const recs = visibleByArea.get(a.area_id) ?? [];
 			const hiddenRecs = hiddenByArea.get(a.area_id) ?? [];
 			const override = cur?.areas[a.area_id];
+			// Curation rename wins; otherwise humanize a slug-shaped HA
+			// area name (alfies_office → Alfies Office, library → Library)
+			// so the editorial register doesn't expose raw IDs in hero
+			// italic. See lib/utils/humanize.ts (BUG-005).
 			const decorated: RawArea = {
 				...a,
-				name: override?.rename || a.name,
+				name: override?.rename || humanizeAreaName(a.name),
 				icon: override?.iconOverride !== undefined ? override.iconOverride : a.icon
 			};
 			return buildArea(decorated, recs, hiddenRecs, toDomain, input.states, deviceById);

@@ -169,8 +169,9 @@
 					</header>
 					<p class="panel-value">{valueFor(s)}</p>
 					<p class="panel-age">
-						<span class="panel-id">{s.id}</span>
-						<span class="dot" aria-hidden="true">·</span>
+						<!-- BUG-002: dropped the entity_id caption — was the only
+						     surface in v0.1 leaking entity_ids outside /settings/*.
+						     Power-users still find them in /settings/house. -->
 						<span>{ageFor(s)}</span>
 					</p>
 				</section>
@@ -283,11 +284,6 @@
 		font-size: 0.7rem;
 		color: var(--fg-dim);
 		margin: 0;
-	}
-
-	.panel-id {
-		font-size: 0.7rem;
-		opacity: 0.7;
 	}
 
 	.empty {

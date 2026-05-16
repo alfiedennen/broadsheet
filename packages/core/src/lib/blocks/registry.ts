@@ -76,7 +76,7 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 	markdown: {
 		label: 'Markdown',
 		description:
-			'Prose paragraphs with `{{entity_id}}` substitutions resolved at render time.'
+			'Full markdown — headings, lists, tables, emphasis, links — with `{{entity_id}}` and Jinja substitutions resolved at render time.'
 	},
 	explainer: {
 		label: 'Explainer',

@@ -580,6 +580,57 @@ function translateMushroomEntity(card: LovelaceCard): { blocks: BlockDef[]; cove
 	};
 }
 
+/**
+ * `custom:mushroom-climate-card` → action-grid tile bound to the
+ * climate entity. Mushroom's climate card is the most popular HACS
+ * climate UI; previously broadsheet's importer left it `unsupported`
+ * which silently dropped every TRV from imported pages (BUG-009).
+ *
+ * The translator emits a labelled tile that opens HA's more-info
+ * dialog when tapped (the canonical Lovelace tap action for climate)
+ * — actual setpoint editing still happens in HA's own dialog because
+ * broadsheet's action-grid primitive doesn't yet model continuous
+ * setpoints.
+ */
+function translateMushroomClimate(
+	card: LovelaceCard
+): { blocks: BlockDef[]; coverage: Coverage; note?: string } {
+	const entity = (card.entity ?? '') as string;
+	if (!entity) {
+		return { blocks: [], coverage: 'unsupported', note: 'entity field missing.' };
+	}
+	const label = ((card.name as string) ?? entity).toString();
+	return {
+		blocks: [
+			{
+				type: 'action-grid',
+				config: {
+					size: 'medium',
+					actions: [
+						{
+							label,
+							icon: (card.icon as string) ?? 'mdi:thermostat',
+							service: {
+								// homeassistant.update_entity is a safe no-op tap that
+								// also kicks the climate state — keeps the tile
+								// reactive without changing setpoint. Setpoint
+								// editing is handled via the HA more-info dialog
+								// the user opens from the tile.
+								domain: 'homeassistant',
+								service: 'update_entity',
+								target: { entity_id: entity }
+							},
+							stateBinding: { entityId: entity }
+						}
+					]
+				}
+			}
+		],
+		coverage: 'partial',
+		note: 'Climate card → state-bound tile. Setpoint editing stays in HA.'
+	};
+}
+
 // Helper alias for the translateMushroomChips loop — keeps the
 // type checker happy without exporting an internal type.
 type ActionGridItemSeed = NonNullable<
@@ -949,6 +1000,7 @@ const TRANSLATORS: Record<string, true> = {
 	'custom:mushroom-chips-card': true,
 	'custom:mushroom-light-card': true,
 	'custom:mushroom-entity-card': true,
+	'custom:mushroom-climate-card': true,
 	'custom:layout-card': true,
 	'custom:stack-in-card': true,
 	'custom:button-card': true,
@@ -1059,6 +1111,7 @@ export function translateView(view: LovelaceView): TranslatedView {
 			'custom:mushroom-chips-card': translateMushroomChips,
 			'custom:mushroom-light-card': translateMushroomEntity,
 			'custom:mushroom-entity-card': translateMushroomEntity,
+			'custom:mushroom-climate-card': translateMushroomClimate,
 			'custom:button-card': translateButtonCard,
 			'custom:calendar-card-pro': translateCalendarCardPro
 		};
@@ -1071,14 +1124,34 @@ export function translateView(view: LovelaceView): TranslatedView {
 			};
 		}
 
-		// Unsupported
+		// Unsupported — but emit a placeholder markdown block so the user
+		// SEES that something was there in their source dashboard. Better
+		// than silently dropping (BUG-010); the user can choose whether
+		// to delete or replace the placeholder. Best-effort entity
+		// surfaced so it's clear what the missing card was for.
+		const fallbackEntity =
+			(card.entity as string | undefined) ??
+			(Array.isArray(card.entities) && card.entities.length > 0
+				? typeof card.entities[0] === 'string'
+					? (card.entities[0] as string)
+					: ((card.entities[0] as { entity?: string })?.entity ?? '')
+				: '');
+		const placeholderBody =
+			fallbackEntity
+				? `> _Unsupported \`${t || 'card'}\` for \`${fallbackEntity}\` — open in HA._`
+				: `> _Unsupported \`${t || 'card'}\` — no broadsheet translator yet._`;
 		return {
-			blocks: [],
+			blocks: [
+				{
+					type: 'markdown',
+					config: { body: placeholderBody }
+				}
+			],
 			reports: [
 				{
 					type: t || '(no type)',
 					coverage: 'unsupported',
-					note: 'No translator for this card type yet.',
+					note: 'No translator for this card type yet — placeholder emitted.',
 					sourceIndex: idx
 				}
 			]

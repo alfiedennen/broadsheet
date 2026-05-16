@@ -27,7 +27,9 @@
     "@sveltejs/adapter-static": "^3.0.6",
     "@sveltejs/kit": "^2.8.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@types/dompurify": "^3.2.0",
     "@types/node": "^22.9.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.3.3",
     "prettier-plugin-svelte": "^3.2.7",
     "svelte": "^5.1.0",
@@ -38,9 +40,11 @@
     "vitest": "^2.1.5"
   },
   "dependencies": {
-    "home-assistant-js-websocket": "^9.4.0",
     "@broadsheet/emanations": "workspace:*",
     "@broadsheet/ghost-cloud": "workspace:*",
-    "@broadsheet/tmdb-tv": "workspace:*"
+    "@broadsheet/tmdb-tv": "workspace:*",
+    "dompurify": "^3.4.3",
+    "home-assistant-js-websocket": "^9.4.0",
+    "marked": "^18.0.3"
   }
 }

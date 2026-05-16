@@ -353,12 +353,60 @@ describe('translator: custom:mini-graph-card', () => {
 });
 
 describe('translator: unsupported card type', () => {
-	it('returns 0 blocks + unsupported coverage', () => {
+	it('emits a placeholder markdown block + unsupported coverage (BUG-010)', () => {
+		// Previously dropped silently — now emits a `> _Unsupported …_` block
+		// so the user sees that the card was there in their source dashboard
+		// and can choose to delete or replace it.
 		const view = singleCardView({ type: 'custom:made-up-card', foo: 'bar' });
 		const r = translateView(view);
-		expect(r.blocks).toHaveLength(0);
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('markdown');
+		expect((r.blocks[0] as { config: { body: string } }).config.body).toMatch(
+			/Unsupported.*custom:made-up-card/
+		);
 		expect(r.reports[0].coverage).toBe('unsupported');
 		expect(r.reports[0].note).toMatch(/No translator/i);
+	});
+
+	it('embeds the entity_id in the placeholder when card had one', () => {
+		const view = singleCardView({
+			type: 'custom:made-up-card',
+			entity: 'sensor.foo'
+		});
+		const r = translateView(view);
+		expect((r.blocks[0] as { config: { body: string } }).config.body).toMatch(
+			/sensor\.foo/
+		);
+	});
+});
+
+describe('translator: mushroom-climate-card (BUG-009)', () => {
+	it('emits action-grid tile bound to climate entity', () => {
+		const view = singleCardView({
+			type: 'custom:mushroom-climate-card',
+			entity: 'climate.kitchen_trv',
+			name: 'Kitchen TRV'
+		});
+		const r = translateView(view);
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('action-grid');
+		const block = r.blocks[0] as {
+			config: {
+				actions: Array<{
+					label: string;
+					stateBinding?: { entityId: string };
+				}>;
+			};
+		};
+		expect(block.config.actions[0].label).toBe('Kitchen TRV');
+		expect(block.config.actions[0].stateBinding?.entityId).toBe('climate.kitchen_trv');
+		expect(r.reports[0].coverage).toBe('partial');
+	});
+
+	it('falls through to unsupported when entity field missing', () => {
+		const view = singleCardView({ type: 'custom:mushroom-climate-card' });
+		const r = translateView(view);
+		expect(r.reports[0].coverage).toBe('unsupported');
 	});
 });
 

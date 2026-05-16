@@ -39,6 +39,22 @@
 
 	let expandedIdx = $state<number | null>(null);
 	let addingBlock = $state(false);
+	// Picker filter (BUG-011) — types up to find the right block when
+	// the list scrolls past the visible viewport. Cleared whenever the
+	// picker reopens.
+	let blockFilter = $state('');
+	const filteredBlockTypes = $derived.by(() => {
+		const q = blockFilter.trim().toLowerCase();
+		if (!q) return ALL_BLOCK_TYPES;
+		return ALL_BLOCK_TYPES.filter((t) => {
+			const meta = BLOCK_META[t];
+			return (
+				t.toLowerCase().includes(q) ||
+				meta.label.toLowerCase().includes(q) ||
+				meta.description.toLowerCase().includes(q)
+			);
+		});
+	});
 
 	function toggleExpanded(i: number) {
 		expandedIdx = expandedIdx === i ? null : i;
@@ -623,26 +639,47 @@
 						<div class="add-block-list">
 							<header class="add-block-header">
 								<strong>Pick a block</strong>
+								<span class="add-block-count"
+									>{filteredBlockTypes.length}/{ALL_BLOCK_TYPES.length} types</span
+								>
 								<button
 									type="button"
 									class="mini"
-									onclick={() => (addingBlock = false)}
+									onclick={() => {
+										addingBlock = false;
+										blockFilter = '';
+									}}
 								>
 									Cancel
 								</button>
 							</header>
-							{#each ALL_BLOCK_TYPES as t (t)}
+							<!-- svelte-ignore a11y_autofocus -->
+							<input
+								type="text"
+								class="add-block-filter"
+								placeholder="Filter — try 'action', 'list', 'chart'…"
+								bind:value={blockFilter}
+								autofocus
+							/>
+							{#each filteredBlockTypes as t (t)}
 								<button class="add-block-row" type="button" onclick={() => addBlock(t)}>
 									<span class="add-block-label">{BLOCK_META[t].label}</span>
 									<span class="add-block-desc">{BLOCK_META[t].description}</span>
 								</button>
+							{:else}
+								<p class="add-block-empty">
+									No block types match "{blockFilter}". Try a shorter word.
+								</p>
 							{/each}
 						</div>
 					{:else}
 						<button
 							type="button"
 							class="add-block-trigger"
-							onclick={() => (addingBlock = true)}
+							onclick={() => {
+								addingBlock = true;
+								blockFilter = '';
+							}}
 						>
 							+ Add block
 						</button>
@@ -772,9 +809,16 @@
 					patchBlockConfig(i, { body: (e.target as HTMLTextAreaElement).value })}
 			></textarea>
 			<span class="field-hint">
-				Supports **bold**, *italic*, `code`, [link](/path). Use
+				Full markdown — <strong>**bold**</strong>, <em>*italic*</em> or <em>_italic_</em>,
+				`code`, # headings, - lists, &gt; blockquotes, [link](/path), tables. Use
 				<code>{`{{entity_id}}`}</code>
 				to interpolate live state — e.g. <code>{`{{weather.forecast_home}}`}</code>.
+				For arithmetic / filters, use HA-style:
+				<code>{`{{ (states('sensor.x') | float * 100) | round(0) }}`}</code>
+				— the simple <code>{`{{sensor.x.state}}`}</code> shorthand is direct
+				lookup only and won't combine with filters. Output that reads "NaN" or
+				"undefined" usually means a typo'd entity_id or a filter on missing data.
+				HTML is sanitized; only safe tags survive.
 			</span>
 		</label>
 	{:else if block.type === 'explainer'}
@@ -1409,12 +1453,15 @@
 		background: var(--bg-card);
 		border: 1px solid var(--accent);
 		border-radius: var(--radius-card);
+		max-height: 70vh;
+		overflow-y: auto;
 	}
 
 	.add-block-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		gap: var(--space-2);
 		margin-bottom: var(--space-2);
 		font-family: var(--font-mono);
 		font-size: var(--text-eyebrow);
@@ -1426,6 +1473,37 @@
 	.add-block-header strong {
 		color: var(--accent);
 		font-weight: 500;
+	}
+
+	.add-block-count {
+		flex: 1;
+		text-align: right;
+		font-size: 0.7rem;
+		opacity: 0.7;
+	}
+
+	.add-block-filter {
+		font-family: var(--font-body);
+		font-size: var(--text-body);
+		padding: var(--space-2) var(--space-3);
+		margin-bottom: var(--space-2);
+		background: var(--bg-raised);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		color: var(--fg);
+	}
+
+	.add-block-filter:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+
+	.add-block-empty {
+		padding: var(--space-3);
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		font-style: italic;
+		color: var(--fg-muted);
 	}
 
 	.add-block-row {

@@ -207,15 +207,6 @@
 					<div class="preset-picker">
 						<span class="field-label">Start from</span>
 						<div class="preset-row">
-							<button
-								type="button"
-								class="preset-chip"
-								class:active={pickedPreset === null}
-								onclick={() => selectPreset(null)}
-							>
-								<span class="preset-name">Blank</span>
-								<span class="preset-desc">Start with a single Hero block.</span>
-							</button>
 							{#each presets as p (p.meta.id)}
 								<button
 									type="button"
