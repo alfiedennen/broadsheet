@@ -139,6 +139,14 @@ export function getCuration(): _Curation {
 	return _cs.current;
 }
 
+// 0.8.x — plugin loader registry, exposed for plugins that need to
+// introspect what else is bundled + active. Voice's unified settings
+// panel uses this to detect whether @broadsheet/harold-preset is
+// enabled and inline-render its settings panel inside the same
+// configurator surface (rather than requiring users to bounce
+// between two settings pages for one coherent workflow).
+export { pluginLoader } from './plugins/loader.svelte';
+
 /* ── HA connection surface (for plugins that need WS access) ─────── */
 // Most plugins read state via discovery + curation. The @broadsheet/voice
 // substrate needs WS-level access to discover HA's assist_pipeline +

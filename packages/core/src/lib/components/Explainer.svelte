@@ -19,20 +19,26 @@
 <p class="explainer">{@render children()}</p>
 
 <style>
+	/* 0.8.x polish: this is effectively the page-to-page nav mesh,
+	 * sized like a navigation row rather than a footnote. Was
+	 * text-caption (~0.85rem) with a 64ch cap — fell below the fold
+	 * + broke onto 2 awkward lines on wide viewports. Now sized at
+	 * 1.05rem and the cap matches the editorial column so it lays
+	 * out on 1 line at default+ viewports. */
 	.explainer {
 		font-family: var(--font-body);
 		font-style: italic;
-		font-size: var(--text-caption);
+		font-size: 1.05rem;
 		color: var(--fg-muted);
-		line-height: var(--leading-normal);
-		margin: var(--space-6) 0 0;
-		max-width: 64ch;
+		line-height: var(--leading-snug);
+		margin: var(--space-4) 0 0;
+		max-width: 100ch;
 	}
 
 	.explainer :global(a) {
 		color: var(--accent);
 		text-decoration: none;
-		border-bottom: 1px solid color-mix(in oklab, var(--accent), transparent 75%);
+		border-bottom: 1px solid color-mix(in oklab, var(--accent), transparent 60%);
 		transition: border-color var(--ease-quick);
 	}
 

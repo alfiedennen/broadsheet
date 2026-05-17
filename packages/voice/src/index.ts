@@ -88,9 +88,14 @@ export const plugin: BroadsheetPlugin = {
 			label: 'Voice',
 			icon: 'mdi:microphone',
 			navOrder: 90,
-			// Voice page is meaningful whenever the plugin is enabled —
-			// even without an active pipeline (the empty state explains
-			// how to set one up).
+			// 0.8.x — hidden from nav. The /voice URL still works (for
+			// hash-deeplinks + saved bookmarks) but the editorial
+			// pipeline walkthrough that used to live here has migrated
+			// to the unified Voice + Harold configurator at
+			// /settings/plugins/voice/config (per user feedback: the
+			// content is sense-making content, belongs alongside the
+			// settings it helps the user decide on, not as its own page).
+			hiddenFromNav: true,
 			component: () => import('./pages/VoicePage.svelte')
 		}
 	],

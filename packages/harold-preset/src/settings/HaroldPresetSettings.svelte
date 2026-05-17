@@ -139,6 +139,9 @@
 		{#if voiceEnabled.value === true}
 			<p class="hint dep-ok">
 				✓ Paired with <code>@broadsheet/voice</code>.
+				<a class="flow-link" href="/settings/plugins/voice/config/"
+					>Open the unified Voice + Harold configurator →</a
+				>
 				<a class="flow-link" href="/settings/setup/add-harold/"
 					>Or run the full setup ↗</a
 				>
