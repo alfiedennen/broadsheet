@@ -47,47 +47,54 @@
 	}
 </script>
 
-{#if config.label}
-	<OutLine label={config.label} />
-{/if}
-<div class="primary-tiles">
-	<button
-		class="primary-tile"
-		type="button"
-		onclick={allLightsOff}
-		disabled={!anyLights}
-	>
-		<span class="primary-icon" aria-hidden="true">○</span>
-		<span class="primary-label">All lights off</span>
-	</button>
-	<button
-		class="primary-tile"
-		type="button"
-		onclick={boostAllHeat}
-		disabled={!anyClimate}
-	>
-		<span class="primary-icon" aria-hidden="true">◐</span>
-		<span class="primary-label">Boost heat</span>
-	</button>
-	<button
-		class="primary-tile"
-		type="button"
-		onclick={allTvsOff}
-		disabled={allTVs.length === 0}
-	>
-		<span class="primary-icon" aria-hidden="true">▢</span>
-		<span class="primary-label">TVs off</span>
-	</button>
-</div>
+<section class="block macro-block">
+	{#if config.label}
+		<OutLine label={config.label} />
+	{/if}
+	<div class="primary-tiles">
+		<button
+			class="primary-tile"
+			type="button"
+			onclick={allLightsOff}
+			disabled={!anyLights}
+		>
+			<span class="primary-icon" aria-hidden="true">○</span>
+			<span class="primary-label">All lights off</span>
+		</button>
+		<button
+			class="primary-tile"
+			type="button"
+			onclick={boostAllHeat}
+			disabled={!anyClimate}
+		>
+			<span class="primary-icon" aria-hidden="true">◐</span>
+			<span class="primary-label">Boost heat</span>
+		</button>
+		<button
+			class="primary-tile"
+			type="button"
+			onclick={allTvsOff}
+			disabled={allTVs.length === 0}
+		>
+			<span class="primary-icon" aria-hidden="true">▢</span>
+			<span class="primary-label">TVs off</span>
+		</button>
+	</div>
+</section>
 
 <style>
-	/* Lifted verbatim from /wall — keeps the visual register identical
-	   while routing through the block primitive. */
+	.block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
+	/* Lifted verbatim from /wall — keeps the visual register identical.
+	 * Margin-bottom removed; PageShell.gap handles inter-block spacing. */
 	.primary-tiles {
 		display: grid;
 		grid-template-columns: 1fr;
 		gap: var(--space-3);
-		margin-bottom: var(--space-6);
 	}
 
 	@media (min-width: 540px) {

@@ -22,41 +22,72 @@
 	}
 </script>
 
-{#if config.label && allScenes.length > 0}
-	<OutLine label={config.label} />
-{/if}
 {#if allScenes.length > 0}
-	<div class="scene-row">
-		{#each allScenes as s (s.id)}
-			<button class="scene-pill" type="button" onclick={() => activateScene(s)}>
-				{s.name}
-			</button>
-		{/each}
-	</div>
+	<!-- Polish patch: wrap label + grid in a single <section> so
+	     PageShell.gap doesn't insert space BETWEEN the OutLine and
+	     the content it labels. Same change applied across every
+	     block renderer. -->
+	<section class="block scene-block">
+		{#if config.label}
+			<OutLine label={config.label} />
+		{/if}
+		<div class="scene-row">
+			{#each allScenes as s (s.id)}
+				<button class="scene-pill" type="button" onclick={() => activateScene(s)}>
+					{s.name}
+				</button>
+			{/each}
+		</div>
+	</section>
 {/if}
 
 <style>
+	.block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
 	.scene-row {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--space-2);
-		margin-bottom: var(--space-6);
+		gap: var(--space-3);
+		/* PageShell handles inter-block spacing; no margin-bottom
+		 * here (was causing double-gap with shell gap). */
 	}
 
+	/* Polish patch: lozenges previously rendered with 0 horizontal
+	 * padding because var(--space-5) was undefined → text-to-edge.
+	 * Tokens now exist; this rule re-derived with explicit padding +
+	 * stronger visual weight (subtle accent-glow on rest, full
+	 * accent on hover) so it reads as a real affordance. */
 	.scene-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		padding: var(--space-3) var(--space-5);
 		font-family: var(--font-caption);
 		font-size: var(--text-body);
+		letter-spacing: 0.02em;
 		color: var(--fg);
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-pill);
 		background: var(--bg-card);
 		min-height: 44px;
-		transition: border-color var(--ease-quick), color var(--ease-quick);
+		min-width: 80px;
+		cursor: pointer;
+		transition: border-color var(--ease-quick),
+			color var(--ease-quick),
+			background var(--ease-quick);
 	}
 
 	.scene-pill:hover {
 		border-color: var(--accent);
 		color: var(--accent);
+		background: var(--accent-glow, rgba(192, 138, 74, 0.08));
+	}
+
+	.scene-pill:active {
+		transform: translateY(1px);
 	}
 </style>

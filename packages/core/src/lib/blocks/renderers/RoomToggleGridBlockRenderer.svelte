@@ -31,38 +31,45 @@
 	}
 </script>
 
-{#if config.label && lightingAreas.length > 0}
-	<OutLine label={config.label} />
-{/if}
 {#if lightingAreas.length > 0}
-	<div class="room-grid">
-		{#each lightingAreas as a (a.id)}
-			<button
-				class="room-tile"
-				type="button"
-				onclick={() => toggleArea(a)}
-				data-on={areaIsOn(a) ? 'true' : 'false'}
-			>
-				<span class="dot" aria-hidden="true"></span>
-				<span class="room-name">{a.name}</span>
-				<span class="room-state">
-					{#if areaIsOn(a)}
-						{a.lights.filter((l) => l.state?.state === 'on').length} of {a.lights.length} on
-					{:else}
-						off
-					{/if}
-				</span>
-			</button>
-		{/each}
-	</div>
+	<section class="block room-block">
+		{#if config.label}
+			<OutLine label={config.label} />
+		{/if}
+		<div class="room-grid">
+			{#each lightingAreas as a (a.id)}
+				<button
+					class="room-tile"
+					type="button"
+					onclick={() => toggleArea(a)}
+					data-on={areaIsOn(a) ? 'true' : 'false'}
+				>
+					<span class="dot" aria-hidden="true"></span>
+					<span class="room-name">{a.name}</span>
+					<span class="room-state">
+						{#if areaIsOn(a)}
+							{a.lights.filter((l) => l.state?.state === 'on').length} of {a.lights.length} on
+						{:else}
+							off
+						{/if}
+					</span>
+				</button>
+			{/each}
+		</div>
+	</section>
 {/if}
 
 <style>
+	.block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
 	.room-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 		gap: var(--space-3);
-		margin-bottom: var(--space-6);
 	}
 
 	.room-tile {

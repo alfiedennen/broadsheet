@@ -29,26 +29,33 @@
 	}
 </script>
 
-{#if config.label && climateAreas.length > 0}
-	<OutLine label={config.label} />
-{/if}
 {#if climateAreas.length > 0}
-	<div class="boost-row">
-		{#each climateAreas as a (a.id)}
-			<button class="boost-tile" type="button" onclick={() => boostArea(a)}>
-				<span class="boost-name">{a.name}</span>
-				<span class="boost-detail">→ {temperature}°</span>
-			</button>
-		{/each}
-	</div>
+	<section class="block boost-block">
+		{#if config.label}
+			<OutLine label={config.label} />
+		{/if}
+		<div class="boost-row">
+			{#each climateAreas as a (a.id)}
+				<button class="boost-tile" type="button" onclick={() => boostArea(a)}>
+					<span class="boost-name">{a.name}</span>
+					<span class="boost-detail">→ {temperature}°</span>
+				</button>
+			{/each}
+		</div>
+	</section>
 {/if}
 
 <style>
+	.block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
 	.boost-row {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
 		gap: var(--space-2);
-		margin-bottom: var(--space-6);
 	}
 
 	.boost-tile {
@@ -56,9 +63,12 @@
 		flex-direction: column;
 		gap: var(--space-1);
 		padding: var(--space-3) var(--space-4);
+		min-height: 64px;
+		background: var(--bg-card);
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-card);
 		text-align: left;
+		cursor: pointer;
 		transition: border-color var(--ease-quick), background var(--ease-quick);
 	}
 
