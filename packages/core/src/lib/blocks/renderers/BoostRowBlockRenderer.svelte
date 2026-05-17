@@ -61,9 +61,10 @@
 	.boost-tile {
 		display: flex;
 		flex-direction: column;
+		justify-content: center;
 		gap: var(--space-1);
 		padding: var(--space-3) var(--space-4);
-		min-height: 64px;
+		min-height: 72px;
 		background: var(--bg-card);
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-card);

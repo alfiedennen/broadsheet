@@ -109,7 +109,7 @@
 </svelte:head>
 
 <PageShell width="default">
-	<Hero size="md">
+	<Hero size="sm">
 		{#snippet eyebrow()}
 			<Eyebrow section="Door" number={4} />
 		{/snippet}

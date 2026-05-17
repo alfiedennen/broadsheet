@@ -25,7 +25,7 @@
 				eyebrow: 'Wall',
 				number: 7,
 				headline: 'Everything within reach.',
-				size: 'md'
+				size: 'sm'
 			}
 		},
 		{ type: 'macro-grid', config: { label: 'Macros' } },

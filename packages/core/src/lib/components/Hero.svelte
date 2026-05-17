@@ -17,12 +17,19 @@
 		eyebrow,
 		headline,
 		dek,
-		size = 'lg' as 'md' | 'lg' | 'xl'
+		size = 'lg' as 'sm' | 'md' | 'lg' | 'xl'
 	}: {
 		eyebrow?: Snippet;
 		headline: Snippet;
 		dek?: Snippet;
-		size?: 'md' | 'lg' | 'xl';
+		/**
+		 * Headline scale. 'sm' added in 0.8.6 polish for dense pages
+		 * (/lights, /heat, /wall, /tv) where the editorial Hero was
+		 * pushing first-section content below the fold on 13"/laptop
+		 * viewports. 'md' default for content pages; 'lg' / 'xl' reserved
+		 * for hero pages like the moment landing.
+		 */
+		size?: 'sm' | 'md' | 'lg' | 'xl';
 	} = $props();
 </script>
 
@@ -39,15 +46,18 @@
 </header>
 
 <style>
+	/* 0.8.6 polish: tighter default margins. Was margin-bottom space-6
+	 * + eyebrow margin-bottom space-2 = ~56px floor under the hero
+	 * before any content even started. New: PageShell.gap (space-8 = 32px)
+	 * is the inter-block spacer, hero doesn't add to it. */
 	.hero {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
-		margin-bottom: var(--space-6);
+		gap: var(--space-2);
 	}
 
 	.hero-eyebrow {
-		margin-bottom: var(--space-2);
+		margin-bottom: var(--space-1);
 	}
 
 	.hero-headline {
@@ -71,6 +81,9 @@
 		font-style: italic;
 	}
 
+	.hero[data-size='sm'] .hero-headline {
+		font-size: var(--text-headline-sm);
+	}
 	.hero[data-size='md'] .hero-headline {
 		font-size: var(--text-headline-md);
 	}
@@ -85,7 +98,21 @@
 		color: var(--fg-muted);
 		font-size: var(--text-body-lg);
 		line-height: var(--leading-snug);
-		max-width: 36ch;
+		max-width: 60ch;
 		margin: var(--space-2) 0 0;
+	}
+
+	/* Short viewports — compress more aggressively so dense pages
+	 * (lights, heat, wall) keep first-section content above the fold. */
+	@media (max-height: 800px) {
+		.hero {
+			gap: var(--space-1);
+		}
+		.hero-eyebrow {
+			margin-bottom: 0;
+		}
+		.hero-dek {
+			margin-top: var(--space-1);
+		}
 	}
 </style>

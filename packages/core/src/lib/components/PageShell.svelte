@@ -104,26 +104,36 @@
 	/* ── Vertical responsiveness ──
 	 * On short viewports compress padding so editorial Heroes don't
 	 * push the first secondary section below the fold on 13" laptops
-	 * (~720px tall after browser chrome). */
+	 * (~720px tall after browser chrome). 0.8.6 polish: more aggressive
+	 * compression — old thresholds didn't fix the fold issue at typical
+	 * 1080p displays (with browser chrome ~960px usable height). */
+	@media (max-height: 950px) {
+		.shell {
+			padding-top: var(--space-6);
+			padding-bottom: var(--space-6);
+			gap: var(--space-6);
+		}
+	}
+
 	@media (max-height: 800px) {
 		.shell {
-			padding-top: var(--space-8);
-			padding-bottom: var(--space-8);
-			gap: var(--space-6);
+			padding-top: var(--space-4);
+			padding-bottom: var(--space-4);
+			gap: var(--space-4);
 		}
 	}
 
 	@media (max-height: 650px) {
 		.shell {
-			padding-top: var(--space-6);
-			padding-bottom: var(--space-6);
-			gap: var(--space-4);
+			padding-top: var(--space-3);
+			padding-bottom: var(--space-3);
+			gap: var(--space-3);
 		}
 	}
 
 	@media (max-width: 640px) and (max-height: 650px) {
 		.shell {
-			padding: var(--space-4) var(--space-4);
+			padding: var(--space-3) var(--space-4);
 			gap: var(--space-3);
 		}
 	}

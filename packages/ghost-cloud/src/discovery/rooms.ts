@@ -8,10 +8,11 @@
  * `discovery.plugins['ghost-cloud']?.rooms`.
  *
  * v0.1 ships static demo data (one captured day per room), so the
- * manifest is always present. When the live-radar-pull path lands,
- * this contributor is where it plugs in — it can additionally scan HA
- * for the LD2450 sensor pattern and report the radar-equipped rooms,
- * with the bundled demo set as the fallback.
+ * manifest is always present. The live-radar-pull path is the
+ * next-patch landing (planned 0.8.7); the page-side LD2450 scan
+ * + HA recorder history fetch + iframe data injection are the
+ * three pieces. This contributor would additionally surface
+ * scanned rooms in the manifest when that lands.
  *
  * Contract notes: `import type` from @broadsheet/core only; eagerly
  * bundled (the contributor object must exist at boot); never throws —

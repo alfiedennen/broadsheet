@@ -75,11 +75,23 @@
 		);
 	}
 
-	async function powerToggle() {
+	// 0.8.6 polish: parity with harold-home /tv. Separate On / Off
+	// (state-aware: disabled when already in the target state) rather
+	// than a single toggle — clearer affordance for the user, and the
+	// state survives the round-trip latency that a toggle would hide.
+	async function powerOn() {
 		if (!primaryTv) return;
-		if (primaryTv.state?.state === 'on') await callOff(primaryTv.id);
-		else await callOn(primaryTv.id);
+		await callOn(primaryTv.id);
 	}
+
+	async function powerOff() {
+		if (!primaryTv) return;
+		await callOff(primaryTv.id);
+	}
+
+	// Mobile tab toggle (≤720px). Above 720px the 2-column layout
+	// shows controls + apps side-by-side and the tab bar hides.
+	let mobileTab = $state<'remote' | 'apps'>('remote');
 
 	// Apps / sources. A media_player only exposes `source_list` (its
 	// installed apps + inputs) while it's ON — so we cache the
@@ -161,8 +173,8 @@
 	<title>TV · broadsheet</title>
 </svelte:head>
 
-<PageShell width="default">
-	<Hero size="md">
+<PageShell width="wide">
+	<Hero size="sm">
 		{#snippet eyebrow()}
 			<Eyebrow section="TV" number={5} />
 		{/snippet}
@@ -171,61 +183,115 @@
 		{/snippet}
 	</Hero>
 
+	<!-- 0.8.6 polish: parity with harold-home /tv. Two-column board
+	     (controls left, apps right) on desktop; mobile tab toggle below
+	     720px switches which column shows. Power gets its own dedicated
+	     row above the board (always visible regardless of tab). -->
 	{#if primaryTv}
-		<OutLine label="Power" />
-		<div class="row power-row">
-			<button class="power-btn" type="button" onclick={powerToggle}>
-				{primaryTv.state?.state === 'on' ? 'Turn off' : 'Turn on'}
-			</button>
-		</div>
-	{/if}
-
-	{#if primaryRemote}
-		<OutLine label="Remote" />
-		<div class="remote">
-			<div class="dpad">
-				{#each dpadKeys as k (k.pos)}
-					<button
-						class="dpad-key dpad-{k.pos}"
-						type="button"
-						onclick={() => sendKey(k.key)}
-						aria-label={k.key}
-					>
-						{k.label}
-					</button>
-				{/each}
-			</div>
-			<div class="aux">
-				<button class="aux-key" type="button" onclick={() => sendKey('BACK')}>Back</button>
-				<button class="aux-key" type="button" onclick={() => sendKey('HOME')}>Home</button>
-				<button class="aux-key" type="button" onclick={() => sendKey('VOLUME_DOWN')}>Vol −</button>
-				<button class="aux-key" type="button" onclick={() => sendKey('MUTE')}>Mute</button>
-				<button class="aux-key" type="button" onclick={() => sendKey('VOLUME_UP')}>Vol +</button>
-			</div>
-		</div>
-	{/if}
-
-	{#if primaryTv}
-		<OutLine label="Apps" />
-		<div class="sources">
-			{#each tvSources as source (source)}
+		<div class="power-cluster">
+			<header class="cluster-eyebrow">power</header>
+			<div class="power-row">
 				<button
-					class="source-btn"
-					class:active={tvOn && source === currentSource}
 					type="button"
-					onclick={() => launchSource(source)}
+					class="power-btn"
+					class:active={tvOn}
+					onclick={powerOn}
+					disabled={tvOn}
 				>
-					{source}
+					On
 				</button>
-			{/each}
+				<button
+					type="button"
+					class="power-btn off"
+					class:active={!tvOn && primaryTv.state?.state !== 'unavailable'}
+					onclick={powerOff}
+					disabled={!tvOn}
+				>
+					Off
+				</button>
+			</div>
 		</div>
-		{#if sourceMode.mode === 'default'}
-			<p class="sources-note">
-				<em>Common apps — your TV's own list loads the first time it's on.</em>
-			</p>
-		{:else if !tvOn}
-			<p class="sources-note"><em>TV is off — tapping an app wakes it first.</em></p>
-		{/if}
+	{/if}
+
+	{#if primaryRemote || primaryTv}
+		<!-- Mobile-only tab bar to toggle between Remote + Apps. -->
+		<nav class="board-tabs" aria-label="Switch between remote and apps">
+			<button
+				type="button"
+				class="board-tab"
+				class:active={mobileTab === 'remote'}
+				onclick={() => (mobileTab = 'remote')}
+				aria-pressed={mobileTab === 'remote'}
+			>
+				Remote
+			</button>
+			<button
+				type="button"
+				class="board-tab"
+				class:active={mobileTab === 'apps'}
+				onclick={() => (mobileTab = 'apps')}
+				aria-pressed={mobileTab === 'apps'}
+			>
+				Apps
+			</button>
+		</nav>
+
+		<div class="board" class:show-remote={mobileTab === 'remote'} class:show-apps={mobileTab === 'apps'}>
+			{#if primaryRemote}
+				<section class="col col-remote" aria-label="Remote">
+					<header class="cluster-eyebrow">remote</header>
+					<div class="remote">
+						<div class="dpad">
+							{#each dpadKeys as k (k.pos)}
+								<button
+									class="dpad-key dpad-{k.pos}"
+									type="button"
+									onclick={() => sendKey(k.key)}
+									aria-label={k.key}
+								>
+									{k.label}
+								</button>
+							{/each}
+						</div>
+						<div class="aux">
+							<button class="aux-key" type="button" onclick={() => sendKey('BACK')}>Back</button>
+							<button class="aux-key" type="button" onclick={() => sendKey('HOME')}>Home</button>
+						</div>
+						<div class="vol">
+							<button class="aux-key" type="button" onclick={() => sendKey('VOLUME_DOWN')}>Vol −</button>
+							<button class="aux-key" type="button" onclick={() => sendKey('MUTE')}>Mute</button>
+							<button class="aux-key" type="button" onclick={() => sendKey('VOLUME_UP')}>Vol +</button>
+						</div>
+					</div>
+				</section>
+			{/if}
+
+			{#if primaryTv}
+				<section class="col col-apps" aria-label="Apps">
+					<header class="cluster-eyebrow">apps</header>
+					<div class="app-list">
+						{#each tvSources as source (source)}
+							<button
+								class="app-row"
+								class:active={tvOn && source === currentSource}
+								type="button"
+								onclick={() => launchSource(source)}
+							>
+								<span class="app-name">{source}</span>
+								<span class="app-cta">→</span>
+							</button>
+						{/each}
+					</div>
+					{#if sourceMode.mode === 'default'}
+						<p class="sources-note">
+							<em>Common apps — your TV's own list loads the first time it's on.</em>
+						</p>
+					{:else if !tvOn}
+						<p class="sources-note"><em>TV is off — tapping an app wakes it first.</em></p>
+					{/if}
+				</section>
+			{/if}
+		</div>
 	{/if}
 
 	{#if allMedia.length > 0}
@@ -283,27 +349,114 @@
 </PageShell>
 
 <style>
-	.row {
+	/* 0.8.6 polish — parity with harold-home /tv. */
+
+	.cluster-eyebrow {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		margin-bottom: var(--space-2);
+	}
+
+	.power-cluster {
 		display: flex;
-		gap: var(--space-2);
+		flex-direction: column;
+	}
+
+	.power-row {
+		display: flex;
+		gap: var(--space-3);
 	}
 
 	.power-btn {
+		flex: 1;
+		max-width: 180px;
 		padding: var(--space-3) var(--space-6);
 		font-family: var(--font-mono);
 		font-size: var(--text-caption);
 		letter-spacing: var(--track-eyebrow);
 		text-transform: uppercase;
 		color: var(--fg);
+		background: var(--bg-card);
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-card);
-		min-height: 44px;
+		min-height: 56px;
+		cursor: pointer;
+		transition: border-color var(--ease-quick), color var(--ease-quick), background var(--ease-quick);
+	}
+
+	.power-btn:hover:not(:disabled) {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.power-btn.active {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: var(--accent-glow);
+	}
+
+	.power-btn:disabled {
+		cursor: default;
+		opacity: 0.5;
+	}
+
+	/* Mobile tab bar — visible only ≤720px viewport. */
+	.board-tabs {
+		display: none;
+		gap: var(--space-2);
+	}
+
+	.board-tab {
+		flex: 1;
+		padding: var(--space-3);
+		font-family: var(--font-mono);
+		font-size: var(--text-caption);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		background: transparent;
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-pill);
+		cursor: pointer;
 		transition: border-color var(--ease-quick), color var(--ease-quick);
 	}
 
-	.power-btn:hover {
-		border-color: var(--accent);
+	.board-tab.active {
 		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-glow);
+	}
+
+	/* Board layout — 2-column desktop, single-column-tabbed mobile. */
+	.board {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--space-6);
+		align-items: flex-start;
+	}
+
+	@media (max-width: 720px) {
+		.board-tabs {
+			display: flex;
+		}
+		.board {
+			grid-template-columns: 1fr;
+		}
+		.board > .col {
+			display: none;
+		}
+		.board.show-remote > .col-remote,
+		.board.show-apps > .col-apps {
+			display: flex;
+		}
+	}
+
+	.col {
+		display: flex;
+		flex-direction: column;
 	}
 
 	.remote {
@@ -371,37 +524,16 @@
 		border-radius: 4px 4px 12px 12px;
 	}
 
-	.aux {
+	.aux,
+	.vol {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2);
 		justify-content: center;
+		margin-top: var(--space-3);
 	}
 
 	.aux-key {
-		padding: var(--space-2) var(--space-4);
-		font-family: var(--font-mono);
-		font-size: var(--text-caption);
-		letter-spacing: var(--track-caption);
-		color: var(--fg-muted);
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-pill);
-		min-height: 44px;
-		transition: border-color var(--ease-quick), color var(--ease-quick);
-	}
-
-	.aux-key:hover {
-		border-color: var(--accent);
-		color: var(--accent);
-	}
-
-	.sources {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-
-	.source-btn {
 		padding: var(--space-2) var(--space-4);
 		font-family: var(--font-mono);
 		font-size: var(--text-caption);
@@ -412,18 +544,65 @@
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-pill);
 		min-height: 44px;
+		cursor: pointer;
+		transition: border-color var(--ease-quick), color var(--ease-quick);
+	}
+
+	.aux-key:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	/* App list — list-style rows on desktop, harold-home pattern. */
+	.app-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.app-row {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		font-family: var(--font-mono);
+		font-size: var(--text-body);
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
+		color: var(--fg);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		min-height: 56px;
+		cursor: pointer;
+		text-align: left;
 		transition: border-color var(--ease-quick), color var(--ease-quick), background var(--ease-quick);
 	}
 
-	.source-btn:hover {
+	.app-row:hover {
 		border-color: var(--accent);
 		color: var(--accent);
 	}
 
-	.source-btn.active {
+	.app-row.active {
 		border-color: var(--accent);
 		color: var(--accent);
 		background: var(--accent-glow);
+	}
+
+	.app-row .app-cta {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.4rem;
+		color: var(--fg-muted);
+		text-transform: none;
+		transition: color var(--ease-quick), transform var(--ease-quick);
+	}
+
+	.app-row:hover .app-cta {
+		color: var(--accent);
+		transform: translateX(2px);
 	}
 
 	.sources-note {

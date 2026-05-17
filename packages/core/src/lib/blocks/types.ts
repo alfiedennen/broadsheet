@@ -36,7 +36,7 @@ export interface HeroBlockConfig {
 	/** Optional muted sub-headline. Accepts plain text. */
 	dek?: string | null;
 	/** Hero size bucket — matches the existing Hero component. */
-	size?: 'md' | 'lg' | 'xl';
+	size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 /**

@@ -72,9 +72,13 @@
 		gap: var(--space-3);
 	}
 
+	/* 0.8.6 polish: justify-content: center so the name + state stack
+	 * sits visually in the middle of the tile instead of pinned to the
+	 * top (the dot is absolute-positioned so it isn't affected). */
 	.room-tile {
 		display: flex;
 		flex-direction: column;
+		justify-content: center;
 		gap: var(--space-2);
 		padding: var(--space-4);
 		min-height: 110px;
@@ -82,6 +86,7 @@
 		border-radius: var(--radius-card);
 		background: var(--bg-card);
 		text-align: left;
+		cursor: pointer;
 		transition: border-color var(--ease-quick), background var(--ease-quick);
 		position: relative;
 	}
