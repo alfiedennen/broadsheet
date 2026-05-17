@@ -91,8 +91,21 @@ export async function bootDiscovery(): Promise<void> {
 
 		// Entity-state subscription — compressed delta, lib handles cache + reconnect
 		_unsubEntities = subscribeEntities(conn, (entities) => {
-			// `entities` is the full state map keyed by entity_id
-			discoveryStore.states = entities as Record<string, State>;
+			// `entities` is the full state map keyed by entity_id.
+			//
+			// 0.8.7 fix — home-assistant-js-websocket's subscribeEntities
+			// MUTATES its internal cache in place and re-delivers the SAME
+			// reference on every state-changed event. Svelte 5 $state
+			// dedupes same-reference assignments as a no-op → consumers
+			// downstream never see updates, and the page reads stale
+			// state until full refresh.
+			//
+			// Symptom: pressing the TV's On button worked at the HA side
+			// (TV physically turned on) but the page kept reading 'off'
+			// until manual refresh. Spread-into-new-object forces a fresh
+			// reference each delivery so $state sees a real change and
+			// the projection chain re-runs.
+			discoveryStore.states = { ...entities } as Record<string, State>;
 		});
 
 		// Registry-update subscriptions — debounced re-pull on each event

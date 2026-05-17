@@ -33,10 +33,48 @@
 	const content = useRenderer('tmdb-content-rows');
 	const tmdb = $derived(curationStore.current.integrations.tmdb ?? {});
 
+	// 0.8.7 fix — stable array references for ContentRows props.
+	// The 0.8.5 version computed these inline in {@const} blocks each
+	// render, producing a fresh array literal on every reactive tick
+	// when the underlying curation value was undefined. That fresh ref
+	// fed into ContentRows' $effect deps and triggered a recursive
+	// reactivity loop (effect_update_depth_exceeded) which jammed
+	// EVERYTHING on /tv — kebab couldn't open, TV state stayed stale
+	// after On/Off, TMDB fetches never fired, no posters rendered.
+	// $derived.by gives a stable reference when inputs don't change.
+	const trendingWindowsArr = $derived.by((): ('day' | 'week')[] => {
+		const v = tmdb.trendingWindows;
+		if (Array.isArray(v)) return v;
+		if (v === 'day' || v === 'week') return [v];
+		return ['week'];
+	});
+	const newWindowsArr = $derived.by((): number[] => {
+		const v = tmdb.newReleasesWindowDays;
+		if (Array.isArray(v)) return v;
+		if (typeof v === 'number') return [v];
+		return [45];
+	});
+
 	const tvAreas = $derived(discovery.areasForPage('tv'));
 	const allTVs = $derived(tvAreas.flatMap((a) => a.tvs));
 	const allRemotes = $derived(tvAreas.flatMap((a) => a.remotes));
-	const allMedia = $derived(tvAreas.flatMap((a) => a.media));
+	// 0.8.7 fix — filter tablets / kiosks / phones out of /tv's
+	// "Other media" list. HA classes them as media_player but they're
+	// surfaces, not media SOURCES. Heuristic: rough name + device-class
+	// match. Speakers/receivers (real audio outputs) stay.
+	function looksLikeKioskOrTablet(name: string, deviceModel: string | null): boolean {
+		const s = (name + ' ' + (deviceModel ?? '')).toLowerCase();
+		return (
+			/\b(tablet|fully kiosk|fire ?(hd|tablet)|galaxy ?tab|kindle|nexus|pixel ?\d|ipad|iphone|chromebook|chrome ?os|browser|kiosk)\b/.test(
+				s
+			)
+		);
+	}
+	const allMedia = $derived(
+		tvAreas
+			.flatMap((a) => a.media)
+			.filter((e) => !looksLikeKioskOrTablet(e.name, e.device?.model ?? null))
+	);
 
 	// Primary TV = first TV. Multi-TV households can pin per area in M4.
 	const primaryTv = $derived(allTVs[0] ?? null);
@@ -309,16 +347,6 @@
 	<OutLine label="Watch" />
 	{#if content.current}
 		{@const ContentRows = content.current}
-		{@const trendingWindowsArr = Array.isArray(tmdb.trendingWindows)
-			? tmdb.trendingWindows
-			: typeof tmdb.trendingWindows === 'string'
-				? [tmdb.trendingWindows]
-				: ['week']}
-		{@const newWindowsArr = Array.isArray(tmdb.newReleasesWindowDays)
-			? tmdb.newReleasesWindowDays
-			: typeof tmdb.newReleasesWindowDays === 'number'
-				? [tmdb.newReleasesWindowDays]
-				: [45]}
 		<ContentRows
 			apiKey={tmdb.apiKey ?? null}
 			region={tmdb.region ?? 'GB'}
@@ -363,11 +391,18 @@
 	.power-cluster {
 		display: flex;
 		flex-direction: column;
+		align-items: center;
+	}
+
+	.power-cluster .cluster-eyebrow {
+		align-self: stretch;
+		text-align: center;
 	}
 
 	.power-row {
 		display: flex;
 		gap: var(--space-3);
+		justify-content: center;
 	}
 
 	.power-btn {

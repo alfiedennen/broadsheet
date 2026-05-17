@@ -72,20 +72,23 @@
 		gap: var(--space-3);
 	}
 
-	/* 0.8.6 polish: justify-content: center so the name + state stack
-	 * sits visually in the middle of the tile instead of pinned to the
-	 * top (the dot is absolute-positioned so it isn't affected). */
+	/* 0.8.7 polish: visual register matches macros + boost — content
+	 * centred both vertically (justify-content) and horizontally
+	 * (align-items + text-align). Was left-aligned in 0.8.6 so it
+	 * read as a different design language than the macro tiles. The
+	 * dot stays absolute top-right. */
 	.room-tile {
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
+		align-items: center;
 		gap: var(--space-2);
 		padding: var(--space-4);
 		min-height: 110px;
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-card);
 		background: var(--bg-card);
-		text-align: left;
+		text-align: center;
 		cursor: pointer;
 		transition: border-color var(--ease-quick), background var(--ease-quick);
 		position: relative;

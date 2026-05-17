@@ -48,34 +48,31 @@
 		gap: var(--space-3);
 	}
 
+	/* 0.8.7 polish: scenes now lay out as a tile grid to match
+	 * macros / rooms / boost on /wall — was a left-aligned pill row
+	 * that looked orphaned next to the other tile rows. Same
+	 * auto-fill grid as boost-row so columns align visually. */
 	.scene-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3);
-		/* PageShell handles inter-block spacing; no margin-bottom
-		 * here (was causing double-gap with shell gap). */
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+		gap: var(--space-2);
 	}
 
-	/* Polish patch: lozenges previously rendered with 0 horizontal
-	 * padding because var(--space-5) was undefined → text-to-edge.
-	 * Tokens now exist; this rule re-derived with explicit padding +
-	 * stronger visual weight (subtle accent-glow on rest, full
-	 * accent on hover) so it reads as a real affordance. */
 	.scene-pill {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: var(--space-3) var(--space-5);
-		font-family: var(--font-caption);
-		font-size: var(--text-body);
-		letter-spacing: 0.02em;
+		padding: var(--space-3) var(--space-4);
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.1rem;
 		color: var(--fg);
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-pill);
 		background: var(--bg-card);
-		min-height: 44px;
-		min-width: 80px;
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		min-height: 72px;
 		cursor: pointer;
+		text-align: center;
 		transition: border-color var(--ease-quick),
 			color var(--ease-quick),
 			background var(--ease-quick);

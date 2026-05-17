@@ -62,13 +62,14 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
+		align-items: center;
 		gap: var(--space-1);
 		padding: var(--space-3) var(--space-4);
 		min-height: 72px;
 		background: var(--bg-card);
 		border: 1px solid var(--rule);
 		border-radius: var(--radius-card);
-		text-align: left;
+		text-align: center;
 		cursor: pointer;
 		transition: border-color var(--ease-quick), background var(--ease-quick);
 	}

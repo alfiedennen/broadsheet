@@ -50,9 +50,24 @@
 	let trendingByWindow = $state<Record<string, RowState>>({});
 	let newByWindow = $state<Record<string, RowState>>({});
 
-	// Fetch a fresh round whenever inputs change. We re-issue ALL queries
-	// when ANY input changes; the TMDB client's 1h localStorage cache
-	// makes unchanged-input refetches effectively free.
+	// 0.8.7 fix — `effect_update_depth_exceeded` infinite loop.
+	//
+	// The 0.8.5 implementation mixed reads and writes on the same
+	// $state proxies (`trendingByWindow[w] = fresh()` is both a read
+	// via the proxy AND a write, plus the {...trendingByWindow}
+	// spread in the .then handlers does both too) — Svelte 5's
+	// proxy tracker then added each proxy as a self-dep on the
+	// containing effect, every write triggered the effect to re-run,
+	// the effect wrote again, infinite. The loop jammed Svelte's
+	// scheduler so the kebab couldn't open + TV state stayed stale
+	// after toggles + posters never rendered (effect crashed before
+	// the fetches even fired).
+	//
+	// Fix: build replacement objects in LOCAL variables, then assign
+	// to the $state proxies ONCE per cycle. The .then handlers
+	// snapshot the current value via $state.snapshot (non-proxy
+	// copy) before merging the new key, so the merge itself doesn't
+	// touch the proxy.
 	$effect(() => {
 		const key = apiKey;
 		const reg = region || 'GB';
@@ -62,12 +77,31 @@
 		if (!key) return;
 
 		let cancelled = false;
-		trendingByWindow = {};
-		newByWindow = {};
-		for (const w of tWins) trendingByWindow[w] = fresh();
-		for (const d of nWins) newByWindow[String(d)] = fresh();
+
+		// Build the loading-state objects in plain locals first,
+		// then assign once. No proxy reads inside the construction.
+		const initialTrending: Record<string, RowState> = {};
+		const initialNew: Record<string, RowState> = {};
+		for (const w of tWins) initialTrending[w] = fresh();
+		for (const d of nWins) initialNew[String(d)] = fresh();
+		trendingByWindow = initialTrending;
+		newByWindow = initialNew;
 
 		const fail = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+		function setTrending(win: string, state: RowState) {
+			if (cancelled) return;
+			// Snapshot first — $state.snapshot returns a non-proxy
+			// copy, so the spread below doesn't read through the
+			// proxy and re-trigger the effect.
+			const current = $state.snapshot(trendingByWindow) as Record<string, RowState>;
+			trendingByWindow = { ...current, [win]: state };
+		}
+		function setNew(key: string, state: RowState) {
+			if (cancelled) return;
+			const current = $state.snapshot(newByWindow) as Record<string, RowState>;
+			newByWindow = { ...current, [key]: state };
+		}
 
 		for (const w of tWins) {
 			const client = createTmdbClient(key, reg, {
@@ -77,20 +111,8 @@
 			});
 			client
 				.trending()
-				.then((items) => {
-					if (!cancelled)
-						trendingByWindow = {
-							...trendingByWindow,
-							[w]: { items, loading: false, error: null }
-						};
-				})
-				.catch((e) => {
-					if (!cancelled)
-						trendingByWindow = {
-							...trendingByWindow,
-							[w]: { items: [], loading: false, error: fail(e) }
-						};
-				});
+				.then((items) => setTrending(w, { items, loading: false, error: null }))
+				.catch((e) => setTrending(w, { items: [], loading: false, error: fail(e) }));
 		}
 
 		for (const d of nWins) {
@@ -100,20 +122,8 @@
 			});
 			client
 				.newReleases(d)
-				.then((items) => {
-					if (!cancelled)
-						newByWindow = {
-							...newByWindow,
-							[String(d)]: { items, loading: false, error: null }
-						};
-				})
-				.catch((e) => {
-					if (!cancelled)
-						newByWindow = {
-							...newByWindow,
-							[String(d)]: { items: [], loading: false, error: fail(e) }
-						};
-				});
+				.then((items) => setNew(String(d), { items, loading: false, error: null }))
+				.catch((e) => setNew(String(d), { items: [], loading: false, error: fail(e) }));
 		}
 
 		return () => {
