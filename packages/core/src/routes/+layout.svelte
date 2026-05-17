@@ -175,19 +175,32 @@
 			audit({ kind: 'auth-event', note: 'window.__broadsheet_dev__ exposed (dev only)' });
 		}
 	});
+
+	// 0.9.0 kiosk mode: ?kiosk=true URL param suppresses ALL editorial
+	// chrome — kebab nav, write-allowed banner, connection indicator —
+	// so a wall tablet pointed at a custom surface shows ONLY the
+	// page content. Useful with Fully Kiosk Browser / Mr Robot etc.
+	// Reactive to URL changes so navigations within the SPA preserve
+	// the mode without a hard reload.
+	const kioskMode = $derived(page.url.searchParams.get('kiosk') === 'true');
 </script>
 
-<WriteAllowedBanner />
+{#if !kioskMode}
+	<WriteAllowedBanner />
+{/if}
 
 <!--
 	KebabNav is sticky top-right on every page except /setup/. It needs
 	the connection to be live (it links to pages that read from
-	discovery), so we only mount once booted.
+	discovery), so we only mount once booted. 0.9.0: kiosk-mode hides
+	it so wall surfaces have no nav chrome.
 -->
-{#if booted && page.url.pathname !== '/setup/'}
+{#if booted && page.url.pathname !== '/setup/' && !kioskMode}
 	<KebabNav />
 {/if}
 
+<!-- Toast stays in kiosk mode so wall surfaces still confirm
+     action presses ("Light off ✓"). -->
 <Toast />
 
 <!--
@@ -195,7 +208,9 @@
 	when it isn't. Mounts unconditionally (even before discovery boots)
 	so users see "Connecting…" on cold start instead of a blank screen.
 -->
-<ConnectionIndicator />
+{#if !kioskMode}
+	<ConnectionIndicator />
+{/if}
 
 <!--
 	v0.2: TakeoverBanner retired. v0.1's banner advised users that

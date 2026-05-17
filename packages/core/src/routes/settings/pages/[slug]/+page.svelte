@@ -25,7 +25,12 @@
 	} from '$lib/curation/store.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { ALL_BLOCK_TYPES, BLOCK_META } from '$lib/blocks/registry';
-	import { defaultBlockConfig, type BlockDef, type BlockType } from '$lib/blocks/types';
+	import {
+		defaultBlockConfig,
+		WALL_SURFACE_PRESETS,
+		type BlockDef,
+		type BlockType
+	} from '$lib/blocks/types';
 	import RenderedPage from '$lib/blocks/RenderedPage.svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
@@ -36,6 +41,26 @@
 	const customPage = $derived(
 		curationStore.current.customPages?.find((p) => p.slug === slug) ?? null
 	);
+
+	// 0.9.0 wall builder: full URLs the "Point a wall here" panel
+	// surfaces. Reactive on window.location.origin + base + slug so
+	// edits to the slug update the displayed URL live.
+	const origin = $derived(typeof window === 'undefined' ? '' : window.location.origin);
+	const kioskUrl = $derived(
+		customPage ? `${origin}${base}/${customPage.slug}/?kiosk=true` : ''
+	);
+	const plainUrl = $derived(
+		customPage ? `${origin}${base}/${customPage.slug}/` : ''
+	);
+
+	async function copyToClipboard(text: string, label: string) {
+		try {
+			await navigator.clipboard.writeText(text);
+			showToast(`${label} copied`, 'success');
+		} catch {
+			showToast('Copy failed — select + copy manually', 'error');
+		}
+	}
 
 	let expandedIdx = $state<number | null>(null);
 	let addingBlock = $state(false);
@@ -559,6 +584,118 @@
 						/>
 						<span class="field-label">Hide from nav (route stays live)</span>
 					</label>
+					<!-- 0.9.0: wall-surface device picker. Stores
+					     width/height/label on customPage.surface so the
+					     "Point a wall here" panel below can suggest
+					     correctly-sized Fully Kiosk Browser config. -->
+					<label class="field">
+						<span class="field-label">Wall device (optional)</span>
+						<select
+							class="field-input"
+							value={customPage.surface?.label ?? ''}
+							onchange={(e) => {
+								const val = (e.target as HTMLSelectElement).value;
+								if (!val) {
+									updateMeta({ surface: undefined });
+								} else {
+									const preset = WALL_SURFACE_PRESETS.find((p) => p.label === val);
+									if (preset) {
+										updateMeta({
+											surface: {
+												width: preset.width,
+												height: preset.height,
+												label: preset.label
+											}
+										});
+									}
+								}
+							}}
+						>
+							<option value="">— Not a wall surface</option>
+							{#each WALL_SURFACE_PRESETS as preset (preset.label)}
+								<option value={preset.label}>
+									{preset.label} ({preset.width}×{preset.height})
+								</option>
+							{/each}
+						</select>
+					</label>
+				</div>
+
+				<!-- 0.9.0 wall builder: "Point a wall here" panel.
+				     URL with optional kiosk-mode query param, copy
+				     button, Fully Kiosk Browser one-liner hint. -->
+				<OutLine label="Point a wall here" />
+				<div class="share-panel">
+					<p class="share-prose">
+						Open this on any device on your network and it renders
+						in <em>kiosk mode</em> — no kebab nav, no chrome, no
+						connection indicator. Useful for wall-mounted tablets
+						running Fully Kiosk Browser, Mr Robot, or any always-on
+						display.
+					</p>
+					<div class="share-row">
+						<label class="field share-field">
+							<span class="field-label">Kiosk URL</span>
+							<input
+								type="text"
+								readonly
+								class="field-input mono share-input"
+								value={kioskUrl}
+								onfocus={(e) => (e.target as HTMLInputElement).select()}
+							/>
+						</label>
+						<button
+							type="button"
+							class="action share-copy"
+							onclick={() => copyToClipboard(kioskUrl, 'Kiosk URL')}
+						>
+							Copy
+						</button>
+					</div>
+					<details class="share-fkb">
+						<summary>Fully Kiosk Browser quick config</summary>
+						<dl class="fkb-dl">
+							<dt>Start URL</dt>
+							<dd><code>{kioskUrl}</code></dd>
+							<dt>Hide browser chrome</dt>
+							<dd>Toggle: <code>Web Content Settings → Web Auto Reload</code>:
+								off; <code>Kiosk Mode</code>: on; <code>Hide Status Bar</code>: on.</dd>
+							<dt>Keep screen on</dt>
+							<dd><code>Display Settings → Keep Screen On</code>: on.
+								Recommend <code>Reduce screen brightness in dark room</code> too.</dd>
+							{#if customPage.surface}
+								<dt>Resolution match</dt>
+								<dd>
+									Page is sized for <code>{customPage.surface.label}</code>
+									({customPage.surface.width}×{customPage.surface.height}).
+									Use landscape orientation on the device for best fit.
+								</dd>
+							{/if}
+						</dl>
+					</details>
+					<details class="share-fkb">
+						<summary>Plain URL (no kiosk mode)</summary>
+						<div class="share-row">
+							<input
+								type="text"
+								readonly
+								class="field-input mono share-input"
+								value={plainUrl}
+								onfocus={(e) => (e.target as HTMLInputElement).select()}
+							/>
+							<button
+								type="button"
+								class="action share-copy"
+								onclick={() => copyToClipboard(plainUrl, 'URL')}
+							>
+								Copy
+							</button>
+						</div>
+						<p class="share-fine">
+							The plain URL keeps the kebab nav + connection indicator —
+							use it when opening on a phone or desktop for casual access.
+						</p>
+					</details>
 				</div>
 
 				<OutLine label="Blocks" />
@@ -1579,6 +1716,117 @@
 	.action.danger {
 		color: var(--state-alert);
 		border-color: var(--state-alert);
+	}
+
+	/* 0.9.0 wall builder — "Point a wall here" panel. */
+	.share-panel {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding: var(--space-4);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+	}
+
+	.share-prose {
+		margin: 0;
+		font-family: var(--font-body);
+		font-size: var(--text-body);
+		line-height: var(--leading-snug);
+		color: var(--fg);
+		max-width: 72ch;
+	}
+
+	.share-prose em {
+		font-style: italic;
+		color: var(--accent);
+	}
+
+	.share-row {
+		display: flex;
+		gap: var(--space-2);
+		align-items: flex-end;
+	}
+
+	.share-field {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.share-input {
+		font-size: var(--text-caption);
+		padding: var(--space-2) var(--space-3);
+	}
+
+	.share-copy {
+		flex: 0 0 auto;
+	}
+
+	.share-fkb {
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		color: var(--fg);
+	}
+
+	.share-fkb > summary {
+		cursor: pointer;
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		padding: var(--space-2) 0;
+		list-style: none;
+		transition: color var(--ease-quick);
+	}
+
+	.share-fkb > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.share-fkb > summary::before {
+		content: '+ ';
+		color: var(--accent);
+	}
+
+	.share-fkb[open] > summary::before {
+		content: '− ';
+	}
+
+	.share-fkb > summary:hover {
+		color: var(--accent);
+	}
+
+	.fkb-dl {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: var(--space-2) var(--space-4);
+		margin: var(--space-2) 0 0;
+		font-size: var(--text-caption);
+		line-height: var(--leading-snug);
+	}
+
+	.fkb-dl dt {
+		font-family: var(--font-mono);
+		color: var(--fg-muted);
+	}
+
+	.fkb-dl dd {
+		margin: 0;
+		color: var(--fg);
+	}
+
+	.fkb-dl code {
+		font-family: var(--font-mono);
+		font-size: 0.9em;
+		color: var(--accent);
+	}
+
+	.share-fine {
+		margin: var(--space-2) 0 0;
+		font-style: italic;
+		color: var(--fg-muted);
 	}
 
 	.mini {

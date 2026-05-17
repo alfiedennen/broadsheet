@@ -48,11 +48,14 @@ describe('applicablePresets — empty discovery', () => {
 		expect(result[0].meta.id).toBe('blank');
 	});
 
-	it('returns ONLY Blank when no data-dependent predicates pass', () => {
+	it('returns Blank + always-applicable presets when no data-dependent predicates pass', () => {
 		const result = applicablePresets({ persons: [], areas: [] });
-		// person/wall/family/energy presets all require either persons
-		// or area-counts/climates → none pass on empty ctx.
-		expect(result.map((p) => p.meta.id)).toEqual(['blank']);
+		// person/wall-morning/family/energy require persons or
+		// area-counts/climates → don't pass on empty ctx. blank +
+		// wall-surface have no applicableWhen / `() => true` → always
+		// pass. 0.9.0 wall builder added wall-surface as the second
+		// always-applicable preset (a blank wall-tablet starting point).
+		expect(result.map((p) => p.meta.id)).toEqual(['blank', 'wall-surface']);
 	});
 });
 
@@ -148,12 +151,16 @@ describe('applicablePresets — populated discovery', () => {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	} as any;
 
-	it('returns all 5 presets when context satisfies every predicate', () => {
+	it('returns all 6 presets when context satisfies every predicate', () => {
 		const result = applicablePresets(fullCtx);
+		// 0.9.0 wall builder added wall-surface as a 6th preset
+		// (always-applicable, slots between wall-morning + family-status
+		// per PRESETS registry order).
 		expect(result.map((p) => p.meta.id)).toEqual([
 			'blank',
 			'person',
 			'wall-morning',
+			'wall-surface',
 			'family-status',
 			'energy-glance'
 		]);

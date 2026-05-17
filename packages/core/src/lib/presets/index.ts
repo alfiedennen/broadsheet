@@ -192,6 +192,71 @@ const wallMorning: PresetBuilder = {
 	})
 };
 
+/* ── Preset 2b: Wall surface (0.9.0 wall builder primitive) ──────── */
+
+/**
+ * The blank wall-tablet starting point. 0.9.0 wall builder ships
+ * this as the canonical "I have a tablet on the wall" preset —
+ * sized for landscape 1280×800-ish (Fire HD 10, Galaxy Tab A9),
+ * with an empty action-grid slot ready for the user's custom
+ * controls (Edifier source toggle, Sonos pause, garage door, etc).
+ *
+ * Differs from `wallMorning` in three ways:
+ *  1. Adds a top action-grid block (custom-actions) seeded with one
+ *     example tile the user replaces — making the "you can put your
+ *     own buttons here" affordance obvious without copy-pasting from
+ *     /settings/pages.
+ *  2. No explainer at the bottom — wall surfaces don't show prose.
+ *  3. Hint to point a device at it (rendered in the page editor's
+ *     "Share with a device" panel — see /settings/pages/[slug]).
+ */
+const wallSurface: PresetBuilder = {
+	meta: {
+		id: 'wall-surface',
+		label: 'Wall surface (blank)',
+		description:
+			"A blank wall-tablet starting point. Pre-filled with custom action slot " +
+			"+ room toggles + scenes. Sized for 1280×800 landscape (Fire HD 10, Galaxy Tab). " +
+			"Use 'Share with a device' on the editor to point your wall at it.",
+		applicableWhen: () => true
+	},
+	build: (ctx, opts) => ({
+		label: opts.label,
+		icon: 'mdi:tablet-cellphone',
+		pageWidth: 'wide',
+		navOrder: 100,
+		hiddenFromNav: false,
+		blocks: [
+			{
+				type: 'hero',
+				config: {
+					eyebrow: 'Wall',
+					headline: 'Within reach.',
+					size: 'sm'
+				}
+			},
+			{
+				type: 'action-grid',
+				config: {
+					label: 'Quick actions',
+					size: 'medium',
+					actions: [
+						{
+							label: 'Replace me',
+							detail: 'Edit this in /settings/pages',
+							icon: 'mdi:pencil',
+							service: { domain: 'light', service: 'toggle', target: {} }
+						}
+					]
+				}
+			},
+			{ type: 'macro-grid', config: { label: 'Macros' } },
+			{ type: 'room-toggle-grid', config: { label: 'Rooms' } },
+			{ type: 'scene-row', config: { label: 'Scenes', maxScenes: 8 } }
+		]
+	})
+};
+
 /* ── Preset 3: Family status board ───────────────────────────────── */
 
 /**
@@ -316,6 +381,7 @@ export const PRESETS: PresetBuilder[] = [
 	blankCanvas,
 	personPage,
 	wallMorning,
+	wallSurface,
 	familyStatus,
 	energyGlance
 ];

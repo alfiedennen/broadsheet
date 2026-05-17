@@ -284,7 +284,41 @@ export interface CustomPageDef {
 	hiddenFromNav?: boolean;
 	pageWidth?: 'narrow' | 'default' | 'wide';
 	blocks: BlockDef[];
+	/**
+	 * 0.9.0 wall builder: optional target dimensions for a wall surface.
+	 * Used by the page editor's "Share with a device" panel to suggest
+	 * a sensible Fully Kiosk Browser config + by the editor's preview
+	 * pane to frame the layout at the target size. Doesn't constrain
+	 * the page render itself — the page lays out responsively whatever
+	 * device it's actually opened on.
+	 */
+	surface?: {
+		/** Target wall device width in CSS px (landscape orientation). */
+		width: number;
+		/** Target height in CSS px. */
+		height: number;
+		/** Human label — e.g. "Fire HD 10", "Galaxy Tab A9", "Custom". */
+		label?: string;
+	};
 }
+
+/**
+ * 0.9.0: known wall-surface device presets the editor offers in the
+ * "Share with a device" dropdown. Width/height are landscape pixel
+ * dimensions matching native CSS viewport (after device-pixel-ratio
+ * scaling). Adding a new one is mechanical — drop the entry.
+ */
+export const WALL_SURFACE_PRESETS = [
+	{ label: 'Fire HD 10', width: 1280, height: 800 },
+	{ label: 'Fire HD 8', width: 1280, height: 800 },
+	{ label: 'Galaxy Tab A9 / A9+', width: 1340, height: 800 },
+	{ label: 'Galaxy Tab S6 / S7', width: 1600, height: 1000 },
+	{ label: 'iPad 10.2"', width: 1080, height: 810 },
+	{ label: 'iPad Pro 11"', width: 1668, height: 1124 },
+	{ label: 'Pixel Tablet', width: 2560, height: 1600 },
+	{ label: 'Generic 7" tablet', width: 1024, height: 600 },
+	{ label: 'Generic phone landscape', width: 800, height: 480 }
+] as const;
 
 /**
  * Default-config factory for a fresh block of `type` — used by the
