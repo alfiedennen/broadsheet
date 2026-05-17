@@ -112,6 +112,28 @@
 			// eslint-disable-next-line no-console
 			console.error('[broadsheet] discovery / curation boot failed', err);
 		}
+
+		// Theme F: first-install auto-seed of curation.people. If the
+		// user has never touched /settings/people AND discovery surfaced
+		// persons, populate the bindings with the auto-picked sensors
+		// so the home tile + manifest line resolve correctly from boot.
+		// No-op on subsequent boots (gated on curation.people length).
+		try {
+			const { autoSeedPeopleFromDiscovery } = await import(
+				'$lib/curation/autoSeed'
+			);
+			const seeded = await autoSeedPeopleFromDiscovery();
+			if (seeded > 0) {
+				audit({
+					kind: 'auth-event',
+					note: `first-boot auto-seed: bound ${seeded} ${seeded === 1 ? 'person' : 'people'} to their suggested sensor`
+				});
+			}
+		} catch (err) {
+			// eslint-disable-next-line no-console
+			console.warn('[broadsheet] auto-seed failed (non-fatal):', err);
+		}
+
 		bootStage = 'plugins';
 
 		// Plugin loader: pure static validation of the bundled plugins.

@@ -40,6 +40,7 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 	import PresenceCards from '$lib/components/PresenceCards.svelte';
 	import InlinePin from '$lib/components/InlinePin.svelte';
+	import { resolvePersonPresence, buildPresenceContext } from '$lib/presence';
 	import type { PresenceCard } from '$lib/components/PresenceCards.types';
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
 
@@ -60,7 +61,8 @@
 		resolvePresence({
 			persons: discovery.persons,
 			states: discoveryStore.states,
-			personOverrides
+			personOverrides,
+			areas: discovery.areas
 		})
 	);
 
@@ -69,7 +71,8 @@
 			persons: discovery.persons,
 			states: discoveryStore.states,
 			personOverrides,
-			voice: curationStore.current.voice
+			voice: curationStore.current.voice,
+			areas: discovery.areas
 		})
 	);
 
@@ -162,84 +165,22 @@
 	const usePaintings = useCurationField<boolean>('plugins.emanations.config.usePaintings');
 	const paintingsEnabled = $derived(usePaintings.value !== false);
 
-	const NOT_PRESENT = new Set(['', 'unknown', 'unavailable', 'not_home', 'away', 'none']);
-
+	// Theme F: presenceFor now wraps the single source of truth in
+	// $lib/presence so the home tile + manifest line + future
+	// presence-aware features (Theme C) never drift apart.
 	function personSlug(p: DomainPerson): string {
 		return p.id.replace(/^person\./, '');
 	}
-	function effectiveSensorFor(p: DomainPerson): string | null {
-		const overrideId = personOverrides[p.id];
-		return overrideId === null ? null : overrideId ?? p.suggestedPresenceSensor ?? null;
-	}
 
 	type PresenceSlot = { kind: 'in-room'; area: DomainArea } | { kind: 'away' };
-
 	function presenceFor(p: DomainPerson): PresenceSlot {
-		const sensorId = effectiveSensorFor(p);
-		if (!sensorId) return { kind: 'away' };
-		// V3.2 dogfood split-brain bug: `discovery.byEntityId(sensorId)`
-		// reads from the entity-registry projection. Template sensors
-		// like `sensor.alfie_committed_room` (defined via `template:` in
-		// configuration.yaml) live in HA's state machine but aren't
-		// always registered in the entity registry — so byEntityId
-		// returns null, this function falls through to 'away', and the
-		// person tile shows AWAY while the moment-text manifest
-		// (which reads directly from `discoveryStore.states`) shows
-		// the correct room. Fix: prefer the registry entity when
-		// available, but fall back to the raw state-machine record.
-		const fromRegistry = discovery.byEntityId(sensorId)?.state?.state;
-		const fromStates = discoveryStore.states[sensorId]?.state;
-		const stateValue = (fromRegistry ?? fromStates ?? '').toString().trim();
-		if (!stateValue || NOT_PRESENT.has(stateValue.toLowerCase())) return { kind: 'away' };
-		// V3 manual dogfood (BUG B-6): templated presence sensors like
-		// sensor.alfie_committed_room can report EITHER the area's display
-		// name ("Office") OR its slug ("alfies_office") depending on how the
-		// HA-side template was written. Matching only on area.name would
-		// silently fall through to 'away' for any sensor that reports slugs
-		// — which then bypasses the user's uploaded room painting AND
-		// renders "AWAY" on the person tile even though the user is
-		// demonstrably home. Match either form, case-insensitive, with the
-		// slug-normalised version of the display name too as a fallback
-		// (covers sensors that report 'living_room' against an area whose
-		// display name is 'Living Room').
-		const needle = stateValue.toLowerCase();
-		const slugNeedle = needle.replace(/\s+/g, '_');
-		// Strategy 1: exact match on name / id / slugged-name. Catches
-		// the common case where the HA area is friendly-named (e.g.
-		// "Living Room") and the sensor reports the same string.
-		const exact = discovery.areas.find((a) => {
-			if (a.id === '__unsorted__') return false;
-			if (a.name.toLowerCase() === needle) return true;
-			if (a.id.toLowerCase() === slugNeedle) return true;
-			if (a.name.toLowerCase().replace(/\s+/g, '_') === slugNeedle) return true;
-			return false;
-		});
-		if (exact) return { kind: 'in-room', area: exact };
-
-		// Strategy 2: suffix match on area_id. Catches the case where
-		// the HA area is slug-named ("alfies_office") and the sensor
-		// reports just the room part ("Office"). Multiple areas can
-		// match (alfies_office + elenas_office both endWith "_office")
-		// — prefer the one whose id starts with the person's first
-		// name (or its possessive form). Example: needle="office",
-		// candidates=[alfies_office, elenas_office], person Alfie →
-		// prefer alfies_office because "alfies" startsWith "alfie".
-		const suffix = `_${slugNeedle}`;
-		const suffixMatches = discovery.areas.filter(
-			(a) => a.id !== '__unsorted__' && a.id.toLowerCase().endsWith(suffix)
-		);
-		if (suffixMatches.length === 0) return { kind: 'away' };
-		if (suffixMatches.length === 1) {
-			return { kind: 'in-room', area: suffixMatches[0] };
-		}
-		// Disambiguate by person-affiliation
-		const firstName = p.name.split(' ')[0].toLowerCase();
-		const affiliated = suffixMatches.find(
-			(a) =>
-				a.id.toLowerCase().startsWith(firstName + '_') ||
-				a.id.toLowerCase().startsWith(firstName + 's_')
-		);
-		return { kind: 'in-room', area: affiliated ?? suffixMatches[0] };
+		const r = resolvePersonPresence(p, buildPresenceContext(personOverrides));
+		// Home tile only renders 'in-room' when we have a specific
+		// area — bare 'home' (HA's person state without a committed-
+		// room sensor) reads as away for tile purposes since there's
+		// no room to label.
+		if (!r.home || !r.area) return { kind: 'away' };
+		return { kind: 'in-room', area: r.area };
 	}
 
 	function paintingForPerson(p: DomainPerson, slot: PresenceSlot): string | null {

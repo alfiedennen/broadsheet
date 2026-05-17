@@ -14,8 +14,9 @@
  *  - manifest.empty: "The house is empty."
  */
 
-import type { DomainPerson } from '$lib/discovery';
+import type { DomainPerson, DomainArea } from '$lib/discovery';
 import type { State } from '$lib/ha/types';
+import { resolvePersonPresence } from './presence';
 
 export interface ManifestInput {
 	persons: DomainPerson[];
@@ -24,6 +25,14 @@ export interface ManifestInput {
 	personOverrides?: Record<string, string | null>;
 	/** Voice string overrides keyed by string id. */
 	voice?: Record<string, string>;
+	/**
+	 * Theme F: domain areas needed by the unified resolver for
+	 * suffix-match + person-affiliation tiebreak. Optional for
+	 * backwards-compat (callers that don't supply will get the
+	 * pre-Theme F behaviour: no area resolution, sensor state value
+	 * used as room name).
+	 */
+	areas?: DomainArea[];
 }
 
 export interface ManifestPersonState {
@@ -33,37 +42,26 @@ export interface ManifestPersonState {
 }
 
 /**
- * Resolve each person's home/away state + current room from their
- * presence sensor. Curation overrides the heuristic when set.
+ * Resolve each person's home/away state + current room.
+ *
+ * Theme F: thin wrapper around the unified $lib/presence resolver
+ * so the home tile + manifest line never drift apart. Returns the
+ * lowercase room-name string the manifest prose expects (rather than
+ * the area.name which may be a humanized slug).
  */
 export function resolvePresence(input: ManifestInput): ManifestPersonState[] {
+	const overrides = input.personOverrides ?? {};
 	return input.persons.map((p) => {
-		// Curation override wins over heuristic suggestion
-		const overrideId = input.personOverrides?.[p.id];
-		const sensorId = overrideId === null ? null : (overrideId ?? p.suggestedPresenceSensor);
-		if (!sensorId) {
-			return { person: p, isHome: false, room: null };
-		}
-
-		const sensor = input.states[sensorId];
-		if (!sensor) return { person: p, isHome: false, room: null };
-
-		const sval = (sensor.state || '').toLowerCase();
-
-		// Heuristic: device_tracker / person → 'home' / 'not_home' / zone-name
-		// committed_room sensor → room name string OR 'away'
-		if (sval === 'home') {
-			// person/device_tracker says "home" but doesn't say which room
-			return { person: p, isHome: true, room: null };
-		}
-		if (sval === 'not_home' || sval === 'away' || sval === 'unavailable' || sval === 'unknown') {
-			return { person: p, isHome: false, room: null };
-		}
-
-		// committed_room sensor returns the room name as the state value
-		// Capitalise on display
-		const room = sval.charAt(0).toUpperCase() + sval.slice(1);
-		return { person: p, isHome: true, room };
+		const r = resolvePersonPresence(p, {
+			personOverrides: overrides,
+			states: input.states,
+			areas: input.areas ?? []
+		});
+		return {
+			person: p,
+			isHome: r.home,
+			room: r.roomNameForProse
+		};
 	});
 }
 
