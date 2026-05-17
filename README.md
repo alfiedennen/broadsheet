@@ -182,11 +182,47 @@ in-app curation layer — no YAML:
   override per section.
 - **Plugins** — enable / disable the first-class plugins, see each one's
   live status, open its config panel.
+- **Pages** — author custom pages from your own things (since 0.9.1).
+  See below.
 
 Curation is persisted to the add-on's data volume as `broadsheet.json`
 (and so rides HA's snapshot/backup system). You can edit that file
 directly if you prefer files to UIs — the Settings panel is a thin
 wrapper over it.
+
+### Custom pages + the wall builder (0.9.x)
+
+Beyond the eight core pages, broadsheet ships with a **things-first
+custom page editor**. You browse the controllable things in your house
+(grouped by room, then by Lights / TV / Heating / Locks / …) and tap
+or drag them onto a canvas. broadsheet picks the right widget for the
+entity's domain automatically — a light becomes a toggle, a scene
+becomes a fire-tile, a TV becomes a full remote.
+
+Composed recipes do more in one tap: *"Living Room lights — panel"*
+drops a single block that renders every light in the area inline +
+grows as you add more lights in HA. *"Living Room media — panel"*
+drops the TV remote + speakers together. *"All Living Room lights —
+off"* drops a one-tap macro across N lights.
+
+Plugins can contribute their own blocks to the browser. When
+`@broadsheet/tmdb-tv` is enabled, every TV-having area gets an extra
+recipe — *"<area> TV — TMDB show & movie rows"* — so the browse-and-
+play poster grid lands on YOUR wall page right next to the remote.
+
+For wall-mounted tablets, the page editor includes a **Wall device**
+preset picker (Fire HD 10, Galaxy Tab A9, iPad, Pixel Tablet, etc.)
++ a Kiosk URL + Fully Kiosk Browser hints. The preview pane renders
+at the device's native dimensions, scaled to fit your editor screen.
+
+- **[`docs/WALL-BUILDER-GUIDE.md`](docs/WALL-BUILDER-GUIDE.md)** —
+  step-by-step "build your first kiosk surface in 5 minutes".
+- **[`docs/CUSTOM-PAGES-GUIDE.md`](docs/CUSTOM-PAGES-GUIDE.md)** —
+  full reference for the things-first editor + every block type.
+- **[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)** — the
+  operational gotchas.
+- **[`docs/IMPORTER-GUIDE.md`](docs/IMPORTER-GUIDE.md)** — bringing
+  an existing Lovelace dashboard across.
 
 ---
 
