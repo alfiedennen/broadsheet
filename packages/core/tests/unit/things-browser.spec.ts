@@ -39,6 +39,19 @@ function mkEnt(id: string, name = id.split('.')[1]): DomainEntity {
 	};
 }
 
+/** Same as mkEnt but with a device model — for kiosk/tablet filter tests. */
+function mkEntWithModel(id: string, name: string, model: string): DomainEntity {
+	const e = mkEnt(id, name);
+	(e as DomainEntity & { device: { id: string; name: null; model: string; manufacturer: null; areaId: null } | null }).device = {
+		id: 'dev-1',
+		name: null,
+		model,
+		manufacturer: null,
+		areaId: null
+	};
+	return e;
+}
+
 function mkArea(id: string, name: string, overrides: Partial<DomainArea> = {}): DomainArea {
 	const base: DomainArea = {
 		id,
@@ -414,6 +427,60 @@ describe('buildBrowserTree — 0.9.3 area-panel composites', () => {
 		const tvSub = tree[0].subGroups.find((sg) => sg.label === 'TV');
 		const panel = tvSub!.recipes.find((r) => r.title.endsWith('media — panel'));
 		expect(panel).toBeUndefined();
+	});
+
+	// 0.9.3.1: tablets / kiosks / phones are media_player by HA's
+	// protocol but are SURFACES (broadsheet often runs ON them), not
+	// SOURCES. They must not appear on a media panel, contribute to
+	// the panel-count threshold, or get TMDB recipes.
+	it('drops kiosk/tablet entities from the Speakers sub-group', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			media: [
+				mkEntWithModel('media_player.galaxy_tab_a9', 'Galaxy Tab A9', 'SM-X115'),
+				mkEntWithModel('media_player.fire_tablet', 'Fire HD 10', 'KFSUWI'),
+				mkEnt('media_player.kitchen_sonos', 'Kitchen Sonos')
+			]
+		});
+		const tree = buildBrowserTree([lr]);
+		const speakers = tree[0].subGroups.find((sg) => sg.label === 'Speakers');
+		// Only the Sonos survives; the tablets drop.
+		expect(speakers).toBeDefined();
+		const titles = speakers!.recipes.map((r) => r.title);
+		expect(titles.some((t) => t.includes('Sonos'))).toBe(true);
+		expect(titles.some((t) => t.toLowerCase().includes('galaxy tab'))).toBe(false);
+		expect(titles.some((t) => t.toLowerCase().includes('fire'))).toBe(false);
+	});
+
+	it('drops kiosk/tablet entries from the media-panel referencedEntityIds + count threshold', () => {
+		// Single real TV + a tablet — the panel-2-or-mixed threshold
+		// should NOT trip, because the tablet doesn't count as a real
+		// speaker.
+		const lr = mkArea('living_room', 'Living Room', {
+			tvs: [mkEnt('media_player.lr_tv', 'TV')],
+			media: [mkEntWithModel('media_player.galaxy_tab_a9', 'Galaxy Tab A9', 'SM-X115')]
+		});
+		const tree = buildBrowserTree([lr]);
+		const tvSub = tree[0].subGroups.find((sg) => sg.label === 'TV');
+		const panel = tvSub!.recipes.find((r) => r.title.endsWith('media — panel'));
+		expect(panel).toBeUndefined();
+	});
+
+	it('keeps the media-panel recipe when there are real mixed sources, with the tablet excluded', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			tvs: [mkEnt('media_player.lr_tv', 'TV')],
+			media: [
+				mkEnt('media_player.kitchen_sonos', 'Sonos'),
+				mkEntWithModel('media_player.galaxy_tab_a9', 'Galaxy Tab', 'SM-X115')
+			]
+		});
+		const tree = buildBrowserTree([lr]);
+		const tvSub = tree[0].subGroups.find((sg) => sg.label === 'TV');
+		const panel = tvSub!.recipes.find((r) => r.title.endsWith('media — panel'));
+		expect(panel).toBeDefined();
+		// Tablet not in referenced entity ids.
+		expect(panel!.referencedEntityIds).not.toContain('media_player.galaxy_tab_a9');
+		// Sonos + TV are.
+		expect(panel!.referencedEntityIds).toEqual(['media_player.lr_tv', 'media_player.kitchen_sonos']);
 	});
 });
 

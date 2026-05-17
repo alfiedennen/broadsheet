@@ -18,6 +18,7 @@
 	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import type { DomainEntity } from '$lib/discovery';
+	import { isRealMediaSource } from '$lib/discovery/heuristics';
 	import { callService, callOn, callOff } from '$lib/ha/actions';
 	import { curationStore } from '$lib/curation/store.svelte';
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
@@ -58,23 +59,13 @@
 	const tvAreas = $derived(discovery.areasForPage('tv'));
 	const allTVs = $derived(tvAreas.flatMap((a) => a.tvs));
 	const allRemotes = $derived(tvAreas.flatMap((a) => a.remotes));
-	// 0.8.7 fix — filter tablets / kiosks / phones out of /tv's
-	// "Other media" list. HA classes them as media_player but they're
-	// surfaces, not media SOURCES. Heuristic: rough name + device-class
-	// match. Speakers/receivers (real audio outputs) stay.
-	function looksLikeKioskOrTablet(name: string, deviceModel: string | null): boolean {
-		const s = (name + ' ' + (deviceModel ?? '')).toLowerCase();
-		return (
-			/\b(tablet|fully kiosk|fire ?(hd|tablet)|galaxy ?tab|kindle|nexus|pixel ?\d|ipad|iphone|chromebook|chrome ?os|browser|kiosk)\b/.test(
-				s
-			)
-		);
-	}
-	const allMedia = $derived(
-		tvAreas
-			.flatMap((a) => a.media)
-			.filter((e) => !looksLikeKioskOrTablet(e.name, e.device?.model ?? null))
-	);
+	// 0.8.7: filter tablets / kiosks / phones out of /tv's "Other
+	// media" list. HA classes them as media_player but they're
+	// surfaces, not media SOURCES. 0.9.3.1 lifted the heuristic
+	// into discovery/heuristics so the things-first browser + the
+	// area-media-panel renderer share it (see `isRealMediaSource`
+	// in the imports above).
+	const allMedia = $derived(tvAreas.flatMap((a) => a.media).filter(isRealMediaSource));
 
 	// Primary TV = first TV. Multi-TV households can pin per area in M4.
 	const primaryTv = $derived(allTVs[0] ?? null);

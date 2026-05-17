@@ -40,6 +40,7 @@
  */
 
 import type { DomainArea, DomainEntity } from '$lib/discovery';
+import { isRealMediaSource } from '$lib/discovery/heuristics';
 import type { BlockDef, MacroStep } from '$lib/blocks/types';
 import type {
 	PluginBlockContribution,
@@ -47,6 +48,21 @@ import type {
 	PluginRecipeSuggestion,
 	PluginDiscoverySnapshot
 } from '$lib/plugins/types';
+
+/**
+ * 0.9.3.1: filter HA's media_player bucket down to REAL media
+ * sources — tablets / kiosks / phones / Cast-Web surfaces are
+ * media_players by HA's protocol but aren't things the user wants
+ * on a media panel. Used by tvSubGroup + mediaSubGroup. Same
+ * heuristic /tv uses + area-media-panel renderer uses, so the three
+ * surfaces stay aligned.
+ */
+function realMedia(area: DomainArea): DomainEntity[] {
+	return area.media.filter(isRealMediaSource);
+}
+function realTvs(area: DomainArea): DomainEntity[] {
+	return area.tvs.filter(isRealMediaSource);
+}
 
 /* ── Types ──────────────────────────────────────────────────────── */
 
@@ -187,28 +203,32 @@ function lightSubGroup(area: DomainArea): BrowserSubGroup | null {
 }
 
 function tvSubGroup(area: DomainArea): BrowserSubGroup | null {
-	if (area.tvs.length === 0) return null;
+	// 0.9.3.1: filter out kiosks/tablets up front — they shouldn't
+	// appear as TVs OR speakers OR drive the media-panel recipe count.
+	const tvs = realTvs(area);
+	const speakers = realMedia(area);
+	if (tvs.length === 0) return null;
 	const recipes: AccomplishmentRecipe[] = [];
 
 	// Composed media panel (TV + speakers together) — only when the
-	// area has > 1 media device OR mixed TVs + speakers. A single-TV
-	// area gets the more detailed per-TV recipes below without the
-	// extra panel-tile clutter.
-	const totalMedia = area.tvs.length + area.media.length;
-	const isMixed = area.tvs.length > 0 && area.media.length > 0;
+	// area has > 1 REAL media device OR mixed TVs + speakers. A
+	// single-TV area gets the more detailed per-TV recipes below
+	// without the extra panel-tile clutter.
+	const totalMedia = tvs.length + speakers.length;
+	const isMixed = tvs.length > 0 && speakers.length > 0;
 	if (totalMedia >= 2 || isMixed) {
-		const allMediaIds = [...area.tvs.map((t) => t.id), ...area.media.map((m) => m.id)];
+		const allMediaIds = [...tvs.map((t) => t.id), ...speakers.map((m) => m.id)];
 		recipes.push({
 			id: `${area.id}/tvs/panel`,
 			title: `${area.name} media — panel`,
-			description: `One block, TV remote${area.tvs.length === 1 ? '' : 's'} + speaker${area.media.length === 1 ? '' : 's'} together`,
+			description: `One block, TV remote${tvs.length === 1 ? '' : 's'} + speaker${speakers.length === 1 ? '' : 's'} together`,
 			icon: 'mdi:multimedia',
 			blocks: [{ type: 'area-media-panel', config: { areaId: area.id } }],
 			referencedEntityIds: allMediaIds
 		});
 	}
 
-	for (const tv of area.tvs) {
+	for (const tv of tvs) {
 		recipes.push(
 			{
 				id: `${area.id}/tvs/${tv.id}/remote`,
@@ -284,9 +304,12 @@ function tvSubGroup(area: DomainArea): BrowserSubGroup | null {
 }
 
 function mediaSubGroup(area: DomainArea): BrowserSubGroup | null {
-	if (area.media.length === 0) return null;
+	// 0.9.3.1: drop kiosk/tablet entries — HA classes them as
+	// media_player but they're surfaces, not sources.
+	const speakers = realMedia(area);
+	if (speakers.length === 0) return null;
 	const recipes: AccomplishmentRecipe[] = [];
-	for (const sp of area.media) {
+	for (const sp of speakers) {
 		recipes.push(
 			{
 				id: `${area.id}/media/${sp.id}/full`,

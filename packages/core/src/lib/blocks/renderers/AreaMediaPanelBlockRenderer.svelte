@@ -15,6 +15,7 @@
 	 * Spec: docs/plans/plan-9.3-composites-and-plugin-blocks.md.
 	 */
 	import { discovery } from '$lib/discovery';
+	import { isRealMediaSource } from '$lib/discovery/heuristics';
 	import OutLine from '$lib/components/OutLine.svelte';
 	import ThingBlockRenderer from './ThingBlockRenderer.svelte';
 	import type { AreaMediaPanelBlockConfig } from '../types';
@@ -22,8 +23,12 @@
 	let { config }: { config: AreaMediaPanelBlockConfig } = $props();
 
 	const area = $derived(config.areaId ? discovery.byAreaId(config.areaId) : null);
-	const tvs = $derived(area?.tvs ?? []);
-	const speakers = $derived(area?.media ?? []);
+	// 0.9.3.1 — filter out kiosks / tablets / phones. HA classes
+	// them as media_player but they're surfaces (broadsheet itself
+	// often runs on them), not media SOURCES. Same heuristic /tv
+	// and the things-browser use.
+	const tvs = $derived((area?.tvs ?? []).filter(isRealMediaSource));
+	const speakers = $derived((area?.media ?? []).filter(isRealMediaSource));
 	const isEmpty = $derived(tvs.length === 0 && speakers.length === 0);
 	const headerLabel = $derived(config.label ?? (area ? `${area.name} media` : 'Media'));
 </script>

@@ -368,3 +368,44 @@ export function isAmbientRoomSensor(entity: Entity, state: State | null): boolea
 	]);
 	return ambient.has(dc);
 }
+
+/* ─────────────── media surface vs source ───────────────── */
+
+/**
+ * HA classes tablets, kiosks, phones and Cast-Web-style browser
+ * surfaces as `media_player` because the protocol works that way —
+ * they can receive cast streams. But they're SURFACES the user
+ * looks AT, not media SOURCES they listen to. Showing them on a
+ * media panel ("Living Room media — panel") is confusing: the user
+ * doesn't want to "control" their Galaxy Tab next to the TV remote;
+ * the Galaxy Tab IS where the panel is rendered.
+ *
+ * Heuristic: name + device model match. The list is conservative —
+ * generic "media_player" without these signals stays. Real speakers
+ * (Sonos, Echo, Google Home, AVRs, etc.) never match. Adding new
+ * tablet manufacturers is a one-line edit; the underlying truth is
+ * "is this thing a screen the user is sitting in front of?".
+ *
+ * Used by `/tv` and the things-first browser (media-panel recipe
+ * generation + the area-media-panel renderer's at-render filter).
+ */
+export function looksLikeKioskOrTablet(name: string, deviceModel: string | null): boolean {
+	const s = (name + ' ' + (deviceModel ?? '')).toLowerCase();
+	return /\b(tablet|fully ?kiosk|fire ?(hd|tablet)|galaxy ?tab|kindle|nexus|pixel ?\d|ipad|iphone|chromebook|chrome ?os|browser|kiosk|wall ?pixel|wall ?display)\b/.test(
+		s
+	);
+}
+
+/**
+ * Convenience for the common case: "is this entity a REAL media
+ * source the user would expect on a media-control surface?" Takes
+ * the minimum entity shape so it works with both raw `Entity` and
+ * the projected `DomainEntity`. Returns true when the entity is
+ * NOT a kiosk/tablet surface.
+ */
+export function isRealMediaSource(entity: {
+	name: string;
+	device?: { model: string | null } | null;
+}): boolean {
+	return !looksLikeKioskOrTablet(entity.name, entity.device?.model ?? null);
+}
