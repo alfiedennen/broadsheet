@@ -394,13 +394,6 @@
 		</section>
 	{/if}
 
-	<Explainer>
-		Who's home shapes <a href="{base}/long-take">the long take</a> and
-		<a href="{base}/body">the bodies behind it</a>. The day around them is described in
-		<a href="{base}/lights">light</a>, <a href="{base}/heat">heat</a>,
-		<a href="{base}/door">comings and goings</a>, and <a href="{base}/tv">tonight's screen</a>.
-	</Explainer>
-
 	<footer class="colophon">
 		<span class="brand">broadsheet</span>
 		<span class="sep" aria-hidden="true">·</span>
