@@ -33,7 +33,9 @@ describe('block registry coverage', () => {
 			'area-media-panel',
 			// 0.9.4 layout containers
 			'row',
-			'grid'
+			'grid',
+			// 0.9.4.1 tabs primitive
+			'tabs'
 		];
 		// Same set, order-insensitive
 		expect(ALL_BLOCK_TYPES.slice().sort()).toEqual(expected.slice().sort());
@@ -70,7 +72,9 @@ describe('defaultBlockConfig — every type returns a valid block', () => {
 		'area-media-panel',
 		// 0.9.4 layout containers
 		'row',
-		'grid'
+		'grid',
+		// 0.9.4.1 tabs primitive
+		'tabs'
 	] as const) {
 		it(`${type} returns a block with matching type discriminator`, () => {
 			const block = defaultBlockConfig(type);
@@ -204,6 +208,20 @@ describe('defaultBlockConfig — type-specific invariants', () => {
 			expect(b.config.children).toHaveLength(0);
 			expect(b.config.columns).toBe(12);
 			expect(b.config.gap).toBe(3);
+		}
+	});
+
+	// 0.9.4.1 — tabs primitive defaults to two empty tabs so the
+	// renderer has something to show + the user has something to fill.
+	it('tabs starter has two empty tabs', () => {
+		const b = defaultBlockConfig('tabs');
+		if (b.type === 'tabs') {
+			expect(Array.isArray(b.config.tabs)).toBe(true);
+			expect(b.config.tabs).toHaveLength(2);
+			expect(b.config.tabs[0].blocks).toHaveLength(0);
+			expect(b.config.tabs[1].blocks).toHaveLength(0);
+			expect(b.config.tabs[0].id).toBeTruthy();
+			expect(b.config.tabs[1].id).toBeTruthy();
 		}
 	});
 });

@@ -30,6 +30,7 @@
 	} from '$lib/lovelace/reader';
 	import {
 		translateDashboard,
+		translateDashboardAsTabs,
 		slugifyForBroadsheet,
 		type TranslatedDashboard,
 		type TranslatedView
@@ -55,8 +56,18 @@
 	let pickedDashboard = $state<LovelaceDashboardEntry | null>(null);
 
 	let loadingConfig = $state(false);
+	// `translated` holds the per-view translation (legacy single-view path).
 	let translated = $state<TranslatedDashboard | null>(null);
+	// 0.9.4.1 — when the user picks a multi-view dashboard the default
+	// landing path is "Import all views as tabbed page". We translate
+	// both ways at load time (cheap) so the user can flip between them
+	// freely in the pick-view step.
+	let translatedAsTabs = $state<TranslatedDashboard | null>(null);
 	let pickedViewIdx = $state<number | null>(null);
+	// 0.9.4.1 — true when the user is committing to a tabbed-page
+	// import (the default for multi-view dashboards). False = single
+	// view import (the legacy behaviour).
+	let tabbedMode = $state(false);
 
 	// Editable destination meta
 	let destLabel = $state('');
@@ -84,6 +95,8 @@
 		loadingConfig = true;
 		configError = null;
 		translated = null;
+		translatedAsTabs = null;
+		tabbedMode = false;
 		try {
 			const cfg = await getLovelaceConfig(d.url_path);
 			if (!cfg) {
@@ -95,12 +108,35 @@
 				return;
 			}
 			translated = translateDashboard(cfg);
+			// 0.9.4.1 — also translate as tabs. Cheap (re-runs the
+			// per-view translator) and the user gets both options on
+			// the pick-view step. Multi-view dashboards default to the
+			// tabbed path; single-view ones default to the legacy
+			// single-page path (no point wrapping one view in tabs).
+			translatedAsTabs = translateDashboardAsTabs(cfg, d.url_path);
+			if (translated.views.length > 1) {
+				tabbedMode = true;
+			}
 		} finally {
 			loadingConfig = false;
 		}
 	}
 
+	/** 0.9.4.1 — commit the whole dashboard as one tabbed broadsheet page. */
+	function pickTabbed() {
+		tabbedMode = true;
+		pickedViewIdx = null;
+		const dashTitle = (translated?.title ?? translatedAsTabs?.title) || 'Imported dashboard';
+		destLabel = dashTitle;
+		destSlug = slugifyForBroadsheet(
+			pickedDashboard?.url_path || slugifyForBroadsheet(dashTitle)
+		);
+		slugEdited = false;
+		step = 'review';
+	}
+
 	function pickView(idx: number) {
+		tabbedMode = false;
 		pickedViewIdx = idx;
 		const view = translated?.views[idx];
 		if (view) {
@@ -129,8 +165,19 @@
 		if (!slugEdited && step === 'review') destSlug = slugifyForBroadsheet(destLabel);
 	});
 
+	/**
+	 * The view about to be committed.
+	 *  - tabbedMode: the aggregated "all views as tabs" view
+	 *    (single block, the tabs primitive).
+	 *  - otherwise: the user's picked single view from the per-view
+	 *    translation.
+	 */
 	const pickedView = $derived(
-		pickedViewIdx !== null && translated ? translated.views[pickedViewIdx] : null
+		tabbedMode
+			? (translatedAsTabs?.views[0] ?? null)
+			: pickedViewIdx !== null && translated
+				? translated.views[pickedViewIdx]
+				: null
 	);
 
 	function slugError(): string | null {
@@ -272,7 +319,6 @@
 			<button class="mini" type="button" onclick={back}>← Back</button>
 			<span class="back-context">From <strong>{pickedDashboard?.title}</strong></span>
 		</div>
-		<OutLine label="Pick a view to import" />
 		{#if loadingConfig}
 			<p class="loading">Translating Lovelace cards…</p>
 		{:else if configError}
@@ -290,6 +336,38 @@
 		{:else if translated && translated.views.length === 0}
 			<p class="empty">This dashboard has no views. Nothing to import.</p>
 		{:else if translated}
+			{#if translated.views.length > 1}
+				<!--
+					0.9.4.1 — multi-view dashboards default to "import as
+					tabbed page". This tile is the recommended path; the
+					per-view list below is the override.
+				-->
+				<div class="tabbed-recommend">
+					<button class="tabbed-row" type="button" onclick={pickTabbed}>
+						<div class="tabbed-meta">
+							<span class="tabbed-title">
+								Import all {translated.views.length} views as one tabbed page
+							</span>
+							<span class="tabbed-summary">
+								One broadsheet page · {translated.views.length} tabs · chip-bar
+								nav at the top · matches your wall-tablet's mental model
+							</span>
+							<span class="tabbed-tabs">
+								Tabs: {translated.views
+									.map((v) => v.title ?? '(untitled)')
+									.join(' · ')}
+							</span>
+						</div>
+						<span class="dash-arrow" aria-hidden="true">›</span>
+					</button>
+					<p class="tabbed-hint">
+						<em>Or</em> pick a single view below to import on its own.
+					</p>
+				</div>
+				<OutLine label="Or import a single view" />
+			{:else}
+				<OutLine label="Pick a view to import" />
+			{/if}
 			<p class="totals">
 				Across all views:
 				<strong>{translated.totals.clean}</strong> clean,
@@ -320,7 +398,13 @@
 			<button class="mini" type="button" onclick={back}>← Back</button>
 			<span class="back-context">
 				From <strong>{pickedDashboard?.title}</strong>
-				· view <strong>{pickedView.title ?? 'untitled'}</strong>
+				{#if tabbedMode}
+					· all
+					<strong>{translated?.views.length ?? '?'} views</strong> as
+					tabs
+				{:else}
+					· view <strong>{pickedView.title ?? 'untitled'}</strong>
+				{/if}
 			</span>
 		</div>
 
@@ -521,6 +605,63 @@
 	.dash-arrow {
 		font-size: 1.4rem;
 		color: var(--fg-dim);
+	}
+
+	/* 0.9.4.1 — multi-view default tile (Import as tabbed page). */
+	.tabbed-recommend {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-6);
+	}
+	.tabbed-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-4) var(--space-4);
+		background: var(--accent-glow, rgba(192, 138, 74, 0.06));
+		border: 1px solid var(--accent);
+		border-radius: var(--radius-card);
+		text-align: left;
+		width: 100%;
+		transition: filter var(--ease-quick);
+		cursor: pointer;
+	}
+	.tabbed-row:hover {
+		filter: brightness(1.08);
+	}
+	.tabbed-meta {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		min-width: 0;
+	}
+	.tabbed-title {
+		font-family: var(--font-display, var(--font-body));
+		font-style: italic;
+		font-size: 1.2rem;
+		color: var(--accent);
+	}
+	.tabbed-summary {
+		font-family: var(--font-body);
+		font-size: 0.85rem;
+		color: var(--fg);
+		line-height: var(--leading-snug);
+	}
+	.tabbed-tabs {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--fg-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.tabbed-hint {
+		font-family: var(--font-body);
+		font-size: 0.82rem;
+		color: var(--fg-muted);
+		font-style: italic;
+		margin: 0;
 	}
 
 	/* ── Destination meta + coverage rows ──────────────────────── */

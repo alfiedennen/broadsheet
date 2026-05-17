@@ -1623,6 +1623,10 @@
 				const cols = block.config.columns ?? 12;
 				return `Grid — ${cols} cols, ${n} child${n === 1 ? '' : 'ren'}`;
 			}
+			case 'tabs': {
+				const n = block.config.tabs.length;
+				return `Tabs — ${n} tab${n === 1 ? '' : 's'}: ${block.config.tabs.map((t) => t.label).slice(0, 3).join(', ')}${n > 3 ? '…' : ''}`;
+			}
 		}
 	}
 </script>

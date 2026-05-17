@@ -236,6 +236,7 @@ hints on the ones it can't inline-edit).
 | **Media panel** *(0.9.3)* | Per-area composite — TV remote(s) + speaker(s) together |
 | **Row** *(0.9.4)* | Horizontal flex container — places children side-by-side, stacks on narrow viewports |
 | **Grid** *(0.9.4)* | CSS-grid container with N columns; child `colSpan` spans multiple columns. Responsive collapse. Lovelace `sections` views land here |
+| **Tabs** *(0.9.4.1)* | Chip-bar at the top + active-tab content below. URL-bound (`?tab=<id>`) so refresh + back + deep-links work. Multi-view Lovelace dashboards land here |
 
 Plus any **plugin-contributed blocks** active on your install
 (`tmdb-tv:rows` for example, when `@broadsheet/tmdb-tv` is enabled).
@@ -354,6 +355,34 @@ render-time. Grows + shrinks with HA discovery — add a 5th light
 to the area in HA, the panel grows automatically. Tablets / kiosks
 are filtered from the media panel by default
 ([0.9.3.1](../CHANGELOG.md#0931--kiosktablet-filter-on-media-surfaces-2026-05-17)).
+
+### Tabs *(0.9.4.1)*
+
+Chip-bar at the top + the active tab's content below. Two
+distinguishing properties:
+
+- **URL-bound active tab** — `?tab=<tab-id>` in the page URL.
+  Refresh keeps you on the right tab, deep-links work, browser-
+  back swaps tabs the way users expect. Important for cast
+  displays + wall tablets that may reload periodically.
+- **Per-tab content** — each tab has its own ordered list of
+  blocks. Composable as a block (not page-level), so a page can
+  have a hero above + an explainer below, with tabs in the
+  middle.
+
+Multi-view Lovelace dashboards (a dashboard with > 1 view in HA)
+default to landing as ONE broadsheet page with a tabs block at
+the top, one tab per source view. The chip-bar navigation that
+authors typically hand-author at the top of each view (mushroom-
+chips-card / horizontal-stack of nav chips) is auto-detected +
+dropped on import — the tabs block IS that nav, no point doing it
+twice. Mixed chip-bars (where some chips navigate elsewhere) are
+preserved as content.
+
+In the things-first canvas, tapping a tabs block opens an inline
+editor: per-tab label override + id editor + add / remove /
+reorder tabs. Editing the BLOCKS inside each tab routes to
+advanced mode (same as row/grid).
 
 ### Row + Grid *(0.9.4)*
 

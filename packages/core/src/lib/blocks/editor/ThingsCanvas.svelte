@@ -257,6 +257,10 @@
 				const cols = block.config.columns ?? 12;
 				return `Grid — ${cols} cols, ${n} child${n === 1 ? '' : 'ren'}`;
 			}
+			case 'tabs': {
+				const n = block.config.tabs.length;
+				return `Tabs — ${n} tab${n === 1 ? '' : 's'}: ${block.config.tabs.map((t) => t.label).slice(0, 3).join(', ')}${n > 3 ? '…' : ''}`;
+			}
 		}
 	}
 
@@ -279,7 +283,8 @@
 			'area-climate-panel': 'Heating panel',
 			'area-media-panel': 'Media panel',
 			row: 'Row',
-			grid: 'Grid'
+			grid: 'Grid',
+			tabs: 'Tabs'
 		};
 		return labels[block.type];
 	}
@@ -287,9 +292,9 @@
 	function isThingsFirstNative(t: BlockDef['type']): boolean {
 		// Block types the things-first editor has inline editors for.
 		// Others get a "switch to advanced to edit" hint. 0.9.3.2
-		// added the 3 area-panel composites; 0.9.4 added row + grid
-		// (container blocks; children-editing is "switch to advanced"
-		// for now).
+		// added the 3 area-panel composites; 0.9.4 added row + grid;
+		// 0.9.4.1 added tabs (container blocks; nested-edit routes
+		// to advanced as with row/grid).
 		return (
 			t === 'thing' ||
 			t === 'macro' ||
@@ -298,7 +303,8 @@
 			t === 'area-climate-panel' ||
 			t === 'area-media-panel' ||
 			t === 'row' ||
-			t === 'grid'
+			t === 'grid' ||
+			t === 'tabs'
 		);
 	}
 
@@ -693,6 +699,103 @@
 									things-first canvas treats {block.type} blocks as atomic
 									(drag, drop, remove, but not nested-edit).
 								</p>
+							{:else if block.type === 'tabs'}
+								{@const cfg = block.config as { tabs: { id: string; label: string; icon?: string | null; blocks: BlockDef[] }[]; paramName?: string }}
+								<dl class="thing-readout">
+									<dt>Tabs</dt>
+									<dd>
+										{cfg.tabs.length} tab{cfg.tabs.length === 1 ? '' : 's'}
+									</dd>
+									<dt>URL param</dt>
+									<dd class="mono">?{cfg.paramName ?? 'tab'}=…</dd>
+								</dl>
+								<ol class="tabs-list-editor">
+									{#each cfg.tabs as tab, ti (tab.id)}
+										<li class="tab-row-editor">
+											<span class="tab-row-num">{ti + 1}.</span>
+											<input
+												type="text"
+												class="field-input tab-row-label"
+												value={tab.label}
+												placeholder="Tab label"
+												oninput={(e) => {
+													const next = cfg.tabs.slice();
+													next[ti] = { ...next[ti], label: (e.target as HTMLInputElement).value };
+													onPatchBlock(i, { tabs: next });
+												}}
+											/>
+											<input
+												type="text"
+												class="field-input mono tab-row-id"
+												value={tab.id}
+												placeholder="tab-id"
+												title="URL-param value (?tab=this). Lowercase letters / digits / hyphens."
+												oninput={(e) => {
+													const next = cfg.tabs.slice();
+													next[ti] = { ...next[ti], id: (e.target as HTMLInputElement).value };
+													onPatchBlock(i, { tabs: next });
+												}}
+											/>
+											<span class="tab-row-meta mono">
+												{tab.blocks.length} block{tab.blocks.length === 1 ? '' : 's'}
+											</span>
+											<button
+												type="button"
+												class="mini"
+												disabled={ti === 0}
+												onclick={() => {
+													const next = cfg.tabs.slice();
+													const [m] = next.splice(ti, 1);
+													next.splice(ti - 1, 0, m);
+													onPatchBlock(i, { tabs: next });
+												}}
+												aria-label="Move tab up">↑</button
+											>
+											<button
+												type="button"
+												class="mini"
+												disabled={ti === cfg.tabs.length - 1}
+												onclick={() => {
+													const next = cfg.tabs.slice();
+													const [m] = next.splice(ti, 1);
+													next.splice(ti + 1, 0, m);
+													onPatchBlock(i, { tabs: next });
+												}}
+												aria-label="Move tab down">↓</button
+											>
+											<button
+												type="button"
+												class="mini danger"
+												disabled={cfg.tabs.length === 1}
+												onclick={() => {
+													const next = cfg.tabs.filter((_, ix) => ix !== ti);
+													onPatchBlock(i, { tabs: next });
+												}}
+												aria-label="Remove tab">✕</button
+											>
+										</li>
+									{/each}
+								</ol>
+								<button
+									type="button"
+									class="action"
+									onclick={() => {
+										const idBase = `tab-${cfg.tabs.length + 1}`;
+										const next = [
+											...cfg.tabs,
+											{ id: idBase, label: `Tab ${cfg.tabs.length + 1}`, blocks: [] }
+										];
+										onPatchBlock(i, { tabs: next });
+									}}
+								>
+									+ Add tab
+								</button>
+								<p class="non-native-hint">
+									To add / remove / reorder the BLOCKS inside each tab,
+									flip the editor to <em>advanced</em> in page meta. The
+									things-first canvas edits the tab structure here; the
+									tab CONTENT is edited block-by-block over there.
+								</p>
 							{:else if !isThingsFirstNative(block.type)}
 								<p class="non-native-hint">
 									This block type — <strong>{blockTypeLabel(block)}</strong>
@@ -980,6 +1083,38 @@
 		color: var(--fg-muted);
 		font-style: italic;
 		line-height: 1.5;
+	}
+
+	/* 0.9.4.1 — tabs inline editor */
+	.tabs-list-editor {
+		list-style: none;
+		margin: 0 0 var(--space-2);
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+	.tab-row-editor {
+		display: grid;
+		grid-template-columns: 1.5rem 1fr 0.7fr auto auto auto auto;
+		gap: var(--space-2);
+		align-items: center;
+		padding: var(--space-1) 0;
+	}
+	.tab-row-num {
+		font-family: var(--font-mono);
+		font-size: 0.78rem;
+		color: var(--fg-muted);
+		font-feature-settings: 'tnum';
+	}
+	.tab-row-label,
+	.tab-row-id {
+		min-width: 0;
+	}
+	.tab-row-meta {
+		font-size: 0.72rem;
+		color: var(--fg-muted);
+		font-feature-settings: 'tnum';
 	}
 
 	.canvas-foot {

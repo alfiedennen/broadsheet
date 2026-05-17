@@ -4,6 +4,42 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.4.1] — tabs primitive + multi-view Lovelace import (2026-05-17)
+
+### Added
+- **`tabs` block** — chip-bar at the top + active-tab content
+  below. URL-bound active tab (`?tab=<id>`) so refresh keeps you
+  on the right tab, deep-links work, browser-back swaps tabs.
+  Critical for cast displays + kiosk tablets that reload.
+- **Multi-view Lovelace dashboard import → ONE broadsheet page
+  with a tabs block**. Previously the importer was view-by-view
+  only; you'd pick "wall tablet" and only get its Home view.
+  Now multi-view dashboards default to "Import all N views as a
+  tabbed page" — one tab per view, chip-bar nav at the top,
+  matching the wall-tablet's mental model. Single-view dashboards
+  translate unchanged (no tabs wrapper).
+- **Chip-bar dedup on import**. The translator recognises the
+  hand-authored navigation chip-bar at the top of each Lovelace
+  view (mushroom-chips-card, or horizontal/vertical-stack of
+  chips, whose tap_actions all `navigate` to sibling view paths)
+  and drops it — the tabs block IS that nav, no point rendering
+  both. Mixed chip-bars (where some chips go elsewhere) are
+  preserved as content.
+- **Inline editor for tabs in the things-first canvas** — tab
+  list with per-tab label + id + block count + reorder + remove
+  + add. Children-editing routes to advanced mode (same pattern
+  as row + grid).
+
+### Why
+After the 0.9.4 ship, a real wall-tablet dashboard import (8
+views, ~130 cards) made the gap obvious: the user picks "wall
+tablet" because it IS one wall surface in their mental model, but
+the importer could only ingest one view at a time. Splitting
+into 8 separate broadsheet pages defeats the purpose entirely —
+the chip-bar navigation IS the wall-tablet's identity. The fix
+is a real `tabs` primitive that preserves that navigation in
+one cohesive page.
+
 ## [0.9.4] — row + grid + Lovelace import that respects layout (2026-05-17)
 
 ### Added

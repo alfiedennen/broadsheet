@@ -80,7 +80,9 @@ const CORE_REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	row: () =>
 		import('./renderers/RowBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	grid: () =>
-		import('./renderers/GridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
+		import('./renderers/GridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	tabs: () =>
+		import('./renderers/TabsBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
 };
 
 /**
@@ -192,5 +194,10 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 		label: 'Grid (N-column layout)',
 		description:
 			'0.9.4 layout container — places its child blocks in a CSS grid with N columns (default 12, matching Lovelace). Children use `colSpan` to span multiple columns. Lovelace `sections` views land here.'
+	},
+	tabs: {
+		label: 'Tabs (chip-bar nav)',
+		description:
+			'0.9.4.1 navigation primitive — chip-bar at the top, switches the visible content section. URL-bound active tab (?tab=<id>) so refresh + back + deep-link work. Multi-view Lovelace dashboards land here.'
 	}
 };

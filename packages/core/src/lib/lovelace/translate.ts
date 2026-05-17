@@ -1418,6 +1418,209 @@ export function translateView(view: LovelaceView): TranslatedView {
 	};
 }
 
+/* ── 0.9.4.1: chip-bar dedup + multi-view → tabs ──────────────────
+ *
+ * Real-world Lovelace dashboards with multiple views typically have
+ * a hand-authored navigation chip-bar at the TOP of every view, so
+ * the user can switch between tabs. The cards in the bar are usually
+ * `custom:mushroom-template-card` (or chips inside a
+ * `custom:mushroom-chips-card`) whose `tap_action: { action: navigate,
+ * navigation_path: '/<dashboard>/<sibling-view-path>' }` points at a
+ * sibling view.
+ *
+ * When 0.9.4.1's multi-view import wraps the views in a `tabs` block,
+ * the tabs block IS that nav. Leaving the source chip-bar in the
+ * per-view content gives the user two navs doing the same job. So
+ * the translator strips it.
+ *
+ * Pattern: a TOP-LEVEL card in the view is a "view-nav chip-bar"
+ * when it's a `horizontal-stack` / `vertical-stack` / `custom:mushroom-
+ * chips-card` whose children (or chips) are ALL chip-shaped cards
+ * whose tap_action.navigation_path matches a sibling view's path.
+ *
+ * The detection runs only when the importer knows the sibling paths,
+ * so single-view imports never strip anything by accident.
+ */
+
+function getNavTargetPath(card: LovelaceCard): string | null {
+	// Direct: tap_action.navigation_path
+	const ta = card.tap_action as
+		| { action?: string; navigation_path?: string }
+		| undefined;
+	if (ta && ta.action === 'navigate' && typeof ta.navigation_path === 'string') {
+		return ta.navigation_path;
+	}
+	return null;
+}
+
+function isNavigateChipCard(
+	card: LovelaceCard,
+	siblingPaths: ReadonlySet<string>
+): boolean {
+	const path = getNavTargetPath(card);
+	if (path && siblingPaths.has(path)) return true;
+	return false;
+}
+
+/**
+ * Walks a card and decides whether it's a chip-bar of view-nav
+ * chips. Recurses ONE level for stacks + mushroom-chips-card.
+ * Returns true only when ALL children/chips look like view-nav
+ * (any non-nav child means the user mixed nav with content; keep it).
+ */
+function isViewNavChipBar(card: LovelaceCard, siblingPaths: ReadonlySet<string>): boolean {
+	if (siblingPaths.size === 0) return false;
+	const t = card.type;
+	// horizontal-stack / vertical-stack of nav-chip cards
+	if (t === 'horizontal-stack' || t === 'vertical-stack') {
+		const children = (card.cards ?? []) as LovelaceCard[];
+		if (children.length === 0) return false;
+		return children.every((c) => isNavigateChipCard(c, siblingPaths));
+	}
+	// custom:mushroom-chips-card with chips that all navigate
+	if (t === 'custom:mushroom-chips-card') {
+		const chips = (card.chips ?? []) as Array<{
+			tap_action?: { action?: string; navigation_path?: string };
+		}>;
+		if (chips.length === 0) return false;
+		return chips.every((chip) => {
+			const ta = chip.tap_action;
+			return (
+				ta?.action === 'navigate' &&
+				typeof ta.navigation_path === 'string' &&
+				siblingPaths.has(ta.navigation_path)
+			);
+		});
+	}
+	return false;
+}
+
+/**
+ * Filter a view's top-level cards down to those that AREN'T view-nav
+ * chip-bars. Conservative — only top-level removal, never recurses
+ * into stacks (a chip-bar nested 3 levels deep stays; that's the
+ * author's deliberate placement).
+ */
+function stripViewNavChipBars(
+	cards: LovelaceCard[],
+	siblingPaths: ReadonlySet<string>
+): LovelaceCard[] {
+	return cards.filter((c) => !isViewNavChipBar(c, siblingPaths));
+}
+
+/**
+ * Translate a view with optional chip-bar stripping. Same body as
+ * `translateView` but accepts the sibling paths set so it can pre-
+ * filter the top-level cards before the existing walker runs.
+ *
+ * Used by `translateDashboardAsTabs`; the public `translateView`
+ * defers to this with an empty sibling set (no stripping for
+ * single-view imports).
+ */
+function translateViewWithSiblings(
+	view: LovelaceView,
+	siblingPaths: ReadonlySet<string>
+): TranslatedView {
+	if (siblingPaths.size === 0) return translateView(view);
+	// Build a shallow-clone view with top-level cards stripped of nav-chip-bars.
+	const stripped: LovelaceView = {
+		...view,
+		cards: stripViewNavChipBars((view.cards ?? []) as LovelaceCard[], siblingPaths)
+	} as LovelaceView;
+	return translateView(stripped);
+}
+
+/**
+ * Derive the set of sibling view paths for a dashboard. Each view's
+ * `path` is converted to its full canonical URL form
+ * (`/<dashboard-url-path>/<view-path>`) so the comparison matches
+ * how Lovelace authors actually write `tap_action.navigation_path`.
+ * `dashboardUrlPath` is null for the default dashboard, in which
+ * case views are addressed as `/lovelace/<view-path>`.
+ */
+function siblingViewPaths(
+	views: LovelaceView[],
+	dashboardUrlPath: string | null
+): Set<string> {
+	const out = new Set<string>();
+	const prefix = dashboardUrlPath ?? 'lovelace';
+	for (const v of views) {
+		const path = (v.path ?? null) as string | null;
+		if (!path) continue;
+		out.add(`/${prefix}/${path}`);
+		// Some authors omit the leading dashboard prefix — also accept
+		// the bare `/<view-path>` form. Cheap to add both.
+		out.add(`/${path}`);
+	}
+	return out;
+}
+
+/**
+ * Multi-view dashboard → one TranslatedView whose single block is a
+ * `tabs` block. Each tab = one source view, with chip-bar nav stripped
+ * from per-view content (the tabs block IS that nav). View `path` is
+ * the tab id (so deep-links land on the right tab); view `title` is
+ * the chip label.
+ *
+ * Aggregate `reports` carries ALL views' per-card reports so the
+ * coverage UI sees the whole dashboard as one unit.
+ */
+export function translateDashboardAsTabs(
+	config: LovelaceConfig,
+	dashboardUrlPath: string | null
+): TranslatedDashboard {
+	const sourceViews = (config.views ?? []) as LovelaceView[];
+	const siblingPaths = siblingViewPaths(sourceViews, dashboardUrlPath);
+
+	const reports: TranslatorReport[] = [];
+	const tabs: import('$lib/blocks/types').TabDef[] = [];
+
+	sourceViews.forEach((v, idx) => {
+		const translated = translateViewWithSiblings(v, siblingPaths);
+		const rawId = (v.path ?? slugifyForBroadsheet(v.title ?? `view-${idx + 1}`)) as string;
+		const id = slugifyForBroadsheet(rawId) || `view-${idx + 1}`;
+		tabs.push({
+			id,
+			label: (v.title ?? `View ${idx + 1}`) as string,
+			icon: (v.icon ?? null) as string | null,
+			blocks: translated.blocks
+		});
+		reports.push(...translated.reports);
+	});
+
+	const aggregatedView: TranslatedView = {
+		title: (config.title ?? null) as string | null,
+		path: null,
+		blocks: [
+			{
+				type: 'tabs',
+				config: { tabs }
+			}
+		],
+		reports
+	};
+
+	// Tally totals across all reports (same shape as translateDashboard).
+	let clean = 0,
+		partial = 0,
+		partialLayout = 0,
+		unsupported = 0,
+		total = 0;
+	for (const r of reports) {
+		total++;
+		if (r.coverage === 'clean') clean++;
+		else if (r.coverage === 'partial') partial++;
+		else if (r.coverage === 'partial-layout') partialLayout++;
+		else unsupported++;
+	}
+
+	return {
+		title: (config.title ?? null) as string | null,
+		views: [aggregatedView],
+		totals: { clean, partial, partialLayout, unsupported, total }
+	};
+}
+
 /** Translate every view in a dashboard config. */
 export function translateDashboard(config: LovelaceConfig): TranslatedDashboard {
 	const views = (config.views ?? []).map(translateView);

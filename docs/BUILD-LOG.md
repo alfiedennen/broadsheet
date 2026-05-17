@@ -3309,3 +3309,126 @@ surface". Done.
 Plan: `docs/plans/plan-9.4-lovelace-import-layout.md` (full
 decision-set + sequenced impl plan, locked then marked
 IMPLEMENTED with file inventory).
+
+## 2026-05-17 — 0.9.4.1 — tabs primitive + multi-view Lovelace import
+
+Same-day dogfood of 0.9.4 against a real wall-tablet dashboard
+surfaced the next gap. User imported their `wall-tablet`
+dashboard (8 views, ~130 cards). Result: 1 broadsheet page with
+34 blocks (16 markdown / 17 single-action action-grids / 1 row
+/ 0 grids), and the other 7 views never arrived. Feedback:
+
+> I picked wall tablet, which has home, heating, door, lights,
+> remote, nearness, immaterials and presence history. I can only
+> import one view?
+
+My initial proposal was to split multi-view imports into N
+broadsheet pages, slug-prefixed (`wall-tablet-home`,
+`wall-tablet-heating`, etc.). User flagged the framing was wrong:
+
+> Absolutely no to multi page creation from one lovelace page
+> import, that defeats the entire purpose. Lets think this through
+> from the users pov before proceeding.
+
+Right call. The wall-tablet ISN'T 8 things — it's ONE wall surface
+with tab navigation between sections. Each Lovelace view is HA's
+implementation of "tab", not "page". The chip-bar at the top of
+every view IS the tab-bar — the user designed it as one cohesive
+interface. Splitting on import throws away that mental model +
+forces the user to either rebuild navigation from scratch or
+accept 8 isolated walls.
+
+The actual gap: broadsheet had no `tabs` primitive yet.
+
+### What 0.9.4.1 ships
+
+**`tabs` block primitive**. New BlockDef variant with
+`config: { tabs: TabDef[]; paramName? }`. Each TabDef carries an
+id (URL-stable), label, optional icon, and `blocks: BlockDef[]`
+for that tab's content. Composable as a block (not page-level)
+so a page can have hero + tabs + explainer, same authoring
+metaphor as every other primitive.
+
+**TabsBlockRenderer**. Chip-bar at the top, active tab's content
+via BlockSlot below. **URL-bound** active tab via `?tab=<id>` —
+refresh stays on the tab, deep-links work, browser-back swaps
+tabs. Uses `goto` (push) so each switch adds a history entry.
+Critical for cast displays + kiosk tablets that may reload.
+
+**Multi-view Lovelace import → ONE page with tabs**. New
+`translateDashboardAsTabs(config, dashboardUrlPath)` walks every
+view, wraps results in a single tabs block, one TabDef per view.
+View `path` becomes the tab id (so deep-links land right);
+`title` becomes the chip label. The aggregated `reports` list
+covers every view's per-card translation status, so the user
+sees one coverage report for the whole dashboard.
+
+The import flow defaults to "Import all N views as tabbed page"
+when the dashboard has > 1 view; the per-view "pick a single
+view" option stays as an override. The pick-view step gets a
+recommended tile at the top showing the tab labels + a one-tap
+accept path.
+
+**Chip-bar dedup**. The translator recognises the hand-authored
+view-nav chip-bar at the top of each Lovelace view and DROPS it
+before per-view translation runs (otherwise the imported page
+shows the tabs block AND a redundant chip-bar both doing the
+same job). Pattern: a top-level card is a "view-nav chip-bar"
+when it's a `horizontal-stack` / `vertical-stack` of cards whose
+`tap_action: { action: navigate, navigation_path: '/<…>' }`
+points at a sibling view's path, OR a `custom:mushroom-chips-card`
+whose chips all carry such tap_actions. The detection is
+conservative: only top-level removal, only when EVERY child of
+the candidate matches the pattern. Mixed chip-bars (some chips
+go elsewhere) are kept.
+
+**Inline editor for tabs in the things-first canvas**. Per-tab
+label override + id editor + per-tab block count + reorder +
+remove + add. Editing the BLOCKS inside each tab routes to
+advanced mode (same pattern as row + grid in 0.9.4 — container
+children are atomic in things-first).
+
+### Worked example — the wall-tablet import after 0.9.4.1
+
+User picks "Wall Tablet" → pick-view step shows:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Import all 8 views as one tabbed page                      ›  │
+│ One broadsheet page · 8 tabs · chip-bar nav at the top ·     │
+│ matches your wall-tablet's mental model                      │
+│ Tabs: Home · Heating · Door · Lights · Remote · Here · …    │
+└──────────────────────────────────────────────────────────────┘
+                          — Or —
+            (single-view list as before, below)
+```
+
+One tap → ONE broadsheet page (`wall-tablet`) with a tabs block
+at the top + 8 tabs. Lands as a draft in the things-first canvas;
+user reviews + commits.
+
+### Ship-readiness
+
+- svelte-check: 0 errors, 0 warnings (522 files).
+- vitest: 341 tests pass (+8 new across blocks/translate/fresh-
+  curation covering tabs default, multi-view shape, chip-bar
+  dedup for stacks + mushroom-chips, mixed-bar preservation,
+  single-view safety).
+- production build: clean.
+
+### Deferred to 0.9.4.2
+
+The four translator-coverage fixes flagged in the dogfood:
+- Coalesce chip rows into a single action-grid (today: N single-
+  action grids inside a row)
+- `custom:layout-card` + `custom:grid-layout` → broadsheet grid
+- Mushroom-template-card without tap_action → state-pill thing
+- `type: template` Lovelace card → dedicated translator
+
+These are orthogonal to the tabs work. Shipping tabs gets the
+USER-FACING MODEL right; the coverage improvements then fill in
+the body of each tab.
+
+Plan: `docs/plans/plan-9.4.1-tabs-and-multiview.md` (full
+decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).

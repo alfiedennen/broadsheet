@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	translateView,
 	translateDashboard,
+	translateDashboardAsTabs,
 	isSupportedCardType,
 	slugifyForBroadsheet
 } from '$lib/lovelace/translate';
@@ -636,5 +637,171 @@ describe('slugifyForBroadsheet', () => {
 	});
 	it('caps length at 64', () => {
 		expect(slugifyForBroadsheet('a'.repeat(100))).toHaveLength(64);
+	});
+});
+
+/* ── 0.9.4.1 multi-view → tabs + chip-bar dedup ────────────────── */
+
+describe('translateDashboardAsTabs (0.9.4.1)', () => {
+	function mkView(path: string, title: string, cards: LovelaceCard[]): LovelaceView {
+		return { title, path, cards } as unknown as LovelaceView;
+	}
+
+	it('emits ONE TranslatedView whose single block is a tabs block, one tab per source view', () => {
+		const cfg: LovelaceConfig = {
+			title: 'Wall Tablet',
+			views: [
+				mkView('home', 'Home', [{ type: 'markdown', content: 'home content' }]),
+				mkView('heating', 'Heating', [{ type: 'markdown', content: 'heat content' }]),
+				mkView('door', 'Door', [{ type: 'markdown', content: 'door content' }])
+			]
+		} as unknown as LovelaceConfig;
+		const r = translateDashboardAsTabs(cfg, 'wall-tablet');
+		expect(r.views).toHaveLength(1);
+		expect(r.views[0].blocks).toHaveLength(1);
+		expect(r.views[0].blocks[0].type).toBe('tabs');
+		if (r.views[0].blocks[0].type === 'tabs') {
+			const tabs = r.views[0].blocks[0].config.tabs;
+			expect(tabs).toHaveLength(3);
+			expect(tabs.map((t) => t.id)).toEqual(['home', 'heating', 'door']);
+			expect(tabs.map((t) => t.label)).toEqual(['Home', 'Heating', 'Door']);
+			// Each tab carries its view's translated blocks.
+			expect(tabs[0].blocks.every((b) => b.type === 'markdown')).toBe(true);
+		}
+	});
+
+	it('aggregates per-card reports across all views', () => {
+		const cfg: LovelaceConfig = {
+			views: [
+				mkView('a', 'A', [{ type: 'markdown', content: '1' }]),
+				mkView('b', 'B', [{ type: 'markdown', content: '2' }])
+			]
+		} as unknown as LovelaceConfig;
+		const r = translateDashboardAsTabs(cfg, 'd');
+		expect(r.totals.total).toBe(2);
+		expect(r.totals.clean).toBe(2);
+	});
+});
+
+describe('chip-bar dedup (0.9.4.1)', () => {
+	function chipNavCard(targetPath: string): LovelaceCard {
+		return {
+			type: 'custom:mushroom-template-card',
+			primary: 'Heat',
+			tap_action: { action: 'navigate', navigation_path: targetPath }
+		} as unknown as LovelaceCard;
+	}
+
+	function mkView(path: string, title: string, cards: LovelaceCard[]): LovelaceView {
+		return { title, path, cards } as unknown as LovelaceView;
+	}
+
+	it('drops a horizontal-stack chip-bar whose tap_actions all navigate to sibling views', () => {
+		const cfg: LovelaceConfig = {
+			views: [
+				mkView('home', 'Home', [
+					{
+						type: 'horizontal-stack',
+						cards: [
+							chipNavCard('/wall-tablet/home'),
+							chipNavCard('/wall-tablet/heating'),
+							chipNavCard('/wall-tablet/door')
+						]
+					},
+					{ type: 'markdown', content: 'real home content' }
+				]),
+				mkView('heating', 'Heating', [{ type: 'markdown', content: 'heat' }]),
+				mkView('door', 'Door', [{ type: 'markdown', content: 'door' }])
+			]
+		} as unknown as LovelaceConfig;
+		const r = translateDashboardAsTabs(cfg, 'wall-tablet');
+		if (r.views[0].blocks[0].type === 'tabs') {
+			const homeTab = r.views[0].blocks[0].config.tabs[0];
+			// chip-bar at the top is gone; only the real content survives.
+			expect(homeTab.blocks).toHaveLength(1);
+			expect(homeTab.blocks[0].type).toBe('markdown');
+			if (homeTab.blocks[0].type === 'markdown') {
+				expect(homeTab.blocks[0].config.body).toBe('real home content');
+			}
+		}
+	});
+
+	it('keeps a chip-bar whose tap_actions point at non-sibling paths (real navigation)', () => {
+		const cfg: LovelaceConfig = {
+			views: [
+				mkView('home', 'Home', [
+					{
+						type: 'horizontal-stack',
+						cards: [
+							chipNavCard('/lovelace/elsewhere'),
+							chipNavCard('/wall-tablet/heating')
+						]
+					},
+					{ type: 'markdown', content: 'home' }
+				]),
+				mkView('heating', 'Heating', [{ type: 'markdown', content: 'heat' }])
+			]
+		} as unknown as LovelaceConfig;
+		const r = translateDashboardAsTabs(cfg, 'wall-tablet');
+		if (r.views[0].blocks[0].type === 'tabs') {
+			const homeTab = r.views[0].blocks[0].config.tabs[0];
+			// Mixed chip-bar (not all siblings) → kept. So home tab gets
+			// the translated chip-bar (becomes a row of action-grids)
+			// + the real markdown.
+			expect(homeTab.blocks.length).toBeGreaterThan(1);
+		}
+	});
+
+	it('drops a mushroom-chips-card whose chips all navigate to siblings', () => {
+		const cfg: LovelaceConfig = {
+			views: [
+				{
+					title: 'Home',
+					path: 'home',
+					cards: [
+						{
+							type: 'custom:mushroom-chips-card',
+							chips: [
+								{ tap_action: { action: 'navigate', navigation_path: '/d/home' } },
+								{ tap_action: { action: 'navigate', navigation_path: '/d/door' } }
+							]
+						},
+						{ type: 'markdown', content: 'real' }
+					]
+				} as unknown as LovelaceView,
+				{ title: 'Door', path: 'door', cards: [{ type: 'markdown', content: 'door' }] } as unknown as LovelaceView
+			]
+		} as unknown as LovelaceConfig;
+		const r = translateDashboardAsTabs(cfg, 'd');
+		if (r.views[0].blocks[0].type === 'tabs') {
+			const homeTab = r.views[0].blocks[0].config.tabs[0];
+			// Only the real markdown survives; chips-card got stripped.
+			expect(homeTab.blocks).toHaveLength(1);
+			expect(homeTab.blocks[0].type).toBe('markdown');
+		}
+	});
+
+	it('single-view dashboards: chip-bar stripping never fires (the public translateDashboard path)', () => {
+		const cfg: LovelaceConfig = {
+			views: [
+				{
+					title: 'Solo',
+					path: 'solo',
+					cards: [
+						{
+							type: 'horizontal-stack',
+							cards: [chipNavCard('/d/solo')]
+						},
+						{ type: 'markdown', content: 'body' }
+					]
+				} as unknown as LovelaceView
+			]
+		} as unknown as LovelaceConfig;
+		const r = translateDashboard(cfg);
+		// translateDashboard doesn't know about siblings → nothing
+		// stripped. Both the horizontal-stack and the markdown make it
+		// through.
+		const totalBlocks = r.views[0].blocks.length;
+		expect(totalBlocks).toBeGreaterThan(1);
 	});
 });

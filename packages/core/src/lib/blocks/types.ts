@@ -386,6 +386,52 @@ export interface GridBlockConfig {
 	gap?: number;
 }
 
+/* ── 0.9.4.1 tabs primitive ──────────────────────────────────────── */
+
+/**
+ * One tab within a `tabs` block. Each tab has a stable id (used in
+ * the URL `?tab=<id>` so refresh + back-button + deep-link work),
+ * a human label for the chip-bar, an optional mdi:* icon, and its
+ * own ordered list of blocks rendered when the tab is active.
+ */
+export interface TabDef {
+	/**
+	 * Stable id, unique within this tabs block. Used in the URL
+	 * (`?tab=<id>`). Lowercase, hyphens allowed. Conventionally
+	 * derived from the source view's path (when imported from Lovelace).
+	 */
+	id: string;
+	/** Chip-bar label. */
+	label: string;
+	/** Optional mdi:* icon for the chip. */
+	icon?: string | null;
+	/** Blocks rendered when this tab is active. */
+	blocks: BlockDef[];
+}
+
+/**
+ * 0.9.4.1 — `tabs` block: chip-bar at the top + active tab's
+ * content below. URL-bound active tab via `?tab=<id>` so refresh
+ * keeps you on the right tab, deep-links work, browser-back swaps
+ * tabs the way the user expects.
+ *
+ * Composable as a block — a page can have a hero above the tabs
+ * + an explainer below; tabs sit in the middle as one block.
+ *
+ * Multi-view Lovelace dashboards import as ONE page with a tabs
+ * block at the top, one TabDef per view.
+ */
+export interface TabsBlockConfig {
+	/** The tabs themselves. First tab is the default when no `?tab=` is set. */
+	tabs: TabDef[];
+	/**
+	 * URL query-parameter name used for active-tab state. Defaults
+	 * to `tab`. Override if a page has > 1 tabs block (rare) so each
+	 * gets its own state key.
+	 */
+	paramName?: string;
+}
+
 /* ── 0.9.3 area-panel composites ─────────────────────────────────── */
 
 /**
@@ -463,6 +509,7 @@ export type BlockDef = (
 	| { type: 'area-media-panel'; config: AreaMediaPanelBlockConfig }
 	| { type: 'row'; config: RowBlockConfig }
 	| { type: 'grid'; config: GridBlockConfig }
+	| { type: 'tabs'; config: TabsBlockConfig }
 ) & {
 	/**
 	 * 0.9.4: how many columns this block occupies when its parent
@@ -641,5 +688,15 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 			return { type: 'row', config: { children: [], gap: 3 } };
 		case 'grid':
 			return { type: 'grid', config: { columns: 12, children: [], gap: 3 } };
+		case 'tabs':
+			return {
+				type: 'tabs',
+				config: {
+					tabs: [
+						{ id: 'tab-1', label: 'Tab 1', blocks: [] },
+						{ id: 'tab-2', label: 'Tab 2', blocks: [] }
+					]
+				}
+			};
 	}
 }
