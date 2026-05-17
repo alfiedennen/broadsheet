@@ -2917,14 +2917,110 @@ flipping doesn't lose work.
   registry coverage + default-config invariants).
 - production build: clean.
 
-**Deferred to 0.9.2** (per the locked spec in
-`docs/plans/plan-9.2-lovelace-import-layout.md`): `row` + `grid`
-primitives so things-first can express two-up tiles and grid
-arrangements (currently still vertical-only), plus the Lovelace
-import path landing imported pages directly in the things-first
-canvas with masonry/coverage report + the two-layer escape hatch
-(pre-import "Skip review" toggle + in-canvas "Save as-is" button).
+**Deferred** (per the locked spec): `row` + `grid` primitives so
+things-first can express two-up tiles and grid arrangements
+(currently still vertical-only), plus the Lovelace import path
+landing imported pages directly in the things-first canvas with
+masonry/coverage report + the two-layer escape hatch (pre-import
+"Skip review" toggle + in-canvas "Save as-is" button). Originally
+scheduled as 0.9.2 — reslotted to **0.9.3** after dogfood of 0.9.1
+surfaced a more urgent miss: the browser was showing atomic entities
+when the user thinks in accomplishments ("can I add a TV on/off
+button? can I add an all-lights-in-this-room panel?"). The browser
+rethink became 0.9.2 — spec at
+`docs/plans/plan-9.2-browser-accomplishments.md`. Layout work
+follows at `docs/plans/plan-9.3-lovelace-import-layout.md`.
 
 Plan: `docs/plans/plan-9.1-wall-builder-things-first.md` (full
 decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).
+
+## 2026-05-17 — 0.9.2 — browser as accomplishments, not atoms
+
+Same-day dogfood of 0.9.1 against the live HA install surfaced the
+same shape of mistake as 0.9.0 → 0.9.1, one layer in. User feedback:
+
+> When I look in the living room set, whilst I see tv, speaker, those
+> mean nothing. What can I *do* with them? Can I add a 'TV on / OFF'
+> button? Great, that's what I want. Can I add a quick 'all lights in
+> this space with controls' panel? See what I mean? You are showing
+> atomic units, we need "what can I accomplish" units.
+
+0.9.1 fixed "the editor asks me to pick a block primitive when I
+think in things". 0.9.2 fixes "the browser shows me HA entities when
+I think in accomplishments". Sequencing impact: the previously-
+planned 0.9.2 work (row + grid primitives + Lovelace import landing)
+is reslotted to 0.9.3 — the browser is the front door, it had to
+stop misframing the task first.
+
+**The new data model**: `AccomplishmentRecipe` replaces 0.9.1's
+`BrowserThing`. Each recipe is a named verb ("All Living Room
+lights — off", "Living Room TV — full remote", "Activate Cinema")
+that produces ≥ 1 blocks when added to the canvas. Some recipes are
+atomic (one entity → one `thing` block); others are composed (a
+panel of N lights, a one-tap macro across N TRVs). Each carries a
+`referencedEntityIds[]` so the placed-badge can fire when every
+referenced entity is already on the canvas.
+
+**Per-area sub-groups** (only emitted when the relevant bucket is
+non-empty):
+
+- **Lights** — when ≥ 2 lights: `<area> lights — panel` (section
+  divider + N thing tiles), `<area> lights — off` (1-tap macro with
+  N `turn_off` steps), `<area> lights — toggle` (1-tap macro with N
+  `toggle` steps). Always: one atomic per light.
+- **TV** — per TV: `full remote` (widget=`media-tv`), `power toggle`
+  (widget=`toggle`), `turn on` (1-tap macro), `turn off` (1-tap
+  macro). Single-entity but 4 distinct accomplishments — different
+  jobs, different tiles.
+- **Speakers** (non-TV media) — per device: `full control`,
+  `play / pause`, `turn on`, `turn off`.
+- **Climate** — when ≥ 2 TRVs: `<area> heating — boost to 21°` +
+  `<area> heating — off (5°)`. Always: per-TRV atomic.
+- **Switches** — atomic per switch.
+- **Locks** — per lock: `unlock` (1-tap macro) + `status tile`
+  (widget=`lock`).
+- **Cameras** — atomic snapshot tile.
+- **Sensors** — atomic value pill ("Show <sensor>" — deliberately
+  framed as a verb).
+
+**Cross-area buckets** stay (scenes / scripts / automations /
+status / other) but each row becomes a recipe: "Activate <scene>",
+"Run <script>", "Trigger <automation>", etc.
+
+**ThingsBrowser** rewrite renders groups → sub-groups → recipes;
+sub-group headers appear only when a group has > 1 sub-group (cross-
+area buckets render flat). Tap + drag both work. Recipe drag carries
+the full payload in `application/x-broadsheet-recipe`; 0.9.1's
+`application/x-broadsheet-entity` MIME is still recognised as a
+fallback for any in-flight legacy drag. The `▸` glyph marks composed
+recipes, `·` marks atoms.
+
+**ThingsCanvas** drop handler parses recipe payloads and inserts
+every block in order at the drop position via a single atomic
+`onInsertBlocks(index, blocks)` write. The legacy
+`onAppendBlock`/`onInsertBlock` props were renamed to
+`onAppendBlocks`/`onInsertBlocks` (always-arrays); a single-block
+convenience `appendBlock(b)` wraps `appendBlocks([b])` for the
+"+ Section divider" footer button.
+
+**MacroComposer** picker switched from `buildBrowserTree` (now
+accomplishment-led) to a new `buildEntityPicker` helper that returns
+the simpler atomic-entity-by-area shape the composer needs.
+Composing the macro IS what produces the composition; the picker
+should not pre-compose.
+
+**Ship-readiness** all green:
+- svelte-check: 0 errors, 0 warnings across 513 files.
+- vitest: 292 tests pass (+22 new in
+  `tests/unit/things-browser.spec.ts` covering recipe generators,
+  cross-area dedup, default-collapsed flags, filter, count, and
+  entity-picker shape).
+- production build: clean.
+
+**Deferred** (per the locked plan): the 0.9.3 row + grid + Lovelace
+import work at `docs/plans/plan-9.3-lovelace-import-layout.md`.
+
+Plan: `docs/plans/plan-9.2-browser-accomplishments.md` (full
+recipe enumeration + sequenced impl plan, locked then marked
 IMPLEMENTED with file inventory).

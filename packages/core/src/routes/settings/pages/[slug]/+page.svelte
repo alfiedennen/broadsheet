@@ -184,18 +184,23 @@
 		customPage?.editorMode ?? 'advanced'
 	);
 
-	async function appendBlock(block: BlockDef) {
-		if (!customPage) return;
-		const next = [...customPage.blocks, block];
+	async function appendBlocks(toAppend: BlockDef[]) {
+		if (!customPage || toAppend.length === 0) return;
+		const next = [...customPage.blocks, ...toAppend];
 		await setCustomPageBlocks(slug, next);
 	}
 
-	async function insertBlockAt(index: number, block: BlockDef) {
-		if (!customPage) return;
+	async function insertBlocksAt(index: number, toInsert: BlockDef[]) {
+		if (!customPage || toInsert.length === 0) return;
 		const safeIdx = Math.max(0, Math.min(index, customPage.blocks.length));
 		const next = customPage.blocks.slice();
-		next.splice(safeIdx, 0, block);
+		next.splice(safeIdx, 0, ...toInsert);
 		await setCustomPageBlocks(slug, next);
+	}
+
+	/** Single-block convenience that delegates to the bulk helper. */
+	async function appendBlock(block: BlockDef) {
+		return appendBlocks([block]);
 	}
 
 	async function removeBlockAt(index: number) {
@@ -818,24 +823,20 @@
 				</div>
 
 				{#if effectiveEditorMode === 'things-first'}
-					<!-- 0.9.1 things-first surface: browser + canvas in a
-					     sub-grid replacing the legacy block list. The
-					     preview pane on the right uses SurfacePreview
-					     (sized to customPage.surface when set). -->
+					<!-- 0.9.2 things-first surface: accomplishment-led
+					     browser (verbs, grouped by area + sub-domain) +
+					     canvas (multi-block recipe drops). Preview pane
+					     uses SurfacePreview when customPage.surface is set. -->
 					<OutLine label="Browse & build" />
 					<div class="things-first-grid">
 						<ThingsBrowser
-							onAddThing={(entityId) =>
-								appendBlock({
-									type: 'thing',
-									config: { entityId, widget: 'auto' }
-								})}
+							onAddRecipe={(recipe) => appendBlocks(recipe.blocks)}
 							placedIds={placedThingIds}
 						/>
 						<ThingsCanvas
 							blocks={customPage.blocks}
-							onAppendBlock={appendBlock}
-							onInsertBlock={insertBlockAt}
+							onAppendBlocks={appendBlocks}
+							onInsertBlocks={insertBlocksAt}
 							onRemoveBlock={removeBlockAt}
 							onMoveBlock={moveBlockTo}
 							onPatchBlock={patchBlockConfig}

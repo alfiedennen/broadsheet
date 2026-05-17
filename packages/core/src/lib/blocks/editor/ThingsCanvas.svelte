@@ -39,10 +39,14 @@
 	interface Props {
 		/** The current ordered list of blocks on this page. */
 		blocks: BlockDef[];
-		/** Append a new block to the end. */
-		onAppendBlock: (block: BlockDef) => void;
-		/** Insert a new block at a specific index (0 = top, blocks.length = end). */
-		onInsertBlock: (index: number, block: BlockDef) => void;
+		/** Append one or more blocks to the end. */
+		onAppendBlocks: (blocks: BlockDef[]) => void;
+		/**
+		 * Insert one or more blocks at a specific index (0 = top,
+		 * blocks.length = end). Multi-block insertion is atomic — one
+		 * setCustomPageBlocks call regardless of how many blocks land.
+		 */
+		onInsertBlocks: (index: number, blocks: BlockDef[]) => void;
 		/** Remove the block at this index. */
 		onRemoveBlock: (index: number) => void;
 		/** Move a block from one index to another. */
@@ -59,8 +63,8 @@
 
 	let {
 		blocks,
-		onAppendBlock,
-		onInsertBlock,
+		onAppendBlocks,
+		onInsertBlocks,
 		onRemoveBlock,
 		onMoveBlock,
 		onPatchBlock,
@@ -90,26 +94,53 @@
 	/* ── Browser-drop wiring ───────────────────────────────────────
 	 * The drop targets are the seam-zones between blocks (and one
 	 * trailing seam after the last block). Each seam is a thin band;
-	 * the user drops a thing on a seam to insert at that position.
+	 * the user drops a recipe on a seam to insert its blocks at that
+	 * position.
 	 *
-	 * We also accept drops on a block row itself — that maps to
-	 * "insert before this row". Visual feedback: the active seam /
-	 * row picks up a dashed accent border while a thing is over it.
+	 * A recipe drop carries:
+	 *   - `application/x-broadsheet-recipe` — full JSON payload (use this)
+	 *   - `application/x-broadsheet-recipe-id` — recipe id (informational)
+	 *   - `text/plain` — first entity_id (fallback for legacy single-thing drops)
+	 *
+	 * Visual feedback: the active seam picks up a dashed accent
+	 * border while a recipe is over it.
 	 */
 	let dragOverSeam = $state<number | null>(null);
 
-	function readEntityFromDataTransfer(dt: DataTransfer | null): string | null {
+	function readRecipeBlocksFromDataTransfer(dt: DataTransfer | null): BlockDef[] | null {
 		if (!dt) return null;
-		const a = dt.getData('application/x-broadsheet-entity');
-		if (a) return a;
-		const b = dt.getData('text/plain');
-		// Sanity-check entity_id shape: domain.suffix
-		return /^[a-z_]+\.[a-z0-9_]+$/.test(b) ? b : null;
+		// Preferred: full recipe JSON.
+		const json = dt.getData('application/x-broadsheet-recipe');
+		if (json) {
+			try {
+				const recipe = JSON.parse(json) as { blocks: BlockDef[] };
+				if (Array.isArray(recipe.blocks) && recipe.blocks.length > 0) {
+					return recipe.blocks;
+				}
+			} catch {
+				// fall through to legacy path
+			}
+		}
+		// Legacy fallback: plain entity_id (drag from an older browser).
+		const id = dt.getData('text/plain');
+		if (/^[a-z_]+\.[a-z0-9_]+$/.test(id)) {
+			return [{ type: 'thing', config: { entityId: id, widget: 'auto' } }];
+		}
+		return null;
+	}
+
+	function isRecipeDrag(dt: DataTransfer | null): boolean {
+		if (!dt) return false;
+		return (
+			dt.types.includes('application/x-broadsheet-recipe') ||
+			dt.types.includes('application/x-broadsheet-recipe-id') ||
+			// Legacy 0.9.1 entity drag — still recognise it.
+			dt.types.includes('application/x-broadsheet-entity')
+		);
 	}
 
 	function handleSeamDragOver(e: DragEvent, seamIdx: number) {
-		const has = e.dataTransfer?.types.includes('application/x-broadsheet-entity');
-		if (!has) return;
+		if (!isRecipeDrag(e.dataTransfer)) return;
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
 		dragOverSeam = seamIdx;
@@ -121,14 +152,11 @@
 	}
 
 	function handleSeamDrop(e: DragEvent, seamIdx: number) {
-		const entityId = readEntityFromDataTransfer(e.dataTransfer);
+		const recipeBlocks = readRecipeBlocksFromDataTransfer(e.dataTransfer);
 		dragOverSeam = null;
-		if (!entityId) return;
+		if (!recipeBlocks) return;
 		e.preventDefault();
-		onInsertBlock(seamIdx, {
-			type: 'thing',
-			config: { entityId, widget: 'auto' }
-		});
+		onInsertBlocks(seamIdx, recipeBlocks);
 	}
 
 	/* ── Block-row drag-to-reorder ────────────────────────────────
@@ -150,7 +178,7 @@
 
 	function handleRowDragOver(e: DragEvent, idx: number) {
 		// Only handle row-reorder drags; entity drops go to the seams.
-		const isEntity = e.dataTransfer?.types.includes('application/x-broadsheet-entity');
+		const isEntity = isRecipeDrag(e.dataTransfer);
 		if (isEntity) return;
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
@@ -158,7 +186,7 @@
 	}
 
 	function handleRowDrop(e: DragEvent, idx: number) {
-		const isEntity = e.dataTransfer?.types.includes('application/x-broadsheet-entity');
+		const isEntity = isRecipeDrag(e.dataTransfer);
 		if (isEntity) return; // seam handler owns this
 		const from = draggedRow;
 		draggedRow = null;
@@ -245,7 +273,7 @@
 	/* ── Footer "add" actions ──────────────────────────────────────── */
 
 	function addSectionDivider() {
-		onAppendBlock({ type: 'outline', config: { label: 'Section' } });
+		onAppendBlocks([{ type: 'outline', config: { label: 'Section' } }]);
 		expandedIdx = blocks.length; // new block index after append
 	}
 

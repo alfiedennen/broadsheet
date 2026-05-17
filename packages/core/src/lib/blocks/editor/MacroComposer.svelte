@@ -25,10 +25,9 @@
 	import { defaultActionsFor, type DefaultAction } from '$lib/blocks/thing-mapping';
 	import type { MacroBlockConfig, MacroStep } from '$lib/blocks/types';
 	import {
-		buildBrowserTree,
-		filterBrowserTree,
-		type BrowserGroup,
-		type BrowserThing
+		buildEntityPicker,
+		filterEntityPicker,
+		type EntityPickerItem
 	} from '$lib/blocks/things-browser';
 
 	interface Props {
@@ -69,10 +68,10 @@
 	let pickerOpen = $state(false);
 	let pickerQuery = $state('');
 	/** When non-null, the user picked a thing; we show its actions next. */
-	let pendingThing = $state<BrowserThing | null>(null);
+	let pendingThing = $state<EntityPickerItem | null>(null);
 
-	const tree = $derived(buildBrowserTree(discovery.areas));
-	const filtered = $derived(filterBrowserTree(tree, pickerQuery));
+	const tree = $derived(buildEntityPicker(discovery.areas));
+	const filtered = $derived(filterEntityPicker(tree, pickerQuery));
 
 	function openPicker() {
 		pickerOpen = true;
@@ -85,7 +84,7 @@
 		pendingThing = null;
 	}
 
-	function selectThing(thing: BrowserThing) {
+	function selectThing(thing: EntityPickerItem) {
 		const actions = defaultActionsFor(thing.entityId);
 		if (actions.length === 0) {
 			// Read-only entity (sensor, binary_sensor) — no actions to
@@ -106,7 +105,7 @@
 		pendingThing = thing;
 	}
 
-	function addStepFromAction(thing: BrowserThing, action: DefaultAction) {
+	function addStepFromAction(thing: EntityPickerItem, action: DefaultAction) {
 		const desc = `${action.label} — ${thing.name}`;
 		steps = [
 			...steps,
@@ -342,18 +341,18 @@
 							<li class="picker-group">
 								<header class="picker-group-head">
 									{group.label}
-									<span class="picker-group-count">{group.things.length}</span>
+									<span class="picker-group-count">{group.items.length}</span>
 								</header>
 								<ul class="picker-things">
-									{#each group.things as thing (thing.entityId)}
+									{#each group.items as item (item.entityId)}
 										<li>
 											<button
 												type="button"
 												class="picker-thing"
-												onclick={() => selectThing(thing)}
+												onclick={() => selectThing(item)}
 											>
-												<span class="picker-thing-name">{thing.name}</span>
-												<span class="picker-thing-id mono">{thing.entityId}</span>
+												<span class="picker-thing-name">{item.name}</span>
+												<span class="picker-thing-id mono">{item.entityId}</span>
 											</button>
 										</li>
 									{/each}

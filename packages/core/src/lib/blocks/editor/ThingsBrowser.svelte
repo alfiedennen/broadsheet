@@ -1,121 +1,137 @@
 <script lang="ts">
 	/**
-	 * 0.9.1 — things-first editor: LEFT pane.
+	 * 0.9.2 — things-first editor: LEFT pane, accomplishments-led.
 	 *
-	 * The user's controllable things, grouped by room (then cross-area
-	 * buckets for scenes / scripts / etc). Search at the top filters
-	 * the tree case-insensitively across name / entity_id / area name.
+	 * The user's controllable things rendered as VERB rows, grouped
+	 * by area and broken into sub-groups (Lights / TV / Climate /
+	 * Locks / …). Cross-area buckets (Scenes / Scripts / etc.) come
+	 * after the area groups.
 	 *
-	 * Two affordances per thing:
-	 *   - Tap the row → onAddThing(entityId) → parent appends a `thing`
-	 *     block to the canvas. Fast path for "I just want this on the
-	 *     wall, broadsheet figures out the widget."
-	 *   - Drag the row → HTML5 DnD with the entityId in dataTransfer.
-	 *     ThingsCanvas listens for these drops to insert at a specific
-	 *     position rather than just appending.
+	 * Each row is an `AccomplishmentRecipe`: a named verb that
+	 * produces ≥ 1 blocks when tapped or dropped. Tap → onAddRecipe
+	 * (parent appends all of recipe.blocks). Drag → DataTransfer
+	 * carries `application/x-broadsheet-recipe-id` so the canvas can
+	 * look up the recipe and insert its blocks at the drop position.
 	 *
-	 * Already-placed things show a small "✓ on canvas" badge so the
-	 * user isn't surprised when the same entity ends up on the wall
-	 * multiple times (which is sometimes deliberate — e.g. a scene
-	 * tile near the lights AND in a "favourites" row).
+	 * Placed-tracking: a recipe shows "✓ placed" when every
+	 * referencedEntityId already has a `thing` block on the canvas.
 	 *
-	 * Spec: docs/plans/plan-9.1-wall-builder-things-first.md.
+	 * Spec: docs/plans/plan-9.2-browser-accomplishments.md.
 	 */
 
 	import { discovery } from '$lib/discovery';
 	import {
 		buildBrowserTree,
 		filterBrowserTree,
+		countRecipes,
+		type AccomplishmentRecipe,
 		type BrowserGroup,
-		type BrowserThing
+		type BrowserSubGroup
 	} from '$lib/blocks/things-browser';
 
 	interface Props {
-		/** Append `{type:'thing', config:{entityId}}` to the canvas. */
-		onAddThing: (entityId: string) => void;
+		/** Append all of recipe.blocks to the canvas. */
+		onAddRecipe: (recipe: AccomplishmentRecipe) => void;
 		/**
-		 * entityIds currently placed on the canvas — drives the "already
-		 * here" badge so duplicate placements aren't surprising.
+		 * entity_ids currently placed as `thing` blocks on the canvas.
+		 * Drives the "✓ placed" badge — a recipe is "placed" when every
+		 * referenced entity is already there.
 		 */
 		placedIds?: Set<string>;
 	}
 
-	let { onAddThing, placedIds = new Set() }: Props = $props();
+	let { onAddRecipe, placedIds = new Set() }: Props = $props();
 
 	let query = $state('');
 
-	// Build the tree from discovery's areas (reactive — areas change
-	// when curation renames/hides/floors-resort or HA refreshes
-	// registries). Filter folds in the search query.
 	const tree = $derived(buildBrowserTree(discovery.areas));
 	const filtered = $derived(filterBrowserTree(tree, query));
+	const totalRecipes = $derived(countRecipes(tree));
 
 	/**
-	 * Per-group collapsed state, keyed by group.id. Lazy semantics:
-	 * if a group hasn't been toggled by the user, its collapsed
-	 * value comes from group.defaultCollapsed. Toggling overrides.
-	 *
-	 * Searching forces all matching groups expanded (the filter
-	 * function sets defaultCollapsed: false on every result group),
-	 * but we still consult our override map so the user's manual
-	 * collapse-state persists for non-matching searches.
+	 * Per-group + per-subgroup collapsed override. Searching forces
+	 * all matching groups expanded; user's manual toggles persist
+	 * for non-matching searches.
 	 */
-	let collapsedOverride = $state<Record<string, boolean>>({});
+	let groupCollapsedOverride = $state<Record<string, boolean>>({});
+	let subGroupCollapsedOverride = $state<Record<string, boolean>>({});
 
-	function isCollapsed(g: BrowserGroup): boolean {
-		const o = collapsedOverride[g.id];
+	function isGroupCollapsed(g: BrowserGroup): boolean {
+		const o = groupCollapsedOverride[g.id];
 		return o === undefined ? g.defaultCollapsed : o;
 	}
-
-	function toggleCollapsed(g: BrowserGroup) {
-		const cur = isCollapsed(g);
-		collapsedOverride = { ...collapsedOverride, [g.id]: !cur };
+	function toggleGroup(g: BrowserGroup) {
+		const cur = isGroupCollapsed(g);
+		groupCollapsedOverride = { ...groupCollapsedOverride, [g.id]: !cur };
 	}
 
-	function handleDragStart(e: DragEvent, thing: BrowserThing) {
+	/** Sub-groups default-expanded; user can collapse a sub-group to hide its rows. */
+	function isSubGroupCollapsed(sg: BrowserSubGroup): boolean {
+		return !!subGroupCollapsedOverride[sg.id];
+	}
+	function toggleSubGroup(sg: BrowserSubGroup) {
+		subGroupCollapsedOverride = {
+			...subGroupCollapsedOverride,
+			[sg.id]: !isSubGroupCollapsed(sg)
+		};
+	}
+
+	function isRecipePlaced(recipe: AccomplishmentRecipe): boolean {
+		if (recipe.referencedEntityIds.length === 0) return false;
+		return recipe.referencedEntityIds.every((id) => placedIds.has(id));
+	}
+
+	function handleDragStart(e: DragEvent, recipe: AccomplishmentRecipe) {
 		if (!e.dataTransfer) return;
 		e.dataTransfer.effectAllowed = 'copy';
-		// Custom MIME type so the canvas can distinguish "browser
-		// thing drop" from "block-row reorder drop".
-		e.dataTransfer.setData('application/x-broadsheet-entity', thing.entityId);
-		// Fallback for browsers that drop the custom MIME on drag-leave.
-		e.dataTransfer.setData('text/plain', thing.entityId);
+		// Carry the recipe id; the canvas looks the recipe up in its own
+		// derived tree on drop. Smaller than serialising the whole
+		// recipe and survives the canvas-side dedup.
+		e.dataTransfer.setData('application/x-broadsheet-recipe-id', recipe.id);
+		// Also carry the full payload as a fallback — useful for cross-
+		// frame drops where the canvas's `discovery` snapshot might be
+		// briefly out of sync with the browser's.
+		e.dataTransfer.setData('application/x-broadsheet-recipe', JSON.stringify(recipe));
+		// Plain-text fallback — first entity_id so old drop handlers
+		// degrade gracefully to single-thing inserts.
+		if (recipe.referencedEntityIds[0]) {
+			e.dataTransfer.setData('text/plain', recipe.referencedEntityIds[0]);
+		}
 	}
 
-	function handleTap(thing: BrowserThing) {
-		onAddThing(thing.entityId);
+	function handleTap(recipe: AccomplishmentRecipe) {
+		onAddRecipe(recipe);
 	}
 
-	/** Convert mdi:foo-bar to a short text chip for the row icon column. */
+	/** Glyph for the row icon column: 3-char chip from mdi:* or '·'. */
 	function iconChip(icon: string | null | undefined): string {
 		if (!icon) return '·';
-		// Strip mdi: prefix; truncate at ~3 chars so the column stays narrow.
 		return icon.replace(/^mdi:/, '').slice(0, 3);
 	}
 
-	function domainTag(domain: string): string {
-		// Short uppercase tag — light → LIGHT, media_player → MEDIA, etc.
-		if (domain === 'media_player') return 'MEDIA';
-		if (domain === 'binary_sensor') return 'BINSEN';
-		if (domain === 'input_boolean') return 'BOOL';
-		if (domain === 'input_select') return 'SEL';
-		if (domain === 'input_number') return 'NUM';
-		return domain.toUpperCase().slice(0, 6);
+	/** ▸ for composed (multi-block) recipes; · for atomic (1-block). */
+	function recipeGlyph(recipe: AccomplishmentRecipe): string {
+		return recipe.blocks.length > 1 ? '▸' : '·';
+	}
+
+	/** True iff this group is a single-subgroup group (e.g. a cross-area bucket).
+	 *  In that case we hide the sub-group header — it would just duplicate
+	 *  the group label. */
+	function shouldShowSubGroupHeader(g: BrowserGroup): boolean {
+		return g.subGroups.length > 1;
 	}
 </script>
 
 <aside class="things-browser" aria-label="Things browser">
 	<header class="browser-head">
 		<strong class="browser-title">Things</strong>
-		<span class="browser-count">
-			{tree.reduce((n, g) => n + g.things.length, 0)} total
-		</span>
+		<span class="browser-count">{totalRecipes} total</span>
 	</header>
 
 	<input
 		type="search"
 		class="browser-search"
-		placeholder="Search things, rooms, entity_ids…"
+		placeholder="Search: 'lights off', 'TV on', area name, entity_id…"
 		bind:value={query}
 		aria-label="Search things"
 	/>
@@ -123,8 +139,9 @@
 	{#if filtered.length === 0}
 		<p class="browser-empty">
 			{#if query}
-				No things match "<em>{query}</em>". Try a shorter word, a
-				room name, or an entity_id fragment.
+				No accomplishments match "<em>{query}</em>". Try a shorter
+				word, a room name, an entity_id fragment, or a verb like
+				"off" / "toggle" / "boost".
 			{:else}
 				No things discovered yet. Open <a href="settings/house">house
 				settings</a> to make sure broadsheet has the entities you
@@ -134,52 +151,81 @@
 	{:else}
 		<ol class="browser-groups">
 			{#each filtered as group (group.id)}
-				{@const collapsed = isCollapsed(group)}
-				<li class="browser-group" class:collapsed>
+				{@const groupCollapsed = isGroupCollapsed(group)}
+				<li class="browser-group" class:collapsed={groupCollapsed}>
 					<button
 						class="group-head"
 						type="button"
-						onclick={() => toggleCollapsed(group)}
-						aria-expanded={!collapsed}
+						onclick={() => toggleGroup(group)}
+						aria-expanded={!groupCollapsed}
 					>
 						<span class="group-caret" aria-hidden="true">
-							{collapsed ? '▸' : '▾'}
+							{groupCollapsed ? '▸' : '▾'}
 						</span>
 						<span class="group-label">{group.label}</span>
-						<span class="group-count">{group.things.length}</span>
+						<span class="group-count">
+							{group.subGroups.reduce((n, sg) => n + sg.recipes.length, 0)}
+						</span>
 					</button>
-					{#if !collapsed}
-						<ul class="group-things">
-							{#each group.things as thing (thing.entityId)}
-								{@const placed = placedIds.has(thing.entityId)}
-								<li class="thing-row" class:placed>
-									<button
-										type="button"
-										class="thing-tap"
-										onclick={() => handleTap(thing)}
-										draggable="true"
-										ondragstart={(e) => handleDragStart(e, thing)}
-										title="Tap to add — or drag onto the canvas"
-									>
-										<span class="thing-icon" aria-hidden="true">
-											{iconChip(thing.icon)}
-										</span>
-										<span class="thing-text">
-											<span class="thing-name">{thing.name}</span>
-											<span class="thing-meta">
-												<span class="thing-domain">{domainTag(thing.domain)}</span>
-												<span class="thing-id">{thing.entityId}</span>
+					{#if !groupCollapsed}
+						<div class="group-body">
+							{#each group.subGroups as sg (sg.id)}
+								{@const sgCollapsed = isSubGroupCollapsed(sg)}
+								<div class="sub-group" class:collapsed={sgCollapsed}>
+									{#if shouldShowSubGroupHeader(group)}
+										<button
+											class="sub-group-head"
+											type="button"
+											onclick={() => toggleSubGroup(sg)}
+											aria-expanded={!sgCollapsed}
+										>
+											<span class="sub-group-caret" aria-hidden="true">
+												{sgCollapsed ? '▸' : '▾'}
 											</span>
-										</span>
-										{#if placed}
-											<span class="thing-placed" title="Already on the canvas">
-												✓
-											</span>
-										{/if}
-									</button>
-								</li>
+											<span class="sub-group-label">{sg.label}</span>
+											<span class="sub-group-count">{sg.recipes.length}</span>
+										</button>
+									{/if}
+									{#if !sgCollapsed}
+										<ul class="sub-group-recipes">
+											{#each sg.recipes as recipe (recipe.id)}
+												{@const placed = isRecipePlaced(recipe)}
+												<li class="recipe-row" class:placed>
+													<button
+														type="button"
+														class="recipe-tap"
+														onclick={() => handleTap(recipe)}
+														draggable="true"
+														ondragstart={(e) => handleDragStart(e, recipe)}
+														title="Tap to add — or drag onto the canvas"
+													>
+														<span class="recipe-glyph" aria-hidden="true">
+															{recipeGlyph(recipe)}
+														</span>
+														<span class="recipe-icon" aria-hidden="true">
+															{iconChip(recipe.icon)}
+														</span>
+														<span class="recipe-text">
+															<span class="recipe-title">{recipe.title}</span>
+															{#if recipe.description}
+																<span class="recipe-description">
+																	{recipe.description}
+																</span>
+															{/if}
+														</span>
+														{#if placed}
+															<span class="recipe-placed" title="Already on the canvas">
+																✓
+															</span>
+														{/if}
+													</button>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+								</div>
 							{/each}
-						</ul>
+						</div>
 					{/if}
 				</li>
 			{/each}
@@ -271,9 +317,10 @@
 		border: none;
 		color: var(--fg);
 		font-family: var(--font-caption, var(--font-body));
-		font-size: 0.8rem;
+		font-size: 0.85rem;
+		font-weight: 500;
 		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.05em;
 		text-align: left;
 		cursor: pointer;
 	}
@@ -296,26 +343,67 @@
 		font-feature-settings: 'tnum';
 	}
 
-	.group-things {
-		list-style: none;
-		margin: 0;
+	.group-body {
 		padding: 0 0 0.25rem;
 	}
 
-	.thing-row {
+	.sub-group {
+		margin-top: 0.25rem;
+	}
+	.sub-group-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.25rem 1rem 0.25rem 1.5rem;
+		background: transparent;
+		border: none;
+		color: var(--fg-muted);
+		font-family: var(--font-caption, var(--font-body));
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		text-align: left;
+		cursor: pointer;
+	}
+	.sub-group-head:hover {
+		color: var(--accent);
+	}
+	.sub-group-caret {
+		font-family: var(--font-mono);
+		color: var(--fg-muted);
+		width: 1ch;
+	}
+	.sub-group-label {
+		flex: 1 1 auto;
+	}
+	.sub-group-count {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--fg-muted);
+		font-feature-settings: 'tnum';
+	}
+
+	.sub-group-recipes {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.recipe-row {
 		display: block;
 	}
-	.thing-row.placed .thing-tap {
+	.recipe-row.placed .recipe-tap {
 		background: var(--accent-glow, rgba(192, 138, 74, 0.04));
 	}
 
-	.thing-tap {
+	.recipe-tap {
 		display: grid;
-		grid-template-columns: 2.25rem 1fr auto;
+		grid-template-columns: 1.25rem 2.25rem 1fr auto;
 		gap: 0.5rem;
 		align-items: center;
 		width: 100%;
-		padding: 0.4rem 1rem 0.4rem 1.5rem;
+		padding: 0.4rem 1rem 0.4rem 1.75rem;
 		background: transparent;
 		border: none;
 		text-align: left;
@@ -323,14 +411,21 @@
 		font-family: var(--font-body);
 		cursor: grab;
 	}
-	.thing-tap:hover {
+	.recipe-tap:hover {
 		background: var(--accent-glow, rgba(192, 138, 74, 0.08));
 	}
-	.thing-tap:active {
+	.recipe-tap:active {
 		cursor: grabbing;
 	}
 
-	.thing-icon {
+	.recipe-glyph {
+		font-family: var(--font-mono);
+		color: var(--accent);
+		font-size: 0.9rem;
+		text-align: center;
+	}
+
+	.recipe-icon {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -344,12 +439,13 @@
 		text-transform: uppercase;
 	}
 
-	.thing-text {
+	.recipe-text {
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
+		gap: 0.1rem;
 	}
-	.thing-name {
+	.recipe-title {
 		font-size: 0.88rem;
 		line-height: 1.25;
 		color: var(--fg);
@@ -357,28 +453,16 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.thing-meta {
-		display: flex;
-		gap: 0.5rem;
-		align-items: baseline;
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
+	.recipe-description {
+		font-size: 0.72rem;
+		font-style: italic;
 		color: var(--fg-muted);
-		min-width: 0;
-	}
-	.thing-domain {
-		color: var(--accent);
-		letter-spacing: 0.03em;
-		flex: 0 0 auto;
-	}
-	.thing-id {
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		min-width: 0;
 	}
 
-	.thing-placed {
+	.recipe-placed {
 		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		color: var(--accent);

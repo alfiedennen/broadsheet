@@ -36,10 +36,14 @@ Tests added:
   `defaultBlockConfig` + appear in `ALL_BLOCK_TYPES` (count → 13).
 - `fresh-curation.spec.ts` — registry includes both primitives.
 
-Deferred to 0.9.2 (per the locked plan): `row` + `grid` primitives
-(for two-up tiles and grid arrangements), Lovelace import landing
-in things-first canvas with masonry/coverage report. Spec:
-`docs/plans/plan-9.2-lovelace-import-layout.md`.
+Deferred (per the locked plan): `row` + `grid` primitives (for two-
+up tiles and grid arrangements), Lovelace import landing in things-
+first canvas with masonry/coverage report. Originally scheduled as
+0.9.2 — reslotted to **0.9.3** after dogfood of 0.9.1 surfaced a
+more urgent UX miss: the browser was showing atomic entities when
+the user thinks in accomplishments. That browser rethink became
+0.9.2 (`docs/plans/plan-9.2-browser-accomplishments.md`). Layout
+work follows in `docs/plans/plan-9.3-lovelace-import-layout.md`.
 
 ---
 
