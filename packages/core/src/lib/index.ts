@@ -115,6 +115,30 @@ export {
 	type RouteModality
 } from './routing';
 
+// 0.7 fix #3 — read-only access to the live HA states snapshot.
+// routeTo() needs Record<string, State>; plugins that drive routing
+// (voice's TTS target resolver) read via this getter. This is the
+// minimum surface that opens for read; broadsheet does NOT expose
+// the mutating discoveryStore methods.
+export { discoveryStore as _discoveryStore } from './discovery/store.svelte';
+// `getStates()` is the friendly facade — plugins prefer this over
+// the underscore-prefixed store. Stays a snapshot read each call.
+import { discoveryStore as _ds } from './discovery/store.svelte';
+import type { State as _State } from './ha/types';
+export function getStates(): Record<string, _State> {
+	return _ds.states;
+}
+
+// 0.7 — read-only curation access. useCurationField gives reactive
+// path-based reads; this gives a snapshot of the whole tree for
+// plugins that need to walk multiple fields (e.g. voice's
+// presence-routing resolver: surfaceArea + people overrides).
+import { curationStore as _cs } from './curation/store.svelte';
+import type { Curation as _Curation } from './curation/types';
+export function getCuration(): _Curation {
+	return _cs.current;
+}
+
 /* ── HA connection surface (for plugins that need WS access) ─────── */
 // Most plugins read state via discovery + curation. The @broadsheet/voice
 // substrate needs WS-level access to discover HA's assist_pipeline +

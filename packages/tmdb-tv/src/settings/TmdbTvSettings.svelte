@@ -18,15 +18,33 @@
 	 * matches the threat model better.
 	 */
 	import { SettingsRow, useCurationField } from '@broadsheet/core';
-	import { providersForRegion, type ProviderCatalogueEntry } from '../lib/tmdb';
+	import {
+		providersForRegion,
+		TMDB_REGIONS,
+		type ProviderCatalogueEntry
+	} from '../lib/tmdb';
+
+	// Sort regions alphabetically by name; GB pinned to the top because
+	// it's the addon's primary author region + a sane default. Stable
+	// shape — computed once, not reactively.
+	const regionOptions = [...TMDB_REGIONS].sort((a, b) => {
+		if (a.code === 'GB') return -1;
+		if (b.code === 'GB') return 1;
+		return a.name.localeCompare(b.name);
+	});
 
 	const apiKey = useCurationField<string | null>('integrations.tmdb.apiKey');
 	const region = useCurationField<string>('integrations.tmdb.region');
 
 	// Theme E depth knobs
 	const providers = useCurationField<number[]>('integrations.tmdb.providers');
-	const trendingWindow = useCurationField<'day' | 'week'>('integrations.tmdb.trendingWindow');
-	const newReleasesWindowDays = useCurationField<number>(
+	// 0.7 multi-select upgrade: trendingWindows + newReleasesWindowDays
+	// are now arrays. Curation may store legacy scalars from 0.6; the
+	// derived sets below normalise both shapes.
+	const trendingWindows = useCurationField<('day' | 'week')[] | 'day' | 'week'>(
+		'integrations.tmdb.trendingWindows'
+	);
+	const newReleasesWindowDays = useCurationField<number[] | number>(
 		'integrations.tmdb.newReleasesWindowDays'
 	);
 
@@ -43,12 +61,22 @@
 		providers.value = [...next];
 	}
 
-	function setTrendingWindow(value: 'day' | 'week') {
-		trendingWindow.value = value;
-	}
+	// Multi-select sets — derived from the (possibly-scalar) curation
+	// values. Empty + falsy values fall to defaults so the user can't
+	// accidentally end up with "no rows at all" the first time the
+	// panel loads.
+	const selectedTrendingWindows = $derived.by((): Set<'day' | 'week'> => {
+		const v = trendingWindows.value;
+		if (Array.isArray(v)) return new Set(v);
+		if (v === 'day' || v === 'week') return new Set([v]);
+		return new Set<'day' | 'week'>(['week']);
+	});
 
-	function setWindowDays(days: number) {
-		newReleasesWindowDays.value = days;
+	function toggleTrendingWindow(win: 'day' | 'week') {
+		const next = new Set(selectedTrendingWindows);
+		if (next.has(win)) next.delete(win);
+		else next.add(win);
+		trendingWindows.value = [...next];
 	}
 
 	const WINDOW_PRESETS: { label: string; days: number }[] = [
@@ -58,8 +86,20 @@
 		{ label: '6 months', days: 180 },
 		{ label: 'This year', days: 365 }
 	];
-	const currentWindowDays = $derived(newReleasesWindowDays.value ?? 45);
-	const currentTrendingWindow = $derived(trendingWindow.value ?? 'week');
+
+	const selectedWindowDays = $derived.by((): Set<number> => {
+		const v = newReleasesWindowDays.value;
+		if (Array.isArray(v)) return new Set(v);
+		if (typeof v === 'number') return new Set([v]);
+		return new Set([45]);
+	});
+
+	function toggleWindowDays(days: number) {
+		const next = new Set(selectedWindowDays);
+		if (next.has(days)) next.delete(days);
+		else next.add(days);
+		newReleasesWindowDays.value = [...next];
+	}
 
 	let saveBlink = $state<'saving' | 'saved' | null>(null);
 	let blinkTimer: ReturnType<typeof setTimeout> | null = null;
@@ -128,17 +168,17 @@
 
 	<SettingsRow
 		label="Region"
-		hint="ISO-3166-1 code — drives trending + availability (GB, US, DE, …)."
+		hint="Drives trending + watch-provider availability. Switching region re-issues TMDB queries on next /tv visit + reshapes the provider chip list below."
 	>
-		<input
-			class="text region"
-			type="text"
-			maxlength="2"
-			placeholder="GB"
+		<select
+			class="picker"
 			value={region.value ?? DEFAULT_REGION}
-			onchange={(e) =>
-				(region.value = e.currentTarget.value.trim().toUpperCase() || DEFAULT_REGION)}
-		/>
+			onchange={(e) => (region.value = (e.currentTarget as HTMLSelectElement).value)}
+		>
+			{#each regionOptions as opt (opt.code)}
+				<option value={opt.code}>{opt.name} ({opt.code})</option>
+			{/each}
+		</select>
 	</SettingsRow>
 
 	<!-- Theme E — depth knobs: providers + trending window + new-releases window. -->
@@ -170,23 +210,23 @@
 	</SettingsRow>
 
 	<SettingsRow
-		label="Trending window"
-		hint="TMDB exposes two trending lenses — last 24 hours or last 7 days. Day-scale catches breakout news; week-scale is steadier."
+		label="Trending rows"
+		hint="TMDB exposes two trending lenses — last 24 hours and last 7 days. Tick one or both; one PosterRow renders per ticked option. Untick both to drop trending from /tv entirely."
 	>
-		<div class="seg">
+		<div class="provider-grid">
 			<button
 				type="button"
-				class="seg-btn"
-				class:on={currentTrendingWindow === 'day'}
-				onclick={() => setTrendingWindow('day')}
+				class="provider-chip"
+				class:on={selectedTrendingWindows.has('day')}
+				onclick={() => toggleTrendingWindow('day')}
 			>
 				Today
 			</button>
 			<button
 				type="button"
-				class="seg-btn"
-				class:on={currentTrendingWindow === 'week'}
-				onclick={() => setTrendingWindow('week')}
+				class="provider-chip"
+				class:on={selectedTrendingWindows.has('week')}
+				onclick={() => toggleTrendingWindow('week')}
 			>
 				This week
 			</button>
@@ -194,21 +234,27 @@
 	</SettingsRow>
 
 	<SettingsRow
-		label="New releases window"
-		hint="How far back the 'New' row looks. Shorter = sharper, longer = more catalogue. Default 45 days."
+		label="New rows"
+		hint="One PosterRow per window ticked. Shorter windows are sharper; longer cover more catalogue. Tick several to get parallel sliding lenses (e.g. 'New this week' AND 'New this month' as two rows). Default: [45 days]."
 	>
-		<div class="seg seg-narrow">
+		<div class="provider-grid">
 			{#each WINDOW_PRESETS as preset (preset.days)}
 				<button
 					type="button"
-					class="seg-btn"
-					class:on={currentWindowDays === preset.days}
-					onclick={() => setWindowDays(preset.days)}
+					class="provider-chip"
+					class:on={selectedWindowDays.has(preset.days)}
+					onclick={() => toggleWindowDays(preset.days)}
 				>
 					{preset.label}
 				</button>
 			{/each}
 		</div>
+		{#if selectedWindowDays.size === 0 && selectedTrendingWindows.size === 0}
+			<span class="empty-warn">
+				No rows enabled — /tv will show a "no rows" placeholder. Tick at
+				least one above.
+			</span>
+		{/if}
 	</SettingsRow>
 </div>
 
@@ -269,15 +315,27 @@
 		color: var(--fg);
 	}
 
-	/* the API key field wants room; the region field is tiny */
-	.text:not(.region) {
+	/* API key wants room. */
+	.text {
 		width: min(22rem, 60vw);
 	}
 
-	.text.region {
-		width: 4.5rem;
-		text-transform: uppercase;
-		text-align: center;
+	/* Region dropdown picker — matches Voice settings + HaroldPreset
+	 * conventions: same height + padding + accent border on focus. */
+	.picker {
+		padding: var(--space-2) var(--space-3);
+		font-family: var(--font-mono);
+		font-size: var(--text-caption);
+		color: var(--fg);
+		background: var(--bg-raised);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		min-width: 14rem;
+	}
+
+	.picker:focus {
+		outline: none;
+		border-color: var(--accent);
 	}
 
 	.get-key {
@@ -351,43 +409,17 @@
 		border-style: solid;
 	}
 
-	.seg {
-		display: inline-flex;
-		gap: 0;
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-pill);
-		overflow: hidden;
-		background: var(--bg-raised);
-	}
-
-	.seg-narrow {
-		flex-wrap: wrap;
-	}
-
-	.seg-btn {
-		font-family: var(--font-mono);
-		font-size: var(--text-eyebrow);
-		letter-spacing: var(--track-eyebrow);
-		text-transform: uppercase;
+	/* 0.7: empty-rows warning when both row arrays are empty. */
+	.empty-warn {
+		display: block;
+		margin-top: var(--space-3);
 		padding: var(--space-2) var(--space-3);
-		background: transparent;
-		color: var(--fg-muted);
-		border: none;
-		border-right: 1px solid var(--rule);
-		cursor: pointer;
-		transition: color var(--ease-quick), background var(--ease-quick);
-	}
-
-	.seg-btn:last-child {
-		border-right: none;
-	}
-
-	.seg-btn:hover {
-		color: var(--accent);
-	}
-
-	.seg-btn.on {
-		color: var(--accent);
-		background: var(--accent-glow, rgba(192, 138, 74, 0.08));
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		font-style: italic;
+		color: var(--state-alert, #bf3a30);
+		background: rgba(191, 58, 48, 0.06);
+		border-left: 2px solid var(--state-alert, #bf3a30);
+		border-radius: 0 var(--radius-card) var(--radius-card) 0;
 	}
 </style>

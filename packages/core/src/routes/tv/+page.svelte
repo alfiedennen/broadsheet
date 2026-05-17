@@ -243,12 +243,22 @@
 	<OutLine label="Watch" />
 	{#if content.current}
 		{@const ContentRows = content.current}
+		{@const trendingWindowsArr = Array.isArray(tmdb.trendingWindows)
+			? tmdb.trendingWindows
+			: typeof tmdb.trendingWindows === 'string'
+				? [tmdb.trendingWindows]
+				: ['week']}
+		{@const newWindowsArr = Array.isArray(tmdb.newReleasesWindowDays)
+			? tmdb.newReleasesWindowDays
+			: typeof tmdb.newReleasesWindowDays === 'number'
+				? [tmdb.newReleasesWindowDays]
+				: [45]}
 		<ContentRows
 			apiKey={tmdb.apiKey ?? null}
 			region={tmdb.region ?? 'GB'}
 			providers={tmdb.providers ?? []}
-			trendingWindow={tmdb.trendingWindow ?? 'week'}
-			newReleasesWindowDays={tmdb.newReleasesWindowDays ?? 45}
+			trendingWindows={trendingWindowsArr}
+			newReleasesWindowDays={newWindowsArr}
 		/>
 	{:else}
 		<div class="content-slot">

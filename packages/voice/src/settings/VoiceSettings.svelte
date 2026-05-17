@@ -26,6 +26,8 @@
 	const pillOnMoment = useCurationField<boolean>('plugins.voice.config.pillOnMoment');
 	const ttsTarget = useCurationField<string>('plugins.voice.config.ttsTarget');
 	const haNativeFirst = useCurationField<boolean>('plugins.voice.config.haNativeFirst');
+	// 0.7 fix #3 — surface-area picker for presence:originator routing.
+	const surfaceArea = useCurationField<string | null>('view.surfaceArea');
 
 	let discovery = $state<VoiceDiscovery | null>(null);
 	let loading = $state(true);
@@ -154,7 +156,7 @@
 
 		<SettingsRow
 			label="TTS target"
-			hint="Where broadsheet's voice replies play. 'browser' plays in this tab; pick a media_player entity to play through that speaker instead."
+			hint="Where broadsheet's voice replies play. 'browser' plays in this tab; pick a media_player to always route there; pick a presence option to route dynamically based on who's where."
 		>
 			<select
 				class="picker"
@@ -164,6 +166,20 @@
 						(e.currentTarget as HTMLSelectElement).value || 'browser')}
 			>
 				<option value="browser">Browser (this tab)</option>
+				<!-- 0.7 fix #3 — presence-based routing options. Dynamic
+				     targets resolved at speak time via routeTo(). -->
+				{#if coreDiscovery.persons.length > 0}
+					<optgroup label="Presence (dynamic)">
+						<option value="presence:originator">
+							Nearest speaker to whoever's in this room
+						</option>
+						{#each coreDiscovery.persons as p (p.id)}
+							<option value="presence:{p.id}">
+								Nearest speaker to {p.name}
+							</option>
+						{/each}
+					</optgroup>
+				{/if}
 				{#if mediaPlayerOptions.length > 0}
 					<optgroup label="HA media players ({mediaPlayerOptions.length})">
 						{#each mediaPlayerOptions as opt (opt.id)}
@@ -176,8 +192,39 @@
 					<option disabled>(no media_player entities discovered)</option>
 				{/if}
 			</select>
-			{#if ttsTarget.value && ttsTarget.value !== 'browser'}
+			{#if ttsTarget.value === 'presence:originator'}
+				<span class="summary-line">
+					Resolved at speak time from <em>this broadsheet instance's surface area</em>
+					(set below). Falls back to browser if no person is in that room.
+				</span>
+			{:else if ttsTarget.value?.startsWith('presence:')}
+				<span class="summary-line">
+					Resolved at speak time to whichever speaker is nearest the picked person.
+				</span>
+			{:else if ttsTarget.value && ttsTarget.value !== 'browser'}
 				<span class="summary-line">Playing through <code>{ttsTarget.value}</code></span>
+			{/if}
+		</SettingsRow>
+
+		<SettingsRow
+			label="Surface area"
+			hint="Which HA area THIS broadsheet instance lives in (the wall tablet's area, the office desktop's area, the phone's 'wherever I am'). Powers 'presence:originator' routing: voice replies route to whoever's currently in this area. Optional — set per-device by opening broadsheet on that device and picking here."
+		>
+			<select
+				class="picker"
+				value={surfaceArea.value ?? ''}
+				onchange={(e) =>
+					(surfaceArea.value = (e.currentTarget as HTMLSelectElement).value || null)}
+			>
+				<option value="">(no surface affinity)</option>
+				{#each coreDiscovery.areas as a (a.id)}
+					<option value={a.id}>{a.name}</option>
+				{/each}
+			</select>
+			{#if surfaceArea.value}
+				<span class="summary-line">
+					Originator routing will pick whoever's in <code>{surfaceArea.value}</code>.
+				</span>
 			{/if}
 		</SettingsRow>
 

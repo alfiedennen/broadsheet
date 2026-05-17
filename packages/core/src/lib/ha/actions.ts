@@ -24,15 +24,21 @@ import { canWrite } from '$lib/stores/safety.svelte';
 import type { ServiceCallResult } from './types';
 
 /**
- * Domains where writes are NEVER allowed in dev mode regardless of
- * the per-session unlock flag. Locks are the canonical example —
- * a bug here is meaningfully expensive (security incident, lockout).
+ * Domains where writes are NEVER allowed regardless of the
+ * per-session unlock flag.
  *
- * If you genuinely need to test lock interactions, do it in Env 3
- * (production canary, with a human present, NEVER overnight) — not in
- * Env 1 dev. See DEV-ENVIRONMENTS.md.
+ * Currently EMPTY — locks were originally hard-banned out of caution
+ * (a bug = security incident / lockout) but the canary has now lived
+ * with the unlock UI long enough that the user has explicitly opted
+ * in to lock writes. The standard readonly + per-session unlock flow
+ * still applies; this set is the additional "even an unlocked session
+ * can't touch this domain" guard, reserved for cases we haven't yet
+ * identified as needing it.
+ *
+ * If you ever need to re-ban a domain, add it here — the callService
+ * wrapper checks this before anything else (no override possible).
  */
-const HARD_BANNED_DOMAINS = new Set(['lock']);
+const HARD_BANNED_DOMAINS = new Set<string>();
 
 /**
  * Dry-run mode (separate from readonly). When true, callService()

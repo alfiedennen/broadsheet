@@ -259,6 +259,49 @@ export function providersForRegion(region: string): ProviderCatalogueEntry[] {
 	);
 }
 
+/**
+ * Curated list of ISO 3166-1 alpha-2 region codes the TMDB settings
+ * panel offers in its dropdown. Covers the regions TMDB has rich
+ * watch-provider coverage for + the territories Alfie's likely
+ * audience lives in. Adding a region is mechanical — drop a new
+ * `{ code, name }` entry in here. The dropdown sorts by name so
+ * ordering of the array doesn't matter.
+ */
+export interface RegionOption {
+	code: string;
+	name: string;
+}
+
+export const TMDB_REGIONS: RegionOption[] = [
+	{ code: 'GB', name: 'United Kingdom' },
+	{ code: 'US', name: 'United States' },
+	{ code: 'IE', name: 'Ireland' },
+	{ code: 'CA', name: 'Canada' },
+	{ code: 'AU', name: 'Australia' },
+	{ code: 'NZ', name: 'New Zealand' },
+	{ code: 'DE', name: 'Germany' },
+	{ code: 'FR', name: 'France' },
+	{ code: 'ES', name: 'Spain' },
+	{ code: 'IT', name: 'Italy' },
+	{ code: 'NL', name: 'Netherlands' },
+	{ code: 'BE', name: 'Belgium' },
+	{ code: 'AT', name: 'Austria' },
+	{ code: 'CH', name: 'Switzerland' },
+	{ code: 'SE', name: 'Sweden' },
+	{ code: 'NO', name: 'Norway' },
+	{ code: 'DK', name: 'Denmark' },
+	{ code: 'FI', name: 'Finland' },
+	{ code: 'PT', name: 'Portugal' },
+	{ code: 'PL', name: 'Poland' },
+	{ code: 'JP', name: 'Japan' },
+	{ code: 'KR', name: 'South Korea' },
+	{ code: 'IN', name: 'India' },
+	{ code: 'BR', name: 'Brazil' },
+	{ code: 'MX', name: 'Mexico' },
+	{ code: 'AR', name: 'Argentina' },
+	{ code: 'ZA', name: 'South Africa' }
+];
+
 /* ── presentation helpers ──────────────────────────────────────── */
 
 /** Build a poster URL. Sizes: w185 / w342 / w500. */

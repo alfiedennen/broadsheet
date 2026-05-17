@@ -32,7 +32,7 @@
 	import type { DomainArea, DomainPerson } from '$lib/discovery';
 	import { connection } from '$lib/stores/connection.svelte';
 	import { curationStore, useCurationField } from '$lib/curation/store.svelte';
-	import { callService, callToggle, getHardBannedDomains } from '$lib/ha/actions';
+	import { callService, callToggle } from '$lib/ha/actions';
 	import { pluginDataUrl } from '$lib/plugins/assets';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
@@ -252,7 +252,6 @@
 	});
 	const lockState = $derived(primaryLock?.state?.state ?? null);
 	const isLocked = $derived(lockState === 'locked');
-	const lockBanned = $derived(getHardBannedDomains().includes('lock'));
 
 	let busy = $state<string | null>(null);
 	async function withBusy(label: string, fn: () => Promise<unknown>) {
@@ -289,10 +288,6 @@
 	}
 	function unlockSubtitle(): string {
 		if (!primaryLock) return 'no lock discovered';
-		// Lock writes are intentionally banned in v0.1 — see /door for the
-		// full message. We keep the tile visible for shape but make the
-		// disabled state read like a deliberate choice, not a broken button.
-		if (lockBanned) return 'view-only — open /door';
 		if (!lockState || lockState === 'unavailable') return 'not reporting';
 		if (!isLocked) return `already ${lockState}`;
 		return 'locked';
@@ -373,7 +368,7 @@
 						class="qr-chip"
 						class:busy={busy === 'unlock'}
 						onclick={fireUnlock}
-						disabled={lockBanned || !isLocked}
+						disabled={!isLocked}
 					>
 						<span class="qr-label">Unlock the door</span>
 						<span class="qr-state">{unlockSubtitle()}</span>

@@ -18,7 +18,9 @@
 	import { base } from '$app/paths';
 	import { discovery } from '$lib/discovery';
 	import type { DomainArea, DomainEntity } from '$lib/discovery';
-	import { callService, getHardBannedDomains } from '$lib/ha/actions';
+	import { callService } from '$lib/ha/actions';
+	import { curationStore, useCurationField } from '$lib/curation/store.svelte';
+	import InlinePin from '$lib/components/InlinePin.svelte';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
@@ -30,7 +32,23 @@
 	const allContacts = $derived(doorAreas.flatMap((a) => a.contacts));
 	const allCameras = $derived(doorAreas.flatMap((a) => a.cameras));
 
-	const hardBanned = $derived(getHardBannedDomains().includes('lock'));
+	// Fix #4 — primary camera picker. The /door page used to render
+	// EVERY camera in the door areas; on a real house with multiple
+	// cameras (front, side, back) that's noisy + a battery hit. v0.7
+	// renders exactly one — the user's pick, persisted as
+	// `view.primaryDoorCameraId`. Default = first camera discovered.
+	// InlinePin pencil beside the figcaption lets the user flip to a
+	// different camera in-place.
+	const primaryDoorCameraId = useCurationField<string | null>('view.primaryDoorCameraId');
+	const primaryCamera = $derived.by((): DomainEntity | null => {
+		if (allCameras.length === 0) return null;
+		const picked = primaryDoorCameraId.value;
+		if (picked) {
+			const match = allCameras.find((c) => c.id === picked);
+			if (match) return match;
+		}
+		return allCameras[0];
+	});
 
 	const proseState = $derived.by(() => {
 		if (allLocks.length === 0) return 'No locks discovered.';
@@ -100,16 +118,6 @@
 		{/snippet}
 	</Hero>
 
-	{#if hardBanned}
-		<aside class="ban-banner">
-			<span class="ban-icon" aria-hidden="true">⚿</span>
-			<div>
-				<strong>Lock writes are hard-banned.</strong>
-				<span>broadsheet treats locks as too consequential for a glanceable dashboard — the Unlock button stays visible for shape, but every call is blocked + audit-logged. To actually unlock, use Home Assistant's own controls or a voice assistant.</span>
-			</div>
-		</aside>
-	{/if}
-
 	{#if allLocks.length > 0}
 		<OutLine label="Locks" />
 		<div class="locks">
@@ -170,27 +178,85 @@
 		</ul>
 	{/if}
 
-	{#if allCameras.length > 0}
+	{#if primaryCamera}
 		<OutLine label="Camera" />
 		<div class="cameras">
-			{#each allCameras as cam (cam.id)}
-				<figure class="camera">
-					{#if cameraErrors[cam.id]}
-						<div class="camera-fallback">
-							<span class="camera-fallback-icon" aria-hidden="true">⃠</span>
-							<span>No snapshot</span>
-						</div>
-					{:else}
-						<img
-							src={cameraSrc(cam)}
-							alt={cam.name}
-							loading="lazy"
-							onerror={() => markCameraFailed(cam.id)}
-						/>
+			<figure class="camera">
+				{#if cameraErrors[primaryCamera.id]}
+					<div class="camera-fallback">
+						<span class="camera-fallback-icon" aria-hidden="true">⃠</span>
+						<span>No snapshot</span>
+					</div>
+				{:else}
+					<img
+						src={cameraSrc(primaryCamera)}
+						alt={primaryCamera.name}
+						loading="lazy"
+						onerror={() => markCameraFailed(primaryCamera!.id)}
+					/>
+				{/if}
+				<figcaption class="camera-caption">
+					<span class="camera-name">{primaryCamera.name}</span>
+					{#if allCameras.length > 1}
+						<!-- Fix #4: multi-camera households get an inline picker
+						     to switch primary. Hidden when only one camera. -->
+						<InlinePin
+							label="Switch primary door camera"
+							confidence={primaryDoorCameraId.value ? 'overridden' : 'auto'}
+						>
+							{#snippet children(close: () => void)}
+								<div class="cam-picker">
+									<header class="cam-picker-head">
+										<strong>Door camera</strong>
+										<span class="cam-picker-sub">
+											broadsheet renders one camera here. Pick which.
+										</span>
+									</header>
+									<ul class="cam-picker-list" role="radiogroup">
+										{#each allCameras as cam (cam.id)}
+											{@const isPicked = primaryCamera!.id === cam.id}
+											<li>
+												<button
+													type="button"
+													class="cam-pick"
+													class:picked={isPicked}
+													role="radio"
+													aria-checked={isPicked}
+													onclick={() => {
+														primaryDoorCameraId.value = cam.id;
+														close();
+													}}
+												>
+													<span class="cam-pick-name">{cam.name}</span>
+													<code class="cam-pick-id">{cam.id}</code>
+												</button>
+											</li>
+										{/each}
+									</ul>
+									{#if primaryDoorCameraId.value}
+										<button
+											type="button"
+											class="cam-pick-clear"
+											onclick={() => {
+												primaryDoorCameraId.value = null;
+												close();
+											}}
+										>
+											Revert to auto (first discovered)
+										</button>
+									{/if}
+								</div>
+							{/snippet}
+						</InlinePin>
 					{/if}
-					<figcaption>{cam.name}</figcaption>
-				</figure>
-			{/each}
+				</figcaption>
+			</figure>
+			{#if allCameras.length > 1}
+				<p class="cam-aside">
+					{allCameras.length - 1} other {allCameras.length === 2 ? 'camera' : 'cameras'} in this area
+					(hidden by default — pick a different primary with ✏️ above).
+				</p>
+			{/if}
 		</div>
 	{/if}
 
@@ -206,32 +272,125 @@
 </PageShell>
 
 <style>
-	.ban-banner {
+	/* Fix #4 — camera picker popover styling. The default InlinePin
+	 * popover is 18rem min / 28rem max; the camera list wants room
+	 * for entity_id codes so we widen via the same :global override
+	 * pattern PresenceCards uses on its picker. */
+	:global(.camera-caption .pin-popover-body) {
+		min-width: 22rem;
+		max-width: min(36rem, 92vw);
+	}
+
+	.camera-caption {
 		display: flex;
-		gap: var(--space-3);
-		padding: var(--space-3) var(--space-4);
-		background: var(--accent-glow);
-		border: 1px solid var(--accent);
-		border-radius: var(--radius-card);
+		align-items: center;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+
+	.camera-name {
+		font-family: var(--font-mono);
 		font-size: var(--text-caption);
-		line-height: var(--leading-snug);
-	}
-
-	.ban-icon {
-		font-size: 1.3rem;
-		color: var(--accent);
-		flex: 0 0 auto;
-	}
-
-	.ban-banner strong {
-		display: block;
-		color: var(--accent);
-		font-weight: 500;
-		margin-bottom: var(--space-1);
-	}
-
-	.ban-banner span {
 		color: var(--fg-muted);
+	}
+
+	.cam-aside {
+		margin: var(--space-2) 0 0;
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		font-style: italic;
+		color: var(--fg-dim);
+	}
+
+	.cam-picker {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
+	.cam-picker-head {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+
+	.cam-picker-head strong {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.2rem;
+		color: var(--accent);
+		font-weight: 400;
+	}
+
+	.cam-picker-sub {
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+	}
+
+	.cam-picker-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.cam-pick {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--space-1);
+		width: 100%;
+		padding: var(--space-2) var(--space-3);
+		background: transparent;
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-md, 4px);
+		text-align: left;
+		cursor: pointer;
+		transition: border-color var(--ease-quick), background var(--ease-quick);
+	}
+
+	.cam-pick:hover {
+		border-color: var(--accent);
+	}
+
+	.cam-pick.picked {
+		border-color: var(--accent);
+		background: var(--accent-glow);
+	}
+
+	.cam-pick-name {
+		font-family: var(--font-body);
+		color: var(--fg);
+	}
+
+	.cam-pick-id {
+		font-family: var(--font-mono);
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+	}
+
+	.cam-pick-clear {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		background: transparent;
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-pill);
+		padding: var(--space-1) var(--space-3);
+		cursor: pointer;
+		align-self: flex-start;
+		transition: color var(--ease-quick), border-color var(--ease-quick), border-style var(--ease-quick);
+	}
+
+	.cam-pick-clear:hover {
+		color: var(--accent);
+		border-color: var(--accent);
+		border-style: solid;
 	}
 
 	.locks {

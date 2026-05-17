@@ -31,6 +31,7 @@
 	import { routeUtterance } from '../lib/conversation';
 	import { startCapture, isSupported as isSttSupported, type SttHandle } from '../lib/stt';
 	import { speak } from '../lib/tts';
+	import { resolveTtsTarget } from '../lib/tts-target';
 	import { transcriptBus } from '../lib/transcript-bus.svelte';
 	import { DEFAULT_VOICE_CONFIG, type VoiceDiscovery } from '../lib/types';
 
@@ -120,12 +121,15 @@
 		// target streams to that media_player. tts engine + voice come
 		// from the active pipeline.
 		if (result.speech && pipeline.tts_engine) {
+			// Fix #3 — presence-based target resolution. See
+			// VoicePillRenderer for the same pattern.
+			const resolved = resolveTtsTarget(ttsTarget.value || DEFAULT_VOICE_CONFIG.ttsTarget);
 			await speak(conn, {
 				text: result.speech.text,
 				engine: pipeline.tts_engine,
 				language: pipeline.tts_language ?? pipeline.conversation_language,
 				voice: pipeline.tts_voice,
-				target: ttsTarget.value || DEFAULT_VOICE_CONFIG.ttsTarget
+				target: resolved.target
 			});
 		}
 	}

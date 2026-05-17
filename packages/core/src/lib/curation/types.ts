@@ -94,17 +94,27 @@ export interface IntegrationsConfig {
 		 */
 		providers?: number[];
 		/**
-		 * Theme E — number of days to look back for the "New" row.
-		 * Defaults to 45 (current behaviour). Sensible options: 7
-		 * (this week), 30 (this month), 90 (this quarter), 180
-		 * (this half-year), 365 (this year).
+		 * Theme E — number of days to look back for the "New" rows.
+		 * Multi-row: one PosterRow per entry. Defaults to [45] (one
+		 * row, current behaviour). Sensible entries: 7 (this week),
+		 * 30 (this month), 90 (this quarter), 180 (this half-year),
+		 * 365 (this year). Empty array = no New rows at all.
+		 *
+		 * 0.7 multi-select upgrade: 0.6 stored a single number; the
+		 * renderer normalises legacy values to a one-element array so
+		 * existing curation reads cleanly.
 		 */
-		newReleasesWindowDays?: number;
+		newReleasesWindowDays?: number[] | number;
 		/**
-		 * Theme E — "Trending" window. TMDB natively supports `day`
-		 * (last 24h) and `week` (last 7 days). Defaults to `week`.
+		 * Theme E — "Trending" windows. TMDB natively supports `day`
+		 * (last 24h) and `week` (last 7 days). Multi-select: pick
+		 * either, both, or neither (empty = no Trending rows).
+		 * Defaults to ['week'] (one row, current behaviour).
+		 *
+		 * 0.7 multi-select upgrade: 0.6 stored a single string; the
+		 * renderer normalises a legacy scalar to a one-element array.
 		 */
-		trendingWindow?: 'day' | 'week';
+		trendingWindows?: ('day' | 'week')[] | 'day' | 'week';
 	};
 	healthConnect?: {
 		platformDetected?: boolean;
@@ -164,6 +174,22 @@ export interface ViewPreferences {
 	 * including plumbing.
 	 */
 	showPlumbing?: boolean;
+	/**
+	 * /door — which camera entity_id to render as the primary. When
+	 * unset, /door renders the first camera discovered (alphabetical
+	 * by area name then entity name). v0.7 fix #4 — multi-camera
+	 * households would otherwise see a wall of stills.
+	 */
+	primaryDoorCameraId?: string | null;
+	/**
+	 * Fix #3 — which HA area this broadsheet instance is "in". Powers
+	 * `presence:originator` TTS routing: when set, voice replies route
+	 * to whoever is currently in this area's nearest media_player
+	 * rather than to a hardcoded entity. Null = no surface affinity
+	 * (the originator-presence option falls back to the picked
+	 * person or to the browser).
+	 */
+	surfaceArea?: string | null;
 }
 
 /** The top-level shape of broadsheet.json v1. */

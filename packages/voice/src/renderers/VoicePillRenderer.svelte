@@ -29,6 +29,7 @@
 	import { startCapture, isSupported as isSttSupported, type SttHandle } from '../lib/stt';
 	import { pullVoiceDiscovery, resolveActivePipeline } from '../lib/discovery';
 	import { DEFAULT_VOICE_CONFIG, type AssistPipeline } from '../lib/types';
+	import { resolveTtsTarget } from '../lib/tts-target';
 	import { onMount } from 'svelte';
 
 	const pillOnMoment = useCurationField<boolean>('plugins.voice.config.pillOnMoment');
@@ -98,12 +99,16 @@
 			error: result.turn.error
 		});
 		if (result.speech && pipeline.tts_engine) {
+			// Fix #3 — resolve presence-based TTS targets at speak time.
+			// 'browser' / 'media_player.*' values pass through; the
+			// 'presence:<who>' shapes are translated via routeTo().
+			const resolved = resolveTtsTarget(ttsTarget.value || DEFAULT_VOICE_CONFIG.ttsTarget);
 			await speak(conn, {
 				text: result.speech.text,
 				engine: pipeline.tts_engine,
 				language: pipeline.tts_language ?? pipeline.conversation_language,
 				voice: pipeline.tts_voice,
-				target: ttsTarget.value || DEFAULT_VOICE_CONFIG.ttsTarget
+				target: resolved.target
 			});
 		}
 		// Expand the pill briefly to show what was said + the reply
