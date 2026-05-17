@@ -332,7 +332,23 @@
 		{/snippet}
 	</Hero>
 
+	<!-- 0.8.x polish: the IA cross-link mesh moved ABOVE PresenceCards.
+	     User feedback after 0.8.0 walk: "All falls below the fold,
+	     point size is tiny given it is effectively a navigation item."
+	     Placing it here puts the page-to-page links near the top of
+	     the home tile (definitely above the fold on any sane viewport)
+	     and the prose was tightened so it fits on one line at the
+	     wider PageShell. The painting cards still get the "look at the
+	     moment" beat below; the colophon stays at the bottom. -->
 	{#if discovery.booted}
+		<Explainer>
+			Who's home shapes <a href="{base}/long-take">the long take</a> and
+			<a href="{base}/body">the bodies</a>. Their day —
+			<a href="{base}/lights">light</a>, <a href="{base}/heat">heat</a>,
+			<a href="{base}/door">comings and goings</a>,
+			<a href="{base}/tv">tonight's screen</a>.
+		</Explainer>
+
 		<PresenceCards {cards} />
 	{/if}
 
