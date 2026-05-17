@@ -63,6 +63,13 @@
 	let destSlug = $state('');
 	let slugEdited = $state(false);
 	let submitting = $state(false);
+	// 0.9.4: post-import canvas review escape hatch #1 — when checked,
+	// the page is created with draft: false immediately and the user
+	// lands in the regular editor (legacy behaviour). When unchecked
+	// (the default since 0.9.4), the page is created as a draft and
+	// the user can review + commit (or discard) in the things-first
+	// canvas. The plan called this "Skip review, save directly".
+	let skipReview = $state(false);
 
 	onMount(async () => {
 		dashboards = await listLovelaceDashboards();
@@ -158,10 +165,24 @@
 				label: destLabel.trim(),
 				navOrder: 100 + (curationStore.current.customPages?.length ?? 0),
 				pageWidth: 'default',
-				blocks: pickedView.blocks
+				blocks: pickedView.blocks,
+				// 0.9.4: imported pages default to the things-first editor
+				// so the post-import review surface is the same editor
+				// the user uses for hand-authored pages. Skipping review
+				// lands them in the regular editor; otherwise the page is
+				// flagged `draft: true` and hidden from nav until they
+				// commit.
+				editorMode: 'things-first',
+				draft: !skipReview,
+				hiddenFromNav: !skipReview
 			});
 			if (ok) {
-				showToast(`Imported "${destLabel.trim()}"`, 'success');
+				showToast(
+					skipReview
+						? `Imported "${destLabel.trim()}"`
+						: `Imported "${destLabel.trim()}" as draft — review + commit`,
+					'success'
+				);
 				goto(`${base}/settings/pages/${destSlug}/`);
 			} else {
 				showToast('Save failed', 'error');
@@ -174,8 +195,17 @@
 	function viewSummary(v: TranslatedView): string {
 		const c = v.reports.filter((r) => r.coverage === 'clean').length;
 		const p = v.reports.filter((r) => r.coverage === 'partial').length;
+		const pl = v.reports.filter((r) => r.coverage === 'partial-layout').length;
 		const u = v.reports.filter((r) => r.coverage === 'unsupported').length;
-		return `${v.blocks.length} block${v.blocks.length === 1 ? '' : 's'} · ${c} clean / ${p} partial / ${u} skipped`;
+		const parts = [
+			`${v.blocks.length} block${v.blocks.length === 1 ? '' : 's'}`,
+			`${c} clean`,
+			...(p > 0 ? [`${p} partial`] : []),
+			// 0.9.4: surface layout-only fidelity loss distinct from data loss
+			...(pl > 0 ? [`${pl} layout-approx`] : []),
+			...(u > 0 ? [`${u} skipped`] : [])
+		];
+		return parts.join(' · ');
 	}
 </script>
 
@@ -345,6 +375,16 @@
 			{/if}
 		</div>
 
+		<!-- 0.9.4: post-import draft semantic + skip-review escape hatch. -->
+		<label class="skip-review-row">
+			<input type="checkbox" bind:checked={skipReview} />
+			<span>
+				<strong>Skip review</strong> — save directly as a finished
+				page. Don't land in the draft canvas for arranging /
+				rearranging first.
+			</span>
+		</label>
+
 		<div class="commit-actions">
 			<button
 				class="action confirm"
@@ -352,7 +392,11 @@
 				disabled={submitting || !!slugErr || !destLabel.trim() || pickedView.blocks.length === 0}
 				onclick={commitImport}
 			>
-				{submitting ? 'Importing…' : 'Import as custom page'}
+				{submitting
+					? 'Importing…'
+					: skipReview
+						? 'Import + save'
+						: 'Import as draft → review'}
 			</button>
 			<a class="action" href="{base}/settings/pages/">Cancel</a>
 		</div>
@@ -561,6 +605,14 @@
 		border-color: color-mix(in srgb, var(--accent) 35%, var(--rule));
 	}
 
+	/* 0.9.4: layout-fidelity gap (data made it through but the layout
+	   was approximated by the masonry heuristic). Visually distinct
+	   from partial (data loss) — softer accent border. */
+	.coverage-row[data-coverage='partial-layout'] {
+		border-color: color-mix(in srgb, var(--accent) 20%, var(--rule));
+		border-style: dashed;
+	}
+
 	.coverage-row[data-coverage='unsupported'] {
 		opacity: 0.7;
 	}
@@ -581,8 +633,36 @@
 		color: var(--accent);
 	}
 
+	.coverage-row[data-coverage='partial-layout'] .cov-badge {
+		color: color-mix(in srgb, var(--accent) 70%, var(--fg-muted));
+	}
+
 	.coverage-row[data-coverage='unsupported'] .cov-badge {
 		color: var(--state-alert);
+	}
+
+	/* 0.9.4: skip-review escape hatch row */
+	.skip-review-row {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		margin-bottom: var(--space-3);
+		background: var(--bg-card);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		cursor: pointer;
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+		line-height: var(--leading-snug);
+	}
+	.skip-review-row input[type='checkbox'] {
+		margin-top: 0.15rem;
+	}
+	.skip-review-row strong {
+		color: var(--fg);
+		font-style: normal;
 	}
 
 	.cov-type {

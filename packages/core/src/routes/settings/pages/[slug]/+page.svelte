@@ -264,6 +264,24 @@
 		)
 	);
 
+	/**
+	 * 0.9.4 — draft commit (the in-canvas "Save as-is" escape hatch).
+	 *
+	 * Imported pages land with `draft: true, hiddenFromNav: true`.
+	 * Tapping "Commit as wall surface" flips both back so the page
+	 * appears in the kebab nav alongside hand-authored pages.
+	 *
+	 * No data migration — the draft and the committed page are the
+	 * SAME page (same slug, same blocks). The flag just toggles
+	 * "this is still being reviewed" off.
+	 */
+	async function commitDraft() {
+		if (!customPage) return;
+		const ok = await updateCustomPage(slug, { draft: false, hiddenFromNav: false });
+		if (ok) showToast('Committed — page is now in the nav', 'success');
+		else showToast('Commit failed', 'error');
+	}
+
 	/* ─────────────── page meta editing ─────────────── */
 	async function updateMeta(patch: Record<string, unknown>) {
 		await updateCustomPage(slug, patch);
@@ -570,6 +588,37 @@
 				</button>
 			</div>
 		</div>
+
+		{#if customPage.draft}
+			<!--
+				0.9.4 — draft banner. Shown only for imported pages whose
+				draft flag hasn't been flipped yet. The "Save as-is" /
+				"Commit as wall surface" buttons both call commitDraft —
+				they're labelled differently to map to the two mental
+				models the plan called out (the plan called for two-layer
+				escape hatches: pre-import "Skip review" checkbox + here-
+				and-now "Save as-is"). Discard removes the page entirely.
+			-->
+			<div class="draft-banner" role="status">
+				<div class="draft-banner-body">
+					<strong>Draft from Lovelace import.</strong>
+					Review the canvas, rearrange anything you'd like, then
+					commit so it appears in your nav. Or save as-is if the
+					import already looks right — you can always edit later.
+				</div>
+				<div class="draft-banner-actions">
+					<button class="action" type="button" onclick={commitDraft}>
+						Save as-is
+					</button>
+					<button class="action confirm" type="button" onclick={commitDraft}>
+						Commit as wall surface
+					</button>
+					<button class="action danger" type="button" onclick={() => (pendingDelete = true)}>
+						Discard
+					</button>
+				</div>
+			</div>
+		{/if}
 
 		{#if renameMode}
 			<div class="rename-form">
@@ -1565,6 +1614,15 @@
 				return `Heating panel — area ${block.config.areaId || '(unset)'}`;
 			case 'area-media-panel':
 				return `Media panel — area ${block.config.areaId || '(unset)'}`;
+			case 'row': {
+				const n = block.config.children.length;
+				return `Row — ${n} child${n === 1 ? '' : 'ren'}`;
+			}
+			case 'grid': {
+				const n = block.config.children.length;
+				const cols = block.config.columns ?? 12;
+				return `Grid — ${cols} cols, ${n} child${n === 1 ? '' : 'ren'}`;
+			}
 		}
 	}
 </script>
@@ -2167,6 +2225,38 @@
 
 	.save-status-actions {
 		display: flex;
+		gap: var(--space-2);
+	}
+
+	/* 0.9.4 draft banner — shown for freshly-imported Lovelace pages
+	   that haven't been committed yet. Visually distinct (dashed
+	   accent border, accent-glow tint) but not alarming. */
+	.draft-banner {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding: var(--space-4) var(--space-5);
+		margin-bottom: var(--space-4);
+		background: var(--accent-glow, rgba(192, 138, 74, 0.06));
+		border: 1px dashed var(--accent);
+		border-radius: var(--radius-card);
+	}
+	.draft-banner-body {
+		font-family: var(--font-body);
+		font-size: var(--text-body);
+		color: var(--fg);
+		line-height: var(--leading-snug);
+	}
+	.draft-banner-body strong {
+		font-family: var(--font-display, var(--font-body));
+		font-style: italic;
+		color: var(--accent);
+		font-weight: normal;
+		margin-right: var(--space-2);
+	}
+	.draft-banner-actions {
+		display: flex;
+		flex-wrap: wrap;
 		gap: var(--space-2);
 	}
 

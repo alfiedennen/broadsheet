@@ -3146,3 +3146,166 @@ Lovelace import landing-in-things-first work. Spec at
 Plan: `docs/plans/plan-9.3-composites-and-plugin-blocks.md`
 (full recipe enumeration + sequenced impl plan, locked then
 marked IMPLEMENTED with file inventory).
+
+## 2026-05-17 — 0.9.4 — row + grid + Lovelace import that respects layout
+
+The last major chunk on the wall-builder arc. 0.9.1 → 0.9.3.x
+delivered the things-first editor + accomplishments browser +
+composite area-panels + plugin block contributions; 0.9.4 closes
+the loop with layout container primitives + a Lovelace importer
+that actually preserves layout signals instead of flattening
+everything to a vertical strip.
+
+Plan: `docs/plans/plan-9.4-lovelace-import-layout.md` (originally
+0.9.2; reslotted to 0.9.3 then 0.9.4 as later dogfood added
+intermediate priorities, locked across the renumbering — same
+decisions). User feedback the plan responded to:
+
+> We can technically import most things, but then when we create
+> a page it's just a huge vertical list of things which no
+> thought given to arrangement on a page.
+
+### Two complementary fixes
+
+**A. `row` + `grid` block primitives**
+
+Three new core block types:
+
+- `row` — horizontal flex container. Children get `flex-grow:
+  child.colSpan ?? 1`, so equal-share by default + weighted by
+  `colSpan`. Stacks to a column below 640px.
+- `grid` — CSS-grid container with `columns: N` (default 12,
+  matching Lovelace's sections-layout convention). Children take
+  1 column by default; `colSpan: N` spans N columns. Responsive
+  collapse: 12 → 6 → 3 → 1 at 1024/640/480px. The `BlockSlot`
+  wrapper clamps colSpan to the effective column count so nothing
+  overflows.
+- `colSpan?: number` as an OPTIONAL top-level field on every
+  `BlockDef` (intersected onto the discriminated union — TypeScript
+  narrows on `type` correctly because the discriminator is at the
+  same level). Layout property, not a per-config field.
+
+New `BlockSlot.svelte` factors out the "look up renderer in the
+registry, lazy import, render with `{config}`" dance — used by
+RenderedPage at the top level + Row and Grid for their children.
+Plugin block host context (set by RenderedPage via `setContext`)
+propagates to every descendant so plugin blocks render correctly
+when placed inside containers.
+
+**B. Translator upgrades that honour layout signals**
+
+`$lib/lovelace/translate.ts` got a substantial upgrade:
+
+| Lovelace shape | broadsheet emits (was → now) |
+|---|---|
+| `horizontal-stack` | flat-flattened with note → **row block wrapping children** |
+| `vertical-stack` | flat sequence | (unchanged — page is already vertical) |
+| `type: 'grid'` card | flat sequence (no translator) → **grid block with same column count + per-child `colSpan` from `grid_options.columns`** |
+| `type: 'sections'` view | not read at all → **one grid per section with 12-col scale; section title → outline above; per-card colSpan from grid_options** |
+| `type: 'panel'` view | flat sequence → **translate single card without wrapper** |
+| Default / masonry view | flat sequence (every card vertical) → **tiered heuristic: 3-col >12 cards, 2-col 6-12, 1-col <6** — wrap requires ≥ 1 small card type (chip/glance/sensor/tile/button) to avoid bunching tall graphs side-by-side |
+
+New `partial-layout` coverage status distinguishes "data through,
+layout approximated by heuristic" from "fields dropped". Stamped
+on every report when the masonry heuristic wraps the view.
+`partialLayout` count added to the dashboard totals.
+
+### Post-import draft semantic
+
+Imported pages no longer commit directly. They land as drafts in
+the things-first canvas:
+
+- New `draft?: boolean` field on `CustomPageDef`. Drafts default
+  to `hiddenFromNav: true` so half-reviewed imports don't clutter
+  the kebab.
+- `/settings/pages/import/` defaults imports to `draft: true,
+  hiddenFromNav: true, editorMode: 'things-first'`.
+- `/settings/pages/[slug]/` shows a draft banner when
+  `customPage.draft === true` — clear prose ("Draft from Lovelace
+  import. Review the canvas, rearrange anything you'd like, then
+  commit so it appears in your nav.") + two affordances.
+
+**Two escape hatches** per the locked plan:
+
+1. **Pre-import** — "Skip review, save directly" checkbox on the
+   import review step. Commit button flips between "Import + save"
+   (skip) and "Import as draft → review" (default).
+2. **Post-import** — "Save as-is" button in the draft banner.
+
+Both call the same `commitDraft()` (flips `draft: false` +
+`hiddenFromNav: false`). Discard triggers the existing delete-
+confirmation flow.
+
+### Things-first canvas inline editor for row + grid
+
+Tapping a row/grid block in the canvas opens an inline editor
+with section label override + gap + (for grid) columns. Children-
+editing routes to "switch to advanced" for now — containers are
+treated as atomic in things-first. Nested DnD inside containers
+is a real UX problem worth a dedicated patch.
+
+### Worked example
+
+A Lovelace dashboard with a `type: 'sections'` view containing:
+
+```yaml
+sections:
+  - title: Lights
+    cards:
+      - { type: light, entity: light.pendant, grid_options: { columns: 6 } }
+      - { type: light, entity: light.lamps, grid_options: { columns: 6 } }
+  - title: Cinema
+    cards:
+      - { type: button, ..., grid_options: { columns: 4 } }
+      - { type: media-control, ..., grid_options: { columns: 8 } }
+```
+
+**Pre-0.9.4** translated to a flat vertical strip — five blocks
+stacked, layout completely lost.
+
+**0.9.4** translates to:
+
+```
+outline · 'Lights'
+grid (columns: 12, children: [
+  action-grid (pendant, colSpan: 6),
+  action-grid (lamps, colSpan: 6)
+])
+outline · 'Cinema'
+grid (columns: 12, children: [
+  action-grid (scene.movie, colSpan: 4),
+  entity-list (TV, colSpan: 8)
+])
+```
+
+Lands in the things-first canvas as a draft. User reviews,
+optionally rearranges, taps "Save as-is" or "Commit as wall
+surface". Done.
+
+### Ship-readiness all green
+
+- svelte-check: 0 errors, 0 warnings across 521 files.
+- vitest: 333 tests pass (+27 new) across 17 files:
+  - `blocks.spec.ts` (+5): row/grid in `ALL_BLOCK_TYPES` + default-
+    config defaults
+  - `translate.spec.ts` (+19): horizontal-stack → row, vertical-
+    stack still flat, grid card, sections view + section titles +
+    empty sections, panel view, masonry tiered heuristic across
+    all 4 tiers (no-wrap / 2-col / 3-col / no-wrap-when-all-tall)
+  - `fresh-curation.spec.ts`: block-type count bumped 16 → 18
+- production build: clean.
+
+### Deferred to follow-on patches
+
+- Editing children of a row/grid INSIDE the things-first canvas
+  (today: "flip to advanced to nest-edit"). Real DnD between
+  containers is a substantial UX problem and not blocking ship.
+- The plan's "coverage report at the FOOTER of the imported page
+  editor" — currently the report shows on the import-review step
+  only; moving it to the editor footer is a smaller follow-up.
+- Per-block colSpan override surface in the things-first canvas
+  inline editor for blocks placed inside a grid container.
+
+Plan: `docs/plans/plan-9.4-lovelace-import-layout.md` (full
+decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).

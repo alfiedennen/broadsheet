@@ -30,7 +30,10 @@ describe('block registry coverage', () => {
 			// 0.9.3 area-panel composites
 			'area-lights-panel',
 			'area-climate-panel',
-			'area-media-panel'
+			'area-media-panel',
+			// 0.9.4 layout containers
+			'row',
+			'grid'
 		];
 		// Same set, order-insensitive
 		expect(ALL_BLOCK_TYPES.slice().sort()).toEqual(expected.slice().sort());
@@ -64,7 +67,10 @@ describe('defaultBlockConfig — every type returns a valid block', () => {
 		// 0.9.3 area-panel composites
 		'area-lights-panel',
 		'area-climate-panel',
-		'area-media-panel'
+		'area-media-panel',
+		// 0.9.4 layout containers
+		'row',
+		'grid'
 	] as const) {
 		it(`${type} returns a block with matching type discriminator`, () => {
 			const block = defaultBlockConfig(type);
@@ -180,5 +186,24 @@ describe('defaultBlockConfig — type-specific invariants', () => {
 	it('area-media-panel starter has empty areaId', () => {
 		const b = defaultBlockConfig('area-media-panel');
 		if (b.type === 'area-media-panel') expect(b.config.areaId).toBe('');
+	});
+
+	// 0.9.4 layout containers — empty children + sensible defaults.
+	it('row starter has empty children + default gap', () => {
+		const b = defaultBlockConfig('row');
+		if (b.type === 'row') {
+			expect(Array.isArray(b.config.children)).toBe(true);
+			expect(b.config.children).toHaveLength(0);
+			expect(b.config.gap).toBe(3);
+		}
+	});
+	it('grid starter has empty children + 12 columns (Lovelace sections default) + gap 3', () => {
+		const b = defaultBlockConfig('grid');
+		if (b.type === 'grid') {
+			expect(Array.isArray(b.config.children)).toBe(true);
+			expect(b.config.children).toHaveLength(0);
+			expect(b.config.columns).toBe(12);
+			expect(b.config.gap).toBe(3);
+		}
 	});
 });

@@ -214,7 +214,7 @@ things-first leaves all your existing blocks in place — they just
 render through the things-first canvas (with "switch to advanced"
 hints on the ones it can't inline-edit).
 
-### All 16 block types
+### All 18 block types
 
 | Block | Use for |
 |---|---|
@@ -234,6 +234,8 @@ hints on the ones it can't inline-edit).
 | **Lights panel** *(0.9.3)* | Per-area composite — one toggle per light, grows with discovery |
 | **Heating panel** *(0.9.3)* | Per-area composite — one climate tile per TRV |
 | **Media panel** *(0.9.3)* | Per-area composite — TV remote(s) + speaker(s) together |
+| **Row** *(0.9.4)* | Horizontal flex container — places children side-by-side, stacks on narrow viewports |
+| **Grid** *(0.9.4)* | CSS-grid container with N columns; child `colSpan` spans multiple columns. Responsive collapse. Lovelace `sections` views land here |
 
 Plus any **plugin-contributed blocks** active on your install
 (`tmdb-tv:rows` for example, when `@broadsheet/tmdb-tv` is enabled).
@@ -353,6 +355,39 @@ to the area in HA, the panel grows automatically. Tablets / kiosks
 are filtered from the media panel by default
 ([0.9.3.1](../CHANGELOG.md#0931--kiosktablet-filter-on-media-surfaces-2026-05-17)).
 
+### Row + Grid *(0.9.4)*
+
+The 0.9.4 layout container primitives. Two-up tiles, multi-column
+arrangements, sections-style layouts — all become possible once
+you can put blocks INSIDE other blocks.
+
+**Row** — horizontal flex container. Drop two or more blocks
+side-by-side; each takes equal flex by default. Setting a child's
+`colSpan: N` weights its flex-grow so wider tiles take
+proportionally more space. Stacks back to a column on narrow
+viewports (<640px). Editor controls: optional section label + gap.
+
+**Grid** — CSS-grid container with `columns: N` (default 12,
+matching Lovelace's sections-layout convention). Each child takes
+1 column by default; child `colSpan: N` spans N columns. Responsive
+collapse: at narrower viewports the column count drops at standard
+breakpoints (12 → 6 → 3 → 1 below 1024 / 640 / 480 px). Each child's
+`colSpan` is clamped to the current column count so nothing
+overflows.
+
+Editor controls: optional section label, columns (1-24), gap.
+
+**Editing children inside row/grid**: the things-first canvas
+treats containers as atomic — drag, drop, remove, reorder
+top-level, but children-editing routes to **advanced mode**. Flip
+the editor mode in page meta to nest-edit (add/remove/reorder
+children, set per-child `colSpan`). This is a known limitation;
+inline children-editing is a 0.9.x follow-up.
+
+**Most rows + grids land via the Lovelace importer** — manually
+authoring them is supported but less common than receiving them
+from a translated dashboard.
+
 ---
 
 ## Slug rules
@@ -392,12 +427,43 @@ drop it from the kebab list. Useful for:
 
 Got an existing Lovelace dashboard? **Settings → Pages → ⇣ Import
 from Lovelace** translates Lovelace cards into broadsheet
-primitives. See [`IMPORTER-GUIDE.md`](IMPORTER-GUIDE.md).
+primitives. See [`IMPORTER-GUIDE.md`](IMPORTER-GUIDE.md) for the
+per-card translator status.
 
-Imported pages currently land in advanced-editor mode (you'll get
-a vertical list of translated blocks). The 0.9.4 plan lands
-imported pages directly in the things-first canvas with a coverage
-report and masonry layout.
+**0.9.4 — imports respect layout.** The translator now honours
+Lovelace's layout signals:
+
+- `horizontal-stack` → row block
+- `vertical-stack` → flat sequence (page is already vertical)
+- `type: 'grid'` card → grid block with same column count
+- `type: 'sections'` view → one grid block per section, 12-column
+  scale + section title as an outline above
+- `type: 'panel'` view → translate the single card without a
+  wrapper
+- Default / masonry view → tiered heuristic: 3-col when >12 cards,
+  2-col when 6-12, single-column when <6 (and only when ≥ 1 small
+  card type is present, so all-tall dashboards don't get bunched
+  side-by-side)
+
+A new **`partial-layout` coverage status** flags cards whose data
+translated cleanly but whose layout was approximated by the
+masonry heuristic — so you see "I rendered the data but laid it
+out flatly" distinct from "I dropped fields".
+
+**Imported pages land as drafts** in the things-first canvas with
+a clear banner above the editor: *"Draft from Lovelace import.
+Review the canvas, rearrange anything you'd like, then commit so
+it appears in your nav."* Two escape hatches:
+
+- **Pre-import**: check "Skip review, save directly" on the import
+  review step — the page is created with `draft: false` and lands
+  in the regular editor.
+- **Post-import**: tap "Save as-is" in the draft banner — flips
+  the page out of draft state and into the nav, no further edits
+  needed.
+
+Drafts default to `hiddenFromNav: true` so half-reviewed imports
+don't clutter the kebab. Committing flips both flags off.
 
 ---
 
@@ -436,5 +502,6 @@ report and masonry layout.
 - HTML5 drag-and-drop works on desktop only. On tablets / phones,
   use tap-to-add — the canvas's per-row ↑ / ↓ controls handle
   reorder.
-- **`row` + `grid` primitives are 0.9.4** — until then, blocks
-  stack vertically. Two-up tile arrangements aren't expressible.
+- Inline editing of `row` / `grid` children inside the things-first
+  canvas is a 0.9.x follow-up; today, container children are
+  editable from **advanced mode** in the page meta.

@@ -248,6 +248,15 @@
 				return `Heating panel — area ${block.config.areaId || '(unset)'}`;
 			case 'area-media-panel':
 				return `Media panel — area ${block.config.areaId || '(unset)'}`;
+			case 'row': {
+				const n = block.config.children.length;
+				return `Row — ${n} child${n === 1 ? '' : 'ren'}`;
+			}
+			case 'grid': {
+				const n = block.config.children.length;
+				const cols = block.config.columns ?? 12;
+				return `Grid — ${cols} cols, ${n} child${n === 1 ? '' : 'ren'}`;
+			}
 		}
 	}
 
@@ -268,7 +277,9 @@
 			sparkline: 'Sparkline',
 			'area-lights-panel': 'Lights panel',
 			'area-climate-panel': 'Heating panel',
-			'area-media-panel': 'Media panel'
+			'area-media-panel': 'Media panel',
+			row: 'Row',
+			grid: 'Grid'
 		};
 		return labels[block.type];
 	}
@@ -276,14 +287,18 @@
 	function isThingsFirstNative(t: BlockDef['type']): boolean {
 		// Block types the things-first editor has inline editors for.
 		// Others get a "switch to advanced to edit" hint. 0.9.3.2
-		// added the 3 area-panel composites.
+		// added the 3 area-panel composites; 0.9.4 added row + grid
+		// (container blocks; children-editing is "switch to advanced"
+		// for now).
 		return (
 			t === 'thing' ||
 			t === 'macro' ||
 			t === 'outline' ||
 			t === 'area-lights-panel' ||
 			t === 'area-climate-panel' ||
-			t === 'area-media-panel'
+			t === 'area-media-panel' ||
+			t === 'row' ||
+			t === 'grid'
 		);
 	}
 
@@ -589,6 +604,95 @@
 										default ("<em>{picked?.name ?? '…'}</em> {panelNoun(block.type)}").
 									</span>
 								</label>
+							{:else if block.type === 'row' || block.type === 'grid'}
+								{@const cfg = block.config as {
+									label?: string | null;
+									children: BlockDef[];
+									gap?: number;
+									columns?: number;
+								}}
+								<dl class="thing-readout">
+									<dt>Children</dt>
+									<dd>
+										{cfg.children.length} block{cfg.children.length === 1 ? '' : 's'}
+										{#if cfg.children.length > 0}
+											<span class="muted"
+												>—
+												{cfg.children
+													.slice(0, 4)
+													.map((c) => c.type)
+													.join(', ')}
+												{#if cfg.children.length > 4}…{/if}</span
+											>
+										{/if}
+									</dd>
+									{#if block.type === 'grid'}
+										<dt>Columns</dt>
+										<dd>{cfg.columns ?? 12}</dd>
+									{/if}
+								</dl>
+								<label class="field">
+									<span class="field-label">Section label override</span>
+									<input
+										type="text"
+										class="field-input"
+										value={cfg.label ?? ''}
+										placeholder="(no header)"
+										oninput={(e) =>
+											onPatchBlock(i, {
+												label: (e.target as HTMLInputElement).value || null
+											})}
+									/>
+									<span class="field-hint">
+										Renders as an OutLine above the {block.type}. Leave blank
+										for no header.
+									</span>
+								</label>
+								{#if block.type === 'grid'}
+									<label class="field">
+										<span class="field-label">Columns (widest viewport)</span>
+										<input
+											type="number"
+											class="field-input mono"
+											min="1"
+											max="24"
+											value={cfg.columns ?? 12}
+											oninput={(e) =>
+												onPatchBlock(i, {
+													columns:
+														Number((e.target as HTMLInputElement).value) || 12
+												})}
+										/>
+										<span class="field-hint">
+											12 matches Lovelace sections (default). Children with
+											<code>colSpan</code> set use that many columns; default 1.
+											Grid collapses responsively at narrower viewports.
+										</span>
+									</label>
+								{/if}
+								<label class="field">
+									<span class="field-label">Gap (1-6)</span>
+									<input
+										type="number"
+										class="field-input mono"
+										min="0"
+										max="6"
+										value={cfg.gap ?? 3}
+										oninput={(e) =>
+											onPatchBlock(i, {
+												gap: Number((e.target as HTMLInputElement).value)
+											})}
+									/>
+									<span class="field-hint">
+										Spacing between children, in design-token steps. 0 = flush.
+									</span>
+								</label>
+								<p class="non-native-hint">
+									To add, remove, or reorder the {block.type}'s children, flip
+									the editor to <em>advanced</em> in page meta. The
+									things-first canvas treats {block.type} blocks as atomic
+									(drag, drop, remove, but not nested-edit).
+								</p>
 							{:else if !isThingsFirstNative(block.type)}
 								<p class="non-native-hint">
 									This block type — <strong>{blockTypeLabel(block)}</strong>

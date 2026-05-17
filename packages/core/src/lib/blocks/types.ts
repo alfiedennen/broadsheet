@@ -330,6 +330,62 @@ export interface MacroBlockConfig {
 	steps: MacroStep[];
 }
 
+/* ── 0.9.4 layout container primitives ──────────────────────────── */
+
+/**
+ * 0.9.4 — `row` block: horizontal flex container.
+ *
+ * Renders `config.children` as a horizontal row. Each child takes
+ * an equal flex share by default; if a child has `colSpan` set
+ * (the optional layout field on every BlockDef, see the
+ * BlockDef discriminated union below), that span becomes a CSS
+ * `flex-grow` weight so wider tiles take proportionally more space.
+ *
+ * Rows wrap responsively at narrow viewports — children stack into
+ * a single column below the small-tablet breakpoint (~640px). For
+ * fine-grained span control, use `grid` instead.
+ */
+export interface RowBlockConfig {
+	/** Optional inline section label rendered as an OutLine above the row. */
+	label?: string | null;
+	/** The blocks rendered side-by-side. */
+	children: BlockDef[];
+	/**
+	 * Horizontal gap between children, in `--space-*` token units.
+	 * Default 3 (= var(--space-3), the standard block gap). 0 = flush.
+	 */
+	gap?: number;
+}
+
+/**
+ * 0.9.4 — `grid` block: CSS-grid layout container with explicit
+ * column count. Each child takes 1 column by default; multi-column
+ * tiles set `colSpan` on the child block. Matches Lovelace's
+ * sections layout's 12-column convention by default, so a sections
+ * grid translates 1:1 (`grid_options.columns: 6` → broadsheet
+ * `colSpan: 6` of 12).
+ *
+ * Responsive: at narrow viewports the grid collapses to fewer
+ * columns at standard breakpoints (12 → 6 → 3 → 1 below 1024px /
+ * 640px / 480px). Children's `colSpan` is clamped to the current
+ * column count so nothing overflows.
+ */
+export interface GridBlockConfig {
+	/** Optional inline section label rendered as an OutLine above the grid. */
+	label?: string | null;
+	/**
+	 * Total columns at the widest viewport. Default 12 (matches
+	 * Lovelace sections). Reasonable values: 2 / 3 / 4 / 6 / 12.
+	 */
+	columns?: number;
+	/** The blocks rendered inside the grid. */
+	children: BlockDef[];
+	/**
+	 * Inter-cell gap in `--space-*` token units. Default 3.
+	 */
+	gap?: number;
+}
+
 /* ── 0.9.3 area-panel composites ─────────────────────────────────── */
 
 /**
@@ -376,7 +432,19 @@ export interface AreaMediaPanelBlockConfig {
  * primitives; the existing block types remain for backwards-compat
  * with previously-authored pages + the Lovelace importer.
  */
-export type BlockDef =
+/**
+ * 0.9.4 — every BlockDef variant carries an optional `colSpan`
+ * (number of columns this block takes when its PARENT is a `grid`).
+ * Ignored outside grid containers. Type-level: union of all per-
+ * type-discriminated members, intersected with the optional
+ * `colSpan` field. TypeScript narrows on `type` correctly because
+ * the discriminator is at the same level.
+ *
+ * The intersection-after-union shape avoids polluting every config
+ * interface with the layout-only field — `colSpan` is a property
+ * of the block's placement, not its content.
+ */
+export type BlockDef = (
 	| { type: 'hero'; config: HeroBlockConfig }
 	| { type: 'markdown'; config: MarkdownBlockConfig }
 	| { type: 'explainer'; config: ExplainerBlockConfig }
@@ -392,7 +460,19 @@ export type BlockDef =
 	| { type: 'macro'; config: MacroBlockConfig }
 	| { type: 'area-lights-panel'; config: AreaLightsPanelBlockConfig }
 	| { type: 'area-climate-panel'; config: AreaClimatePanelBlockConfig }
-	| { type: 'area-media-panel'; config: AreaMediaPanelBlockConfig };
+	| { type: 'area-media-panel'; config: AreaMediaPanelBlockConfig }
+	| { type: 'row'; config: RowBlockConfig }
+	| { type: 'grid'; config: GridBlockConfig }
+) & {
+	/**
+	 * 0.9.4: how many columns this block occupies when its parent
+	 * is a `grid`. Defaults to 1 (occupies one cell). Clamped to
+	 * the grid's column count at render time. Ignored when the
+	 * block is at the top level of a page OR inside a `row`
+	 * (rows use `colSpan` as a flex-grow weight instead).
+	 */
+	colSpan?: number;
+};
 
 /** Just the type discriminator — useful for builder UI listings. */
 export type BlockType = BlockDef['type'];
@@ -453,6 +533,18 @@ export interface CustomPageDef {
 		/** Human label — e.g. "Fire HD 10", "Galaxy Tab A9", "Custom". */
 		label?: string;
 	};
+	/**
+	 * 0.9.4: page is a freshly-imported Lovelace draft awaiting user
+	 * review. The editor shows a banner with "Commit as wall surface"
+	 * / "Discard" affordances; draft pages default to `hiddenFromNav`
+	 * so half-reviewed imports don't clutter the kebab. Committing
+	 * flips this to false (or omits — semantically the same).
+	 *
+	 * The import flow's "Skip review, save directly" checkbox bypasses
+	 * the draft state and creates the page with `draft: false`
+	 * immediately.
+	 */
+	draft?: boolean;
 }
 
 /**
@@ -545,5 +637,9 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 			return { type: 'area-climate-panel', config: { areaId: '' } };
 		case 'area-media-panel':
 			return { type: 'area-media-panel', config: { areaId: '' } };
+		case 'row':
+			return { type: 'row', config: { children: [], gap: 3 } };
+		case 'grid':
+			return { type: 'grid', config: { columns: 12, children: [], gap: 3 } };
 	}
 }

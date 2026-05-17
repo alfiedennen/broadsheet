@@ -76,7 +76,11 @@ const CORE_REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	'area-media-panel': () =>
 		import(
 			'./renderers/AreaMediaPanelBlockRenderer.svelte'
-		) as unknown as ReturnType<BlockRendererThunk>
+		) as unknown as ReturnType<BlockRendererThunk>,
+	row: () =>
+		import('./renderers/RowBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	grid: () =>
+		import('./renderers/GridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
 };
 
 /**
@@ -178,5 +182,15 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 		label: 'Media panel (per area)',
 		description:
 			'0.9.3 composite — one block, takes an areaId, renders TV remote(s) + speaker(s) together with the right widget per device. Single drop, single remove.'
+	},
+	row: {
+		label: 'Row (horizontal layout)',
+		description:
+			'0.9.4 layout container — places its child blocks side-by-side in a horizontal row. Stacks back to a column on narrow viewports. Use for two-up tiles.'
+	},
+	grid: {
+		label: 'Grid (N-column layout)',
+		description:
+			'0.9.4 layout container — places its child blocks in a CSS grid with N columns (default 12, matching Lovelace). Children use `colSpan` to span multiple columns. Lovelace `sections` views land here.'
 	}
 };

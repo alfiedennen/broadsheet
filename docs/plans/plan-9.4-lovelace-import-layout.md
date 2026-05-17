@@ -1,14 +1,102 @@
-# Plan — 0.9.2: Lovelace import that respects layout
+# Plan — 0.9.4: Lovelace import that respects layout + row/grid primitives
 
-**Status**: LOCKED 2026-05-17 after decision-set sign-off (deltas
-from drafted defaults: #9 chose B — tiered 3-col/2-col/1-col masonry
-heuristic; #11 chose B — footer report instead of prominent banner;
-#10 stays A with two-layer escape hatches: pre-import "Skip review"
-toggle + in-canvas "Save as-is" button). Drafted same day as 0.9.1.
-Companion to `plan-9.1-wall-builder-things-first.md`.
-**Sequence**: Lands AFTER 0.9.1's `row`/`grid` container primitives
-exist (the translator needs them). Logically though it can be
-designed in parallel — many of the same primitives serve both.
+**Status**: IMPLEMENTED 2026-05-17 (same-day after 0.9.3.3 docs).
+svelte-check clean (521 files, 0 errors, 0 warnings), 333 tests pass
+(+27 new across blocks/translate/fresh-curation), production build
+clean. Files shipped:
+
+- `packages/core/src/lib/blocks/types.ts` — `RowBlockConfig` +
+  `GridBlockConfig` types; row + grid added to the `BlockDef`
+  discriminated union; optional top-level `colSpan?: number`
+  intersected onto every union member (layout property, not
+  per-config); `defaultBlockConfig` cases for row + grid; new
+  optional `draft?: boolean` field on `CustomPageDef` for the
+  import draft semantic.
+- `packages/core/src/lib/blocks/registry.ts` — row + grid
+  registered in CORE_REGISTRY + BLOCK_META.
+- `packages/core/src/lib/blocks/BlockSlot.svelte` (NEW) — single-
+  block resolver+renderer with optional grid/flex wrappers. The
+  shared "look up renderer, lazy import, render with {config}"
+  dance, factored out so Row + Grid can recursively render
+  children without duplicating the logic.
+- `packages/core/src/lib/blocks/renderers/RowBlockRenderer.svelte`
+  (NEW) — horizontal flex layout; children get `flex-grow:
+  child.colSpan ?? 1`; stacks to a column below 640px.
+- `packages/core/src/lib/blocks/renderers/GridBlockRenderer.svelte`
+  (NEW) — CSS grid with `config.columns` columns; child `colSpan`
+  becomes `grid-column: span N`. Responsive collapse: 12 → 6 → 3
+  → 1 at 1024/640/480px breakpoints; BlockSlot clamps colSpan to
+  the effective column count so nothing overflows.
+- `packages/core/src/lib/lovelace/translate.ts` — full translator
+  upgrade per plan: `translateStack` emits a row block for
+  `horizontal-stack` (was: flat-flattened with note); `translateGrid`
+  emits a grid block for `type: 'grid'` cards (new); `translateView`
+  dispatches on `view.type`: `sections` → one grid per section
+  with 12-col scale + per-card colSpan from `grid_options.columns`,
+  outline blocks for section titles, panel → translate single card
+  without wrapper, default/masonry → tiered heuristic (3-col >12
+  cards, 2-col 6-12, 1-col <6, requires ≥ 1 small card type). New
+  `partial-layout` coverage status for masonry-heuristic-wrapped
+  outputs (data through, layout approximated); `partialLayout`
+  count added to the dashboard totals.
+- `packages/core/src/routes/settings/pages/import/+page.svelte` —
+  post-import draft flow per plan: imports default to `draft:
+  true, hiddenFromNav: true, editorMode: 'things-first'`. New
+  "Skip review, save directly" checkbox on the review step is
+  the pre-import escape hatch. The commit button text + toast
+  flip between "Import + save" (skip) and "Import as draft →
+  review" (default). Coverage chip styling extended for the new
+  `partial-layout` class.
+- `packages/core/src/routes/settings/pages/[slug]/+page.svelte` —
+  draft banner shown when `customPage.draft === true` with two
+  affordances: "Save as-is" + "Commit as wall surface" (both call
+  `commitDraft()` which flips `draft: false` + `hiddenFromNav:
+  false`). "Discard" triggers the existing delete-confirmation
+  flow.
+- `packages/core/src/lib/blocks/editor/ThingsCanvas.svelte` —
+  inline editors for row + grid (label override + gap + columns
+  for grid). Children-editing remains "switch to advanced" for
+  now — containers are atomic in things-first.
+
+Tests:
+- `tests/unit/blocks.spec.ts` (+5 tests) — row + grid in
+  `ALL_BLOCK_TYPES`; default-config defaults exercised.
+- `tests/unit/translate.spec.ts` (+19 tests) —
+  horizontal-stack → row (instead of flat); vertical-stack
+  stays flat; grid card; sections view + section titles + empty
+  sections; panel view; masonry heuristic across all 4 tiers
+  (no-wrap / 2-col / 3-col / no-wrap-when-all-tall).
+- `tests/integration/fresh-curation.spec.ts` — block-type count
+  bumped 16 → 18.
+- 27 new tests, 333 total (was 306).
+
+Deferred to follow-on patches:
+- Editing children of a row/grid INSIDE the things-first canvas
+  (today: "flip to advanced to nest-edit"). Real DnD between
+  containers is a substantial UX problem and not blocking ship.
+- Coverage report tightening per the plan's collapsible-footer
+  vision — currently the report shows inline at review step;
+  enhancement deferred to 0.9.4.1 or later.
+- The plan's "coverage report at the FOOTER of the imported page
+  editor" — current behaviour shows it on the import-review step
+  only; moving to the editor footer is a smaller follow-up.
+
+---
+
+**Status (pre-impl)**: LOCKED 2026-05-17 after decision-set sign-off
+(deltas from drafted defaults: #9 chose B — tiered 3-col/2-col/1-col
+masonry heuristic; #11 chose B — footer report instead of prominent
+banner; #10 stays A with two-layer escape hatches: pre-import "Skip
+review" toggle + in-canvas "Save as-is" button). Drafted same day as
+0.9.1. Companion to `plan-9.1-wall-builder-things-first.md`.
+
+**Sequence note (post-renumbering)**: Originally planned as 0.9.2;
+reslotted to 0.9.3, then to 0.9.4 as later dogfood feedback added
+intermediate priorities (browser-as-accomplishments in 0.9.2,
+composites + plugin blocks in 0.9.3). The plan itself stayed locked
+across the renumbering — the work is identical. The `row` / `grid`
+container primitives mentioned below as "0.9.1's" actually land in
+this ship (0.9.4) — the original plan assumed they'd come earlier.
 
 ---
 

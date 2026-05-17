@@ -154,7 +154,7 @@ describe('translator: entities', () => {
 });
 
 describe('translator: vertical-stack / horizontal-stack', () => {
-	it('vertical-stack recurses into children', () => {
+	it('vertical-stack recurses into children + flat-emits (no wrapper)', () => {
 		const view = singleCardView({
 			type: 'vertical-stack',
 			cards: [
@@ -163,6 +163,8 @@ describe('translator: vertical-stack / horizontal-stack', () => {
 			]
 		});
 		const r = translateView(view);
+		// vertical-stack still flat-emits children to the page (the page
+		// is already vertical) — no wrapper block.
 		expect(r.blocks).toHaveLength(2);
 		expect(r.blocks.every((b) => b.type === 'markdown')).toBe(true);
 		// Wrapper itself + 2 children = 3 reports
@@ -171,14 +173,187 @@ describe('translator: vertical-stack / horizontal-stack', () => {
 		expect(r.reports[0].coverage).toBe('clean');
 	});
 
-	it('horizontal-stack flags the layout flatten note', () => {
+	// 0.9.4: horizontal-stack now emits a row block wrapping the
+	// translated children (was: flat sequence with a "lost" note).
+	it('horizontal-stack emits a row block wrapping the children (0.9.4)', () => {
 		const view = singleCardView({
 			type: 'horizontal-stack',
-			cards: [{ type: 'markdown', content: 'a' }]
+			cards: [
+				{ type: 'markdown', content: 'a' },
+				{ type: 'markdown', content: 'b' }
+			]
 		});
 		const r = translateView(view);
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('row');
+		if (r.blocks[0].type === 'row') {
+			expect(r.blocks[0].config.children).toHaveLength(2);
+			expect(r.blocks[0].config.children.every((c) => c.type === 'markdown')).toBe(true);
+		}
 		expect(r.reports[0].type).toBe('horizontal-stack');
-		expect(r.reports[0].note).toMatch(/Horizontal/i);
+		expect(r.reports[0].coverage).toBe('clean');
+		// No more "Horizontal layout flattened" note since the layout IS preserved.
+		expect(r.reports[0].note).toBeUndefined();
+	});
+});
+
+/* ── 0.9.4 grid + sections + panel + masonry tests ─────────────── */
+
+describe('translator: grid card (0.9.4)', () => {
+	it('emits a grid block with column count + children translated', () => {
+		const view = singleCardView({
+			type: 'grid',
+			columns: 4,
+			cards: [
+				{ type: 'markdown', content: 'a' },
+				{ type: 'markdown', content: 'b' },
+				{ type: 'markdown', content: 'c' }
+			]
+		});
+		const r = translateView(view);
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('grid');
+		if (r.blocks[0].type === 'grid') {
+			expect(r.blocks[0].config.columns).toBe(4);
+			expect(r.blocks[0].config.children).toHaveLength(3);
+		}
+	});
+
+	it('per-child grid_options.columns becomes the block colSpan', () => {
+		const view = singleCardView({
+			type: 'grid',
+			columns: 12,
+			cards: [
+				{ type: 'markdown', content: 'wide', grid_options: { columns: 8 } },
+				{ type: 'markdown', content: 'narrow', grid_options: { columns: 4 } }
+			]
+		});
+		const r = translateView(view);
+		if (r.blocks[0].type === 'grid') {
+			expect(r.blocks[0].config.children[0].colSpan).toBe(8);
+			expect(r.blocks[0].config.children[1].colSpan).toBe(4);
+		}
+	});
+});
+
+describe('translator: sections view (0.9.4)', () => {
+	it('emits one grid block per section + outline for section titles', () => {
+		const view = {
+			type: 'sections',
+			title: 'Living Room',
+			sections: [
+				{
+					title: 'Lights',
+					type: 'grid',
+					cards: [
+						{ type: 'markdown', content: 'pendant', grid_options: { columns: 6 } },
+						{ type: 'markdown', content: 'lamps', grid_options: { columns: 6 } }
+					]
+				},
+				{
+					title: 'Cinema',
+					type: 'grid',
+					cards: [{ type: 'markdown', content: 'movie' }]
+				}
+			]
+		} as unknown as LovelaceView;
+		const r = translateView(view);
+		// Expected: outline 'Lights' + grid (2 children) + outline 'Cinema' + grid (1 child) = 4 blocks
+		expect(r.blocks).toHaveLength(4);
+		expect(r.blocks[0].type).toBe('outline');
+		expect(r.blocks[1].type).toBe('grid');
+		expect(r.blocks[2].type).toBe('outline');
+		expect(r.blocks[3].type).toBe('grid');
+		if (r.blocks[1].type === 'grid') {
+			expect(r.blocks[1].config.columns).toBe(12);
+			expect(r.blocks[1].config.children[0].colSpan).toBe(6);
+			expect(r.blocks[1].config.children[1].colSpan).toBe(6);
+		}
+	});
+
+	it('sections without titles do not emit an outline', () => {
+		const view = {
+			type: 'sections',
+			sections: [{ type: 'grid', cards: [{ type: 'markdown', content: 'a' }] }]
+		} as unknown as LovelaceView;
+		const r = translateView(view);
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('grid');
+	});
+
+	it('empty sections produce no block at all', () => {
+		const view = {
+			type: 'sections',
+			sections: [{ title: 'Empty', type: 'grid', cards: [] }]
+		} as unknown as LovelaceView;
+		const r = translateView(view);
+		// outline header emits, but no grid since the section has no children
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('outline');
+	});
+});
+
+describe('translator: panel view (0.9.4)', () => {
+	it('translates the single card without any wrapper', () => {
+		const view = {
+			type: 'panel',
+			cards: [{ type: 'markdown', content: 'just me' }]
+		} as unknown as LovelaceView;
+		const r = translateView(view);
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('markdown');
+	});
+});
+
+describe('translator: masonry heuristic (0.9.4)', () => {
+	const small = (i: number): LovelaceCard =>
+		({ type: 'chip', entity: `sensor.s${i}` }) as unknown as LovelaceCard;
+	const tall = (i: number): LovelaceCard =>
+		({ type: 'custom:mini-graph-card', entity: `sensor.g${i}` }) as unknown as LovelaceCard;
+	const md = (i: number): LovelaceCard =>
+		({ type: 'markdown', content: `block ${i}` }) as unknown as LovelaceCard;
+
+	it('< 6 cards → no wrap (flat sequence, single column)', () => {
+		const view = {
+			cards: [small(1), small(2), small(3)]
+		} as unknown as LovelaceView;
+		const r = translateView(view);
+		expect(r.blocks.every((b) => b.type !== 'grid')).toBe(true);
+		expect(r.blocks).toHaveLength(3);
+	});
+
+	it('6-12 cards with ≥ 1 small type → wrap in 2-col grid + partial-layout coverage', () => {
+		const view = {
+			cards: [small(1), md(2), md(3), md(4), md(5), md(6), md(7)]
+		} as unknown as LovelaceView;
+		const r = translateView(view);
+		expect(r.blocks).toHaveLength(1);
+		expect(r.blocks[0].type).toBe('grid');
+		if (r.blocks[0].type === 'grid') {
+			expect(r.blocks[0].config.columns).toBe(2);
+		}
+		// Clean reports got re-stamped to partial-layout
+		expect(r.reports.some((rep) => rep.coverage === 'partial-layout')).toBe(true);
+	});
+
+	it('> 12 cards with ≥ 1 small → wrap in 3-col grid', () => {
+		const cards = [small(0), ...Array.from({ length: 14 }, (_, i) => md(i))];
+		const view = { cards } as unknown as LovelaceView;
+		const r = translateView(view);
+		expect(r.blocks).toHaveLength(1);
+		if (r.blocks[0].type === 'grid') {
+			expect(r.blocks[0].config.columns).toBe(3);
+		}
+	});
+
+	it('many cards but ALL tall types → no wrap (kept single-column to avoid bunching)', () => {
+		const view = {
+			cards: Array.from({ length: 8 }, (_, i) => tall(i))
+		} as unknown as LovelaceView;
+		const r = translateView(view);
+		// Each tall card produces its own block; none wrap into a grid.
+		expect(r.blocks.every((b) => b.type !== 'grid')).toBe(true);
+		expect(r.blocks.length).toBeGreaterThan(1);
 	});
 });
 

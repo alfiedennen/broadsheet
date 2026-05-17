@@ -30,8 +30,14 @@ import type { LovelaceCard, LovelaceConfig, LovelaceView } from './reader';
  * Coverage classification for one card's translation. Aggregated
  * into a per-page report shown to the user before they commit the
  * import.
+ *
+ * `partial-layout` (0.9.4): translation worked but the source's
+ * multi-column / sections layout was approximated by a heuristic
+ * (e.g. a default masonry view bucketed into a 2-column row when
+ * we don't have explicit column hints). The data made it through;
+ * the user might want to re-arrange in the things-first canvas.
  */
-export type Coverage = 'clean' | 'partial' | 'unsupported';
+export type Coverage = 'clean' | 'partial' | 'partial-layout' | 'unsupported';
 
 export interface TranslatorReport {
 	/** Source Lovelace card type. */
@@ -54,7 +60,14 @@ export interface TranslatedView {
 export interface TranslatedDashboard {
 	title: string | null;
 	views: TranslatedView[];
-	totals: { clean: number; partial: number; unsupported: number; total: number };
+	totals: {
+		clean: number;
+		partial: number;
+		/** 0.9.4: data translated but layout was approximated by the masonry heuristic. */
+		partialLayout: number;
+		unsupported: number;
+		total: number;
+	};
 }
 
 /* ── Per-card translators ─────────────────────────────────────────── */
@@ -163,27 +176,94 @@ function translateEntities(card: LovelaceCard): { blocks: BlockDef[]; coverage: 
 
 /**
  * `vertical-stack` / `horizontal-stack` → recurse into child cards.
- * Both translate identically for v0.2 — broadsheet pages are a flat
- * vertical sequence of blocks, so the layout distinction is lost.
- * Future: if a horizontal-block primitive lands, horizontal-stack
- * could land as a horizontal layout container.
+ *
+ * `vertical-stack` flattens to the parent flow (broadsheet pages
+ * are already vertical, no wrapper needed).
+ *
+ * `horizontal-stack` (0.9.4) emits a `row` block wrapping the
+ * translated children. The translator no longer drops horizontal
+ * layout signals. Equal flex shares by default; per-child
+ * `colSpan` honoured if the source carried one (rare for
+ * horizontal-stack).
  */
 function translateStack(
 	card: LovelaceCard,
 	recurse: (c: LovelaceCard, idx: number) => { blocks: BlockDef[]; reports: TranslatorReport[] }
 ): { blocks: BlockDef[]; coverage: Coverage; note?: string; childReports: TranslatorReport[] } {
 	const cards = (card.cards ?? []) as LovelaceCard[];
-	const blocks: BlockDef[] = [];
+	const childBlocks: BlockDef[] = [];
 	const childReports: TranslatorReport[] = [];
 	cards.forEach((c, i) => {
 		const r = recurse(c, i);
-		blocks.push(...r.blocks);
+		childBlocks.push(...r.blocks);
 		childReports.push(...r.reports);
 	});
-	const note = card.type === 'horizontal-stack'
-		? 'Horizontal layout flattened to vertical (no horizontal primitive yet).'
-		: undefined;
-	return { blocks, coverage: 'clean', note, childReports };
+
+	if (card.type === 'horizontal-stack') {
+		const rowBlock: BlockDef = {
+			type: 'row',
+			config: {
+				label: (card.title ?? null) as string | null,
+				children: childBlocks,
+				gap: 3
+			}
+		};
+		return {
+			blocks: [rowBlock],
+			coverage: 'clean',
+			note: undefined,
+			childReports
+		};
+	}
+
+	// vertical-stack — flat sequence, no wrapper.
+	return { blocks: childBlocks, coverage: 'clean', note: undefined, childReports };
+}
+
+/**
+ * 0.9.4 — `grid` card → broadsheet `grid` block.
+ *
+ * A `type: 'grid'` Lovelace card has `columns: N` + `cards: [...]`.
+ * Translates 1:1 to a broadsheet grid block with the same column
+ * count + translated children. Each child's `colSpan` is read from
+ * its own `grid_options.columns` if present; defaults to 1.
+ */
+function translateGrid(
+	card: LovelaceCard,
+	recurse: (c: LovelaceCard, idx: number) => { blocks: BlockDef[]; reports: TranslatorReport[] }
+): { blocks: BlockDef[]; coverage: Coverage; note?: string; childReports: TranslatorReport[] } {
+	const cards = (card.cards ?? []) as LovelaceCard[];
+	const columns = typeof card.columns === 'number' ? card.columns : 3;
+	const childBlocks: BlockDef[] = [];
+	const childReports: TranslatorReport[] = [];
+
+	cards.forEach((c, i) => {
+		const r = recurse(c, i);
+		// Source card's grid_options.columns becomes broadsheet
+		// colSpan. Walk each emitted child block and attach.
+		const gridOpts = c.grid_options as { columns?: number } | undefined;
+		const span =
+			gridOpts && typeof gridOpts.columns === 'number' && gridOpts.columns > 0
+				? gridOpts.columns
+				: undefined;
+		for (const b of r.blocks) {
+			if (span !== undefined) (b as BlockDef).colSpan = span;
+			childBlocks.push(b);
+		}
+		childReports.push(...r.reports);
+	});
+
+	const gridBlock: BlockDef = {
+		type: 'grid',
+		config: {
+			label: (card.title ?? null) as string | null,
+			columns,
+			children: childBlocks,
+			gap: 3
+		}
+	};
+
+	return { blocks: [gridBlock], coverage: 'clean', note: undefined, childReports };
 }
 
 /**
@@ -1019,8 +1099,49 @@ export function isSupportedCardType(type: string): boolean {
  * coverage reports. Stacks recurse — a stack's child reports are
  * flattened into the view's report list with the same sourceIndex.
  */
+/**
+ * 0.9.4 — masonry-default heuristic for views without explicit
+ * layout signals (the legacy default view shape, every install
+ * since the beginning of HA).
+ *
+ * Tiered: 3-col when > 12 cards, 2-col when 6-12, 1-col under 6.
+ * Each tier ALSO requires ≥ 1 small card type in the bunch (chip,
+ * glance, sensor, tile, mushroom-chip, custom mini chips, button) —
+ * dashboards consisting entirely of tall graphs / media-controls
+ * stay single-column to avoid bunching them side-by-side.
+ *
+ * Returns either:
+ *  - { wrap: true,  columns: N } — caller wraps the translated
+ *    blocks in a grid block with that column count, all colSpans
+ *    default to 1, status `partial-layout` on the source's reports
+ *  - { wrap: false } — single-column flat sequence (current behaviour)
+ */
+function masonryHeuristic(cards: LovelaceCard[]): { wrap: boolean; columns: number } {
+	const n = cards.length;
+	if (n < 6) return { wrap: false, columns: 1 };
+	// "Small card" types — narrow / short, safe to put side-by-side
+	const smallTypes = new Set([
+		'chip',
+		'chips',
+		'glance',
+		'sensor',
+		'tile',
+		'button',
+		'entity',
+		'custom:mushroom-chips-card',
+		'custom:mushroom-template-card',
+		'custom:mushroom-entity-card',
+		'custom:mushroom-light-card',
+		'custom:button-card',
+		'heading'
+	]);
+	const hasSmall = cards.some((c) => typeof c.type === 'string' && smallTypes.has(c.type));
+	if (!hasSmall) return { wrap: false, columns: 1 };
+	if (n > 12) return { wrap: true, columns: 3 };
+	return { wrap: true, columns: 2 };
+}
+
 export function translateView(view: LovelaceView): TranslatedView {
-	const cards = (view.cards ?? []) as LovelaceCard[];
 	const blocks: BlockDef[] = [];
 	const reports: TranslatorReport[] = [];
 
@@ -1049,6 +1170,20 @@ export function translateView(view: LovelaceView): TranslatedView {
 		}
 		if (t === 'vertical-stack' || t === 'horizontal-stack') {
 			const r = translateStack(card, visit);
+			return {
+				blocks: r.blocks,
+				reports: [
+					{ type: t, coverage: r.coverage, note: r.note, sourceIndex: idx },
+					...r.childReports
+				]
+			};
+		}
+
+		// 0.9.4: `grid` card — translates 1:1 to a broadsheet grid block
+		// with the source's column count + per-child colSpan from each
+		// child's grid_options.columns.
+		if (t === 'grid') {
+			const r = translateGrid(card, visit);
 			return {
 				blocks: r.blocks,
 				reports: [
@@ -1158,11 +1293,122 @@ export function translateView(view: LovelaceView): TranslatedView {
 		};
 	};
 
+	/*
+	 * 0.9.4 — view-level dispatch on view.type:
+	 *
+	 *  - `sections` view → one grid block per section, with 12-col
+	 *    scale + per-card colSpan from grid_options.columns. Each
+	 *    section's title (if set) emits an outline block above.
+	 *  - `panel` view → one card fills the view; translate it
+	 *    without any wrapping. The panel-flag is layout metadata
+	 *    we don't need on broadsheet's side.
+	 *  - default / masonry view → translate cards individually, then
+	 *    optionally wrap the whole sequence in a grid via the
+	 *    masonry heuristic when enough small-type cards are present.
+	 */
+	const viewType = view.type as string | undefined;
+
+	if (viewType === 'sections') {
+		const sections = (view.sections ?? []) as Array<{
+			title?: string;
+			type?: string;
+			cards?: LovelaceCard[];
+		}>;
+		sections.forEach((section, secIdx) => {
+			if (section.title) {
+				blocks.push({ type: 'outline', config: { label: section.title } });
+			}
+			const sectionCards = (section.cards ?? []) as LovelaceCard[];
+			const childBlocks: BlockDef[] = [];
+			sectionCards.forEach((c, i) => {
+				const r = visit(c, secIdx * 1000 + i);
+				const gridOpts = c.grid_options as { columns?: number } | undefined;
+				const span =
+					gridOpts && typeof gridOpts.columns === 'number' && gridOpts.columns > 0
+						? gridOpts.columns
+						: undefined;
+				for (const b of r.blocks) {
+					if (span !== undefined) (b as BlockDef).colSpan = span;
+					childBlocks.push(b);
+				}
+				reports.push(...r.reports);
+			});
+			if (childBlocks.length > 0) {
+				blocks.push({
+					type: 'grid',
+					config: {
+						columns: 12,
+						children: childBlocks,
+						gap: 3
+					}
+				});
+			}
+		});
+
+		return {
+			title: (view.title ?? null) as string | null,
+			path: (view.path ?? null) as string | null,
+			blocks,
+			reports
+		};
+	}
+
+	// Default / panel / masonry — iterate top-level cards through `visit`.
+	const cards = (view.cards ?? []) as LovelaceCard[];
+
+	if (viewType === 'panel') {
+		// Single card fills the view; if there's exactly one we translate
+		// it without any wrapping. Fall through otherwise (rare — broken
+		// panel views with multiple cards).
+		if (cards.length === 1) {
+			const r = visit(cards[0], 0);
+			blocks.push(...r.blocks);
+			reports.push(...r.reports);
+			return {
+				title: (view.title ?? null) as string | null,
+				path: (view.path ?? null) as string | null,
+				blocks,
+				reports
+			};
+		}
+	}
+
+	// Translate each top-level card individually first.
+	const topLevelBlocksByIndex: BlockDef[][] = [];
 	cards.forEach((card, i) => {
 		const r = visit(card, i);
-		blocks.push(...r.blocks);
+		topLevelBlocksByIndex.push(r.blocks);
 		reports.push(...r.reports);
 	});
+
+	// Apply the masonry heuristic for default views — if it returns
+	// wrap, package the whole sequence into a grid block. Each child
+	// keeps its default colSpan (1) so the grid auto-distributes them.
+	const heuristic = masonryHeuristic(cards);
+	if (heuristic.wrap && viewType !== 'panel') {
+		const childBlocks: BlockDef[] = [];
+		for (const seq of topLevelBlocksByIndex) {
+			childBlocks.push(...seq);
+		}
+		// Re-stamp the reports with partial-layout so the user sees the
+		// heuristic was applied (data made it through, layout is a guess).
+		for (const report of reports) {
+			if (report.coverage === 'clean') report.coverage = 'partial-layout';
+		}
+		blocks.push({
+			type: 'grid',
+			config: {
+				columns: heuristic.columns,
+				children: childBlocks,
+				gap: 3
+			}
+		});
+	} else {
+		// No wrap — flat sequence (legacy behaviour).
+		for (const seq of topLevelBlocksByIndex) {
+			blocks.push(...seq);
+		}
+	}
 
 	return {
 		title: (view.title ?? null) as string | null,
@@ -1177,6 +1423,7 @@ export function translateDashboard(config: LovelaceConfig): TranslatedDashboard 
 	const views = (config.views ?? []).map(translateView);
 	let clean = 0,
 		partial = 0,
+		partialLayout = 0,
 		unsupported = 0,
 		total = 0;
 	for (const v of views) {
@@ -1184,13 +1431,14 @@ export function translateDashboard(config: LovelaceConfig): TranslatedDashboard 
 			total++;
 			if (r.coverage === 'clean') clean++;
 			else if (r.coverage === 'partial') partial++;
+			else if (r.coverage === 'partial-layout') partialLayout++;
 			else unsupported++;
 		}
 	}
 	return {
 		title: (config.title ?? null) as string | null,
 		views,
-		totals: { clean, partial, unsupported, total }
+		totals: { clean, partial, partialLayout, unsupported, total }
 	};
 }
 

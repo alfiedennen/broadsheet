@@ -4,6 +4,85 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.4] — row + grid + Lovelace import that respects layout (2026-05-17)
+
+### Added
+- **`row` block** — horizontal flex container. Drop two or more
+  blocks side-by-side; each child gets equal flex by default,
+  override per-child with `colSpan`. Stacks back to a column on
+  narrow viewports (<640px). Editor → things-first or advanced.
+- **`grid` block** — CSS-grid container with `columns` (default 12,
+  matching Lovelace's sections-layout convention). Each child takes
+  1 column by default; child `colSpan: N` spans N columns. Responsive
+  collapse at 1024/640/480px so a 12-col desktop layout reads on
+  phone portrait.
+- **`colSpan` on every block** — optional top-level field, honoured
+  by the `grid` renderer (`grid-column: span N`) and `row` renderer
+  (flex-grow weight). Ignored outside containers.
+- **Lovelace import** now honours layout signals:
+  - `horizontal-stack` → row block wrapping children
+  - `vertical-stack` → flat sequence (page is already vertical)
+  - `type: 'grid'` card → grid block with same column count + per-
+    child `colSpan` from `grid_options.columns`
+  - `type: 'sections'` view → one grid block per section with 12-col
+    scale + section title preserved as an outline above
+  - `type: 'panel'` view → translate the single card without any
+    wrapper
+  - Default / masonry view → tiered heuristic: 3-col grid when >12
+    cards, 2-col when 6-12, single-column when <6. Requires ≥1
+    small card type (chip/glance/sensor/tile/button) — all-tall
+    dashboards stay single-column to avoid bunching graphs.
+- **`partial-layout` coverage status** — new classification for
+  cards whose data translated cleanly but whose layout was
+  approximated by the masonry heuristic. Distinguishes "I rendered
+  the data but laid it out flatly" from "I dropped fields".
+- **Imported pages land as drafts** in the things-first canvas with
+  a clear banner ("Draft from Lovelace import. Review the canvas,
+  rearrange anything you'd like, then commit so it appears in your
+  nav.") + two escape hatches:
+  - **Pre-import**: "Skip review, save directly" checkbox on the
+    review step
+  - **Post-import**: "Save as-is" button in the draft banner
+- Drafts default to `hiddenFromNav: true` so half-reviewed imports
+  don't clutter the kebab; committing flips both flags off.
+- Inline editors for row + grid in the things-first canvas (label
+  override + gap + grid columns). Children-editing routes to
+  advanced mode for now.
+
+### Changed
+- The legacy "horizontal-stack flattened to vertical" coverage note
+  is gone — horizontal layout is now actually preserved.
+
+### Architecture (developer-facing)
+- New `BlockSlot.svelte` factors out the resolver+renderer dance
+  RenderedPage uses; Row and Grid use it to recursively render
+  their children with grid/flex wrappers.
+- The plugin block contract is unchanged — plugin blocks can be
+  placed inside rows and grids transparently because the plugin-
+  block host context (set by RenderedPage via `setContext`)
+  propagates to every descendant.
+
+## [0.9.3.3] — user-facing documentation overhaul (2026-05-17)
+
+### Added
+- `docs/WALL-BUILDER-GUIDE.md` (new) — 5-minute step-by-step
+  walkthrough for building a tablet/kiosk wall surface, including
+  device-preset picker + battery-management per device class +
+  common variants (TV wall / hallway / kitchen).
+- `docs/TROUBLESHOOTING.md` (new) — operational gotchas. Top of the
+  file is the supervisor-cache fix (`ha store reload`); also covers
+  tablets-in-media, unknown-block placeholders, "settings don't
+  reach the tablet" reload strategies, "Pardon?" voice misfires,
+  and where logs live.
+
+### Changed
+- `docs/CUSTOM-PAGES-GUIDE.md` — comprehensive rewrite leading with
+  the things-first editor; advanced editor preserved as the
+  alternative. Block-type reference grew from 11 to 16.
+- `README.md` — new "Custom pages + the wall builder" section under
+  "Adapt to your house".
+- `CHANGELOG.md` — full 0.9.x release notes back through 0.9.0.
+
 ## [0.9.3.2] — area-panel inline editor (2026-05-17)
 
 ### Fixed
