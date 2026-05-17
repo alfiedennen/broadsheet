@@ -183,6 +183,16 @@
 			settingsThunk: enabled ? entry.plugin.settingsPanel?.component ?? null : null
 		};
 	});
+
+	// Stable promise — `{#await thunk()}` would re-create the promise
+	// on every reactive tick, so Svelte restarts the await every render
+	// and the chunk-fetch never appears to resolve. Binding the call
+	// once into a $derived gives === stability while the thunk ref is
+	// stable (which it is — settingsPanel.component is a module-level
+	// arrow fn). Same pattern as the per-plugin config page in
+	// routes/settings/plugins/[pluginId]/config/+page.svelte.
+	const haroldThunk = $derived(haroldStatus.settingsThunk);
+	const haroldPromise = $derived(haroldThunk ? haroldThunk() : null);
 </script>
 
 <div class="panel">
@@ -486,8 +496,8 @@
 						to expose Harold's settings here.
 					</p>
 				</div>
-			{:else if haroldStatus.settingsThunk}
-				{#await haroldStatus.settingsThunk()}
+			{:else if haroldPromise}
+				{#await haroldPromise}
 					<p class="loading">Loading Harold settings…</p>
 				{:then mod}
 					{@const HaroldPanel = mod.default}
