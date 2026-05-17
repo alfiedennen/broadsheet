@@ -33,6 +33,13 @@
 		'plugins.harold-preset.config.meetingModeInstalled'
 	);
 
+	// Theme H plugin-dep deeplink: track whether @broadsheet/voice is
+	// enabled. When it isn't, surface the dep as a clickable enable
+	// link (hash-flashes the voice row on /settings/plugins) rather than
+	// bare descriptive text. When it is, replace the prompt with a quiet
+	// "✓ Voice plugin enabled" so the section doesn't keep nagging.
+	const voiceEnabled = useCurationField<boolean>('plugins.voice.enabled');
+
 	let memorySize = $state(0);
 	let blueprintBusy = $state(false);
 	let blueprintMsg = $state('');
@@ -129,9 +136,17 @@
 			handles the routine device control (free, sub-200ms); only conversation +
 			questions fall through to Claude.
 		</p>
-		<p class="hint">
-			Pairs with @broadsheet/voice — enable that first if you haven't already.
-		</p>
+		{#if voiceEnabled.value === true}
+			<p class="hint dep-ok">
+				✓ Paired with <code>@broadsheet/voice</code>.
+			</p>
+		{:else}
+			<p class="hint dep-missing">
+				Pairs with <a class="dep-link" href="/settings/plugins/#plugin-voice"
+					><code>@broadsheet/voice</code> — enable that first ↗</a
+				>.
+			</p>
+		{/if}
 	</section>
 
 	<SettingsRow
@@ -268,6 +283,31 @@
 		font-size: var(--text-caption);
 		color: var(--fg-muted);
 		font-style: italic;
+	}
+
+	.intro .hint code {
+		font-family: var(--font-mono);
+		font-style: normal;
+		font-size: 0.9em;
+		color: var(--accent);
+	}
+
+	.dep-ok {
+		color: var(--state-positive, #6a8a4d) !important;
+	}
+
+	.dep-missing .dep-link {
+		color: var(--accent);
+		text-decoration: none;
+		border-bottom: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent);
+		transition: border-bottom-style var(--ease-quick), border-bottom-color var(--ease-quick);
+	}
+
+	.dep-missing .dep-link:hover,
+	.dep-missing .dep-link:focus {
+		border-bottom-style: solid;
+		border-bottom-color: var(--accent);
+		outline: none;
 	}
 
 	.text {

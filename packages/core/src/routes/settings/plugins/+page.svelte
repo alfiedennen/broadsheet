@@ -15,15 +15,22 @@
 	 * plugin silently doing nothing.
 	 */
 
+	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { pluginLoader } from '$lib/plugins/loader.svelte';
 	import type { PluginStatus } from '$lib/plugins/types';
 	import { curationStore, setPluginEnabled } from '$lib/curation/store.svelte';
 	import { showToast } from '$lib/stores/toast.svelte';
+	import { wireHashHighlight } from '$lib/utils/hashNavigate';
 	import PageShell from '$lib/components/PageShell.svelte';
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+
+	// Theme H: lets cross-plugin "Pairs with @broadsheet/voice"
+	// deeplinks scroll-and-flash the right row when the user lands here
+	// from another plugin's settings panel via a #plugin-<id> hash.
+	onMount(() => wireHashHighlight());
 
 	const registry = $derived(pluginLoader.registry);
 
@@ -77,7 +84,10 @@
 	{#each registry as { plugin, status, statusReason } (plugin.id)}
 		{@const enabled = isEnabled(plugin.id)}
 		<OutLine label={plugin.displayName} />
-		<section class="plugin-card" data-status={status}>
+		<!-- id="plugin-<id>" is the hash-navigate target for Theme H
+		     plugin-dep deeplinks ("Pairs with @broadsheet/voice"
+		     from harold-preset settings → scrolls + flashes here). -->
+		<section class="plugin-card" data-status={status} id="plugin-{plugin.id}">
 			<div class="plugin-head">
 				<div class="plugin-id-row">
 					<code class="plugin-id">@broadsheet/{plugin.id}</code>

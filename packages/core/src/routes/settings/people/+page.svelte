@@ -16,9 +16,9 @@
 
 	import { tick, onMount } from 'svelte';
 	import { discovery } from '$lib/discovery';
+	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import type { DomainPerson } from '$lib/discovery';
 	import { curationStore, setPersonPresenceSensor } from '$lib/curation/store.svelte';
-	import { discoveryStore } from '$lib/discovery/store.svelte';
 	import { createPerson } from '$lib/ha/registry';
 	import { showToast } from '$lib/stores/toast.svelte';
 	import { wireHashHighlight } from '$lib/utils/hashNavigate';
@@ -26,86 +26,23 @@
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	import PresenceSensorPicker from '$lib/components/PresenceSensorPicker.svelte';
 
 	// Theme H: when a home-tile InlinePin sends the user here with a
 	// fragment like #person.alfie_dennen, scroll to + flash that row.
 	onMount(() => wireHashHighlight());
-
-	// Resolve effective sensor per person (curation override OR heuristic suggestion)
-	function effectiveSensor(p: DomainPerson): string | null {
-		const o = curationStore.current.people.find((x) => x.personId === p.id);
-		if (o !== undefined) return o.presenceSensorId;
-		return p.suggestedPresenceSensor;
-	}
 
 	function effectiveDeviceClass(p: DomainPerson): 'android' | 'ios' | 'unknown' {
 		const o = curationStore.current.people.find((x) => x.personId === p.id);
 		return o?.deviceClass ?? p.deviceClass;
 	}
 
-	async function pickSensor(p: DomainPerson, sensorId: string | null) {
-		const ok = await setPersonPresenceSensor(p.id, sensorId, effectiveDeviceClass(p));
-		if (ok) showToast(sensorId ? `${p.name}: sensor updated` : `${p.name}: cleared`, 'success');
-		else showToast('Save failed — try again', 'error');
-	}
-
 	async function setDeviceClass(p: DomainPerson, dc: 'android' | 'ios' | 'unknown') {
-		const sensor = effectiveSensor(p);
+		const o = curationStore.current.people.find((x) => x.personId === p.id);
+		const sensor = o !== undefined ? o.presenceSensorId : p.suggestedPresenceSensor;
 		const ok = await setPersonPresenceSensor(p.id, sensor, dc);
 		if (ok) showToast(`${p.name}: ${dc}`, 'success');
 		else showToast('Save failed', 'error');
-	}
-
-	/* ─────────────── "Other entity…" picker ────────────────────────
-	 * The ranked list is heuristic-curated. Some installs have
-	 * presence wired in ways the heuristic can't recognise — a
-	 * custom template binary_sensor, a Bermuda area sensor, a Z2M
-	 * occupancy sensor on a specific room. The escape hatch surfaces
-	 * EVERY entity that could plausibly answer "is this person here"
-	 * — binary_sensor / sensor / device_tracker / person — minus the
-	 * ones already in the ranked list. User filters by typing.
-	 */
-	let expandedFor = $state<string | null>(null); // person id whose 'other' list is open
-	let otherFilter = $state<Record<string, string>>({}); // per-person typed filter
-
-	function toggleExpanded(pid: string) {
-		expandedFor = expandedFor === pid ? null : pid;
-	}
-
-	function allCandidateEntities(): string[] {
-		const ids: string[] = [];
-		for (const id of Object.keys(discoveryStore.states)) {
-			if (
-				id.startsWith('binary_sensor.') ||
-				id.startsWith('sensor.') ||
-				id.startsWith('device_tracker.') ||
-				id.startsWith('person.')
-			) {
-				ids.push(id);
-			}
-		}
-		return ids.sort((a, b) => a.localeCompare(b));
-	}
-
-	function otherCandidates(p: DomainPerson): string[] {
-		const ranked = new Set(p.rankedPresenceSensors.map((r) => r.entityId));
-		const filter = (otherFilter[p.id] ?? '').toLowerCase().trim();
-		const all = allCandidateEntities().filter((id) => !ranked.has(id));
-		if (!filter) return all;
-		return all.filter(
-			(id) =>
-				id.toLowerCase().includes(filter) ||
-				(discoveryStore.states[id]?.attributes?.friendly_name ?? '')
-					.toString()
-					.toLowerCase()
-					.includes(filter)
-		);
-	}
-
-	function entityLabel(id: string): string {
-		const fn = discoveryStore.states[id]?.attributes?.friendly_name as string | undefined;
-		const state = discoveryStore.states[id]?.state ?? '—';
-		return fn ? `${fn} (${state})` : `(${state})`;
 	}
 
 	/* ─────────────── "+ New person" form ───────────────────────────
@@ -280,7 +217,6 @@
 	{/if}
 
 	{#each discovery.persons as person (person.id)}
-		{@const effective = effectiveSensor(person)}
 		{@const dc = effectiveDeviceClass(person)}
 		<OutLine label={person.name} />
 
@@ -321,123 +257,11 @@
 			</dl>
 
 			<h3 class="sensors-title">Presence sensor</h3>
-			<ul class="sensor-list" role="radiogroup" aria-label="Pick presence sensor for {person.name}">
-				{#each person.rankedPresenceSensors as ranked (ranked.entityId)}
-					{@const isPicked = effective === ranked.entityId}
-					<li>
-						<button
-							type="button"
-							class="sensor-row"
-							class:picked={isPicked}
-							class:warn={ranked.warning}
-							role="radio"
-							aria-checked={isPicked}
-							onclick={() => pickSensor(person, ranked.entityId)}
-						>
-							<span class="radio" aria-hidden="true">
-								<span class="dot"></span>
-							</span>
-							<div class="sensor-meta">
-								<div class="sensor-id-row">
-									<code class="sensor-id">{ranked.entityId}</code>
-									{#if ranked.badge === 'best'}
-										<span class="badge best">★ best</span>
-									{:else}
-										<span class="badge">{ranked.badge}</span>
-									{/if}
-									{#if ranked.warning}
-										<span class="badge warn">⚠</span>
-									{/if}
-								</div>
-								<p class="sensor-reason">{ranked.reason}</p>
-							</div>
-						</button>
-					</li>
-				{/each}
-				<li>
-					<button
-						type="button"
-						class="sensor-row"
-						class:picked={effective === null}
-						role="radio"
-						aria-checked={effective === null}
-						onclick={() => pickSensor(person, null)}
-					>
-						<span class="radio" aria-hidden="true"><span class="dot"></span></span>
-						<div class="sensor-meta">
-							<div class="sensor-id-row">
-								<code class="sensor-id">(none)</code>
-							</div>
-							<p class="sensor-reason">
-								No tracker. {person.name} won't appear in the manifest until you pick one.
-							</p>
-						</div>
-					</button>
-				</li>
-			</ul>
-
-			<!--
-				Escape hatch: open the picker to ANY plausible entity. Heuristic
-				ranks above are the right answer 90% of the time; this covers
-				the 10% where someone has a custom template binary_sensor or
-				an unusual integration the heuristic doesn't recognise.
-			-->
-			<details class="other-block" open={expandedFor === person.id}>
-				<summary
-					class="other-summary"
-					onclick={(e) => {
-						e.preventDefault();
-						toggleExpanded(person.id);
-					}}
-				>
-					Other entity…
-					<span class="other-hint">
-						any binary_sensor / sensor / device_tracker / person
-					</span>
-				</summary>
-				{#if expandedFor === person.id}
-					<input
-						type="search"
-						class="other-filter"
-						placeholder="Filter — type to narrow (e.g. 'alfie' or 'occupancy')"
-						bind:value={otherFilter[person.id]}
-					/>
-					{@const matches = otherCandidates(person)}
-					{#if matches.length === 0}
-						<p class="empty">
-							No other entities match. Try a different filter, or check what's
-							in <code>binary_sensor.*</code> / <code>sensor.*</code> in HA.
-						</p>
-					{:else}
-						<p class="other-count">
-							{matches.length} match{matches.length === 1 ? '' : 'es'}
-						</p>
-						<ul class="other-list" role="radiogroup" aria-label="Other entities">
-							{#each matches.slice(0, 50) as id (id)}
-								{@const isPicked = effective === id}
-								<li>
-									<button
-										type="button"
-										class="other-row"
-										class:picked={isPicked}
-										role="radio"
-										aria-checked={isPicked}
-										onclick={() => pickSensor(person, id)}
-									>
-										<code class="sensor-id">{id}</code>
-										<span class="other-label">{entityLabel(id)}</span>
-									</button>
-								</li>
-							{/each}
-						</ul>
-						{#if matches.length > 50}
-							<p class="other-truncated">
-								… {matches.length - 50} more — narrow with the filter above.
-							</p>
-						{/if}
-					{/if}
-				{/if}
-			</details>
+			<!-- Theme H: picker UI extracted to PresenceSensorPicker so
+			     the same component renders here AND in the home-tile
+			     InlinePin popover. Full-form (not compact) since this
+			     IS the long-form settings surface. -->
+			<PresenceSensorPicker {person} />
 		</section>
 	{/each}
 </PageShell>
@@ -594,130 +418,6 @@
 		color: var(--fg-muted);
 	}
 
-	/* ── "Other entity…" expansion ─────────────────────────────────── */
-	.other-block {
-		margin-top: var(--space-4);
-		padding-top: var(--space-3);
-		border-top: 1px dashed var(--rule);
-	}
-
-	.other-summary {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-		font-family: var(--font-mono);
-		font-size: var(--text-eyebrow);
-		letter-spacing: var(--track-eyebrow);
-		text-transform: uppercase;
-		color: var(--fg-muted);
-		cursor: pointer;
-		min-height: 36px;
-		list-style: none;
-		transition: color var(--ease-quick);
-	}
-
-	.other-summary::-webkit-details-marker {
-		display: none;
-	}
-
-	.other-summary:hover {
-		color: var(--accent);
-	}
-
-	.other-summary::before {
-		content: '+ ';
-		color: var(--accent);
-	}
-
-	.other-block[open] .other-summary::before {
-		content: '− ';
-	}
-
-	.other-hint {
-		font-style: italic;
-		text-transform: lowercase;
-		color: var(--fg-dim);
-		font-size: 0.7rem;
-	}
-
-	.other-filter {
-		display: block;
-		width: 100%;
-		max-width: 480px;
-		margin: var(--space-3) 0 var(--space-2);
-		padding: var(--space-2) var(--space-3);
-		font-family: var(--font-mono);
-		font-size: var(--text-body);
-		background: var(--bg-raised);
-		color: var(--fg);
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-card);
-		min-height: 40px;
-	}
-
-	.other-filter:focus {
-		outline: none;
-		border-color: var(--accent);
-	}
-
-	.other-count {
-		font-family: var(--font-mono);
-		font-size: var(--text-eyebrow);
-		letter-spacing: var(--track-eyebrow);
-		text-transform: uppercase;
-		color: var(--fg-dim);
-		margin: 0 0 var(--space-2);
-	}
-
-	.other-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		max-height: 360px;
-		overflow-y: auto;
-	}
-
-	.other-row {
-		display: grid;
-		grid-template-columns: 1fr auto;
-		gap: var(--space-3);
-		align-items: baseline;
-		padding: var(--space-2) var(--space-3);
-		background: var(--bg-raised);
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-card);
-		text-align: left;
-		width: 100%;
-		min-height: 40px;
-		transition: border-color var(--ease-quick), background var(--ease-quick);
-	}
-
-	.other-row:hover {
-		border-color: var(--accent);
-	}
-
-	.other-row.picked {
-		border-color: var(--accent);
-		background: var(--accent-glow);
-	}
-
-	.other-label {
-		font-family: var(--font-body);
-		font-size: var(--text-caption);
-		color: var(--fg-muted);
-	}
-
-	.other-truncated {
-		font-family: var(--font-body);
-		font-style: italic;
-		font-size: var(--text-caption);
-		color: var(--fg-dim);
-		margin: var(--space-2) 0 0;
-	}
-
 	.empty {
 		color: var(--fg-muted);
 		font-style: italic;
@@ -798,93 +498,8 @@
 		margin: var(--space-2) 0 0;
 	}
 
-	.sensor-list {
-		list-style: none;
-		display: flex;
-		flex-direction: column;
-		margin: 0;
-		padding: 0;
-	}
-
-	.sensor-row {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: var(--space-3);
-		align-items: flex-start;
-		padding: var(--space-3) var(--space-3);
-		border: 1px solid var(--rule);
-		border-radius: var(--radius-card);
-		text-align: left;
-		color: var(--fg);
-		margin-bottom: var(--space-2);
-		transition: border-color var(--ease-quick), background var(--ease-quick);
-		width: 100%;
-	}
-
-	.sensor-row:hover {
-		border-color: var(--accent);
-	}
-
-	.sensor-row.picked {
-		border-color: var(--accent);
-		background: var(--accent-glow);
-	}
-
-	.radio {
-		width: 18px;
-		height: 18px;
-		border-radius: 50%;
-		border: 2px solid var(--fg-muted);
-		display: grid;
-		place-items: center;
-		flex: 0 0 auto;
-		margin-top: 2px;
-	}
-
-	.sensor-row.picked .radio {
-		border-color: var(--accent);
-	}
-
-	.dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: transparent;
-		transition: background var(--ease-quick);
-	}
-
-	.sensor-row.picked .dot {
-		background: var(--accent);
-	}
-
-	.sensor-meta {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-		min-width: 0;
-	}
-
-	.sensor-id-row {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-
-	.sensor-id {
-		font-family: var(--font-mono);
-		font-size: var(--text-caption);
-		color: var(--fg);
-	}
-
-	.sensor-reason {
-		font-family: var(--font-body);
-		font-size: var(--text-caption);
-		color: var(--fg-muted);
-		margin: 0;
-		line-height: var(--leading-snug);
-	}
-
+	/* Kept for the Hero dek's "★ best" inline pill. The picker UI
+	 * itself ships its own .badge inside PresenceSensorPicker. */
 	.badge {
 		font-family: var(--font-mono);
 		font-size: 0.65rem;
@@ -892,21 +507,7 @@
 		text-transform: uppercase;
 		padding: 1px var(--space-2);
 		border-radius: var(--radius-pill);
-		color: var(--fg-muted);
-		border: 1px solid var(--rule);
-	}
-
-	.badge.best {
 		color: var(--accent);
-		border-color: var(--accent);
-	}
-
-	.badge.warn {
-		color: var(--state-alert);
-		border-color: var(--state-alert);
-	}
-
-	.sensor-row.warn .sensor-reason {
-		color: var(--state-alert);
+		border: 1px solid var(--accent);
 	}
 </style>

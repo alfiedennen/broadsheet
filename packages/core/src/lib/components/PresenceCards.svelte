@@ -32,6 +32,7 @@
 	import { useRenderer } from '$lib/plugins/renderers.svelte';
 	import ProceduralPainting from './ProceduralPainting.svelte';
 	import InlinePin from './InlinePin.svelte';
+	import PresenceSensorPicker from './PresenceSensorPicker.svelte';
 	import type { PresenceCard } from './PresenceCards.types';
 
 	let { cards }: { cards: PresenceCard[] } = $props();
@@ -81,16 +82,26 @@
 					<h3 class="card-name">{card.person.name}</h3>
 					<p class="card-loc">
 						<span class="dot" data-state={card.away ? 'away' : 'in-room'}></span>
-						{#if card.locationPinHref}
-							<InlinePin
-								value={card.locationLabel}
-								label="Change {card.person.name.split(' ')[0]}'s presence sensor"
-								confidence={card.locationConfidence ?? 'auto'}
-								href={card.locationPinHref}
-							/>
-						{:else}
-							{card.locationLabel}
-						{/if}
+						<InlinePin
+							value={card.locationLabel}
+							label="Change {card.person.name.split(' ')[0]}'s presence sensor"
+							confidence={card.locationConfidence ?? 'auto'}
+						>
+							{#snippet children(close: () => void)}
+								<div class="picker-popover">
+									<header class="picker-head">
+										<strong>{card.person.name}</strong>
+										<span class="picker-sub">Pick the sensor that knows where they are.</span>
+									</header>
+									<PresenceSensorPicker person={card.person} compact onCommit={close} />
+									{#if card.locationPinHref}
+										<a class="picker-footer" href={card.locationPinHref}>
+											Open in Settings →
+										</a>
+									{/if}
+								</div>
+							{/snippet}
+						</InlinePin>
 					</p>
 				</header>
 			</article>
@@ -200,5 +211,53 @@
 
 	.dot[data-state='away'] {
 		background: var(--fg-dim);
+	}
+
+	/* Theme H follow-up: picker popover layout when InlinePin's
+	 * children snippet renders PresenceSensorPicker on the home tile.
+	 * Wider than the default inline-pin popover (28rem max) so the
+	 * sensor list + "Other entity…" filter have room. */
+	:global(.card-loc .pin-popover-body) {
+		min-width: 22rem;
+		max-width: min(32rem, 90vw);
+	}
+
+	.picker-popover {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
+	.picker-head {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+	.picker-head strong {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.2rem;
+		color: var(--accent);
+		font-weight: 400;
+	}
+	.picker-sub {
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		color: var(--fg-muted);
+	}
+
+	.picker-footer {
+		text-align: right;
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		text-decoration: none;
+		padding-top: var(--space-2);
+		border-top: 1px dashed var(--rule);
+	}
+	.picker-footer:hover {
+		color: var(--accent);
 	}
 </style>
