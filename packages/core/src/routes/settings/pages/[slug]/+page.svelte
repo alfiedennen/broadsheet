@@ -36,6 +36,12 @@
 	import Hero from '$lib/components/Hero.svelte';
 	import Eyebrow from '$lib/components/Eyebrow.svelte';
 	import OutLine from '$lib/components/OutLine.svelte';
+	// 0.9.1 things-first editor surface — used when customPage.editorMode === 'things-first'.
+	import ThingsBrowser from '$lib/blocks/editor/ThingsBrowser.svelte';
+	import ThingsCanvas from '$lib/blocks/editor/ThingsCanvas.svelte';
+	import MacroComposer from '$lib/blocks/editor/MacroComposer.svelte';
+	import SurfacePreview from '$lib/blocks/editor/SurfacePreview.svelte';
+	import type { MacroBlockConfig } from '$lib/blocks/types';
 
 	const slug = $derived(pageState.params.slug ?? '');
 	const customPage = $derived(
@@ -161,6 +167,97 @@
 			}
 		}, 400);
 	}
+
+	/* ─────────────── 0.9.1 things-first editor helpers ───────────────
+	 * The things-first surface is a controlled view — ThingsBrowser +
+	 * ThingsCanvas don't touch the store directly. The parent (this
+	 * file) routes their callbacks through the same persistence path
+	 * the advanced editor uses (setCustomPageBlocks / patchBlockConfig).
+	 *
+	 * Effective editor mode: `editorMode` is optional on CustomPageDef
+	 * so pages from before this field existed default to 'advanced'
+	 * (their existing editor surface stays unchanged). New pages
+	 * created via /settings/pages set editorMode: 'things-first' so
+	 * the new surface is the default for fresh authoring.
+	 */
+	const effectiveEditorMode = $derived<'things-first' | 'advanced'>(
+		customPage?.editorMode ?? 'advanced'
+	);
+
+	async function appendBlock(block: BlockDef) {
+		if (!customPage) return;
+		const next = [...customPage.blocks, block];
+		await setCustomPageBlocks(slug, next);
+	}
+
+	async function insertBlockAt(index: number, block: BlockDef) {
+		if (!customPage) return;
+		const safeIdx = Math.max(0, Math.min(index, customPage.blocks.length));
+		const next = customPage.blocks.slice();
+		next.splice(safeIdx, 0, block);
+		await setCustomPageBlocks(slug, next);
+	}
+
+	async function removeBlockAt(index: number) {
+		if (!customPage) return;
+		const next = customPage.blocks.filter((_, idx) => idx !== index);
+		await setCustomPageBlocks(slug, next);
+	}
+
+	async function moveBlockTo(from: number, to: number) {
+		if (!customPage) return;
+		if (from === to) return;
+		const next = customPage.blocks.slice();
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
+		await setCustomPageBlocks(slug, next);
+	}
+
+	// MacroComposer modal state. composerOpenFor === null when closed;
+	// === 'new' when composing a new macro (saving appends);
+	// === number when editing an existing macro at that index.
+	let composerOpenFor = $state<number | 'new' | null>(null);
+	const composerInitial = $derived<MacroBlockConfig | null>(
+		typeof composerOpenFor === 'number' && customPage
+			? customPage.blocks[composerOpenFor]?.type === 'macro'
+				? (customPage.blocks[composerOpenFor].config as MacroBlockConfig)
+				: null
+			: null
+	);
+
+	function openComposer(existingIndex: number | null) {
+		composerOpenFor = existingIndex === null ? 'new' : existingIndex;
+	}
+
+	function closeComposer() {
+		composerOpenFor = null;
+	}
+
+	async function saveComposer(macro: MacroBlockConfig) {
+		if (composerOpenFor === 'new') {
+			await appendBlock({ type: 'macro', config: macro });
+		} else if (typeof composerOpenFor === 'number') {
+			await patchBlockConfig(composerOpenFor, {
+				label: macro.label,
+				detail: macro.detail,
+				icon: macro.icon,
+				steps: macro.steps
+			});
+		}
+		composerOpenFor = null;
+	}
+
+	// entityIds currently placed as `thing` blocks — drives the
+	// "✓ on canvas" badge in the browser so duplicate placements
+	// aren't surprising.
+	const placedThingIds = $derived(
+		new Set(
+			(customPage?.blocks ?? [])
+				.filter((b): b is BlockDef & { type: 'thing' } => b.type === 'thing')
+				.map((b) => b.config.entityId)
+				.filter((id) => id) // skip empties
+		)
+	);
 
 	/* ─────────────── page meta editing ─────────────── */
 	async function updateMeta(patch: Record<string, unknown>) {
@@ -619,6 +716,28 @@
 							{/each}
 						</select>
 					</label>
+					<!-- 0.9.1 editor-mode toggle. things-first is the new
+					     default for fresh pages. Advanced is the legacy
+					     block-by-block surface; we keep it for parity with
+					     pages authored before 0.9.1 + the more exotic block
+					     types (action-grid, sparkline) that don't have a
+					     things-first inline editor. -->
+					<label class="field">
+						<span class="field-label">Editor</span>
+						<select
+							class="field-input"
+							value={effectiveEditorMode}
+							onchange={(e) =>
+								updateMeta({
+									editorMode: (e.target as HTMLSelectElement).value as
+										| 'things-first'
+										| 'advanced'
+								})}
+						>
+							<option value="things-first">Things-first (recommended)</option>
+							<option value="advanced">Advanced (block-by-block)</option>
+						</select>
+					</label>
 				</div>
 
 				<!-- 0.9.0 wall builder: "Point a wall here" panel.
@@ -698,130 +817,163 @@
 					</details>
 				</div>
 
-				<OutLine label="Blocks" />
-				<ol class="block-list">
-					{#each customPage.blocks as block, i (i)}
-						<li
-							class="block-row"
-							class:expanded={expandedIdx === i}
-							class:dragging={draggedBlockIdx === i}
-							class:drop-target={dragOverBlockIdx === i && draggedBlockIdx !== null && draggedBlockIdx !== i}
-							ondragover={(e) => handleBlockDragOver(e, i)}
-							ondragleave={handleBlockDragLeave}
-							ondrop={(e) => handleBlockDrop(e, i)}
-						>
-							<!--
-								Header is the drag handle. Whole li is the drop
-								target. Limiting `draggable` to the header keeps
-								form interactions inside the expanded editor
-								(text inputs, drag-to-select) working normally.
-							-->
-							<header
-								class="block-head"
-								role="group"
-								aria-label="Block {i + 1} header (drag to reorder)"
-								draggable="true"
-								ondragstart={(e) => handleBlockDragStart(e, i)}
-								ondragend={handleBlockDragEnd}
+				{#if effectiveEditorMode === 'things-first'}
+					<!-- 0.9.1 things-first surface: browser + canvas in a
+					     sub-grid replacing the legacy block list. The
+					     preview pane on the right uses SurfacePreview
+					     (sized to customPage.surface when set). -->
+					<OutLine label="Browse & build" />
+					<div class="things-first-grid">
+						<ThingsBrowser
+							onAddThing={(entityId) =>
+								appendBlock({
+									type: 'thing',
+									config: { entityId, widget: 'auto' }
+								})}
+							placedIds={placedThingIds}
+						/>
+						<ThingsCanvas
+							blocks={customPage.blocks}
+							onAppendBlock={appendBlock}
+							onInsertBlock={insertBlockAt}
+							onRemoveBlock={removeBlockAt}
+							onMoveBlock={moveBlockTo}
+							onPatchBlock={patchBlockConfig}
+							onComposeMacro={openComposer}
+						/>
+					</div>
+					<p class="things-first-hint">
+						Need an action-grid, sparkline, or other advanced
+						block? Switch the editor mode to <em>Advanced</em>
+						in page meta above — your blocks remain in place
+						either way.
+					</p>
+				{:else}
+					<OutLine label="Blocks" />
+					<ol class="block-list">
+						{#each customPage.blocks as block, i (i)}
+							<li
+								class="block-row"
+								class:expanded={expandedIdx === i}
+								class:dragging={draggedBlockIdx === i}
+								class:drop-target={dragOverBlockIdx === i && draggedBlockIdx !== null && draggedBlockIdx !== i}
+								ondragover={(e) => handleBlockDragOver(e, i)}
+								ondragleave={handleBlockDragLeave}
+								ondrop={(e) => handleBlockDrop(e, i)}
 							>
-								<span class="block-grip" aria-hidden="true" title="Drag to reorder">⋮⋮</span>
-								<button
-									type="button"
-									class="block-title"
-									onclick={() => toggleExpanded(i)}
+								<!--
+									Header is the drag handle. Whole li is the drop
+									target. Limiting `draggable` to the header keeps
+									form interactions inside the expanded editor
+									(text inputs, drag-to-select) working normally.
+								-->
+								<header
+									class="block-head"
+									role="group"
+									aria-label="Block {i + 1} header (drag to reorder)"
+									draggable="true"
+									ondragstart={(e) => handleBlockDragStart(e, i)}
+									ondragend={handleBlockDragEnd}
 								>
-									<span class="block-num">{String(i + 1).padStart(2, '0')}</span>
-									<span class="block-type">{BLOCK_META[block.type].label}</span>
-									<span class="block-summary">{summarise(block)}</span>
-								</button>
-								<div class="block-actions">
+									<span class="block-grip" aria-hidden="true" title="Drag to reorder">⋮⋮</span>
 									<button
 										type="button"
-										class="mini"
-										disabled={i === 0}
-										onclick={() => moveBlock(i, -1)}
-										aria-label="Move up"
+										class="block-title"
+										onclick={() => toggleExpanded(i)}
 									>
-										↑
+										<span class="block-num">{String(i + 1).padStart(2, '0')}</span>
+										<span class="block-type">{BLOCK_META[block.type].label}</span>
+										<span class="block-summary">{summarise(block)}</span>
 									</button>
-									<button
-										type="button"
-										class="mini"
-										disabled={i === customPage.blocks.length - 1}
-										onclick={() => moveBlock(i, 1)}
-										aria-label="Move down"
-									>
-										↓
-									</button>
-									<button
-										type="button"
-										class="mini danger"
-										onclick={() => removeBlock(i)}
-									>
-										Remove
-									</button>
-								</div>
-							</header>
-							{#if expandedIdx === i}
-								<div class="block-editor">
-									{@render blockEditor(block, i)}
-								</div>
-							{/if}
-						</li>
-					{/each}
-				</ol>
+									<div class="block-actions">
+										<button
+											type="button"
+											class="mini"
+											disabled={i === 0}
+											onclick={() => moveBlock(i, -1)}
+											aria-label="Move up"
+										>
+											↑
+										</button>
+										<button
+											type="button"
+											class="mini"
+											disabled={i === customPage.blocks.length - 1}
+											onclick={() => moveBlock(i, 1)}
+											aria-label="Move down"
+										>
+											↓
+										</button>
+										<button
+											type="button"
+											class="mini danger"
+											onclick={() => removeBlock(i)}
+										>
+											Remove
+										</button>
+									</div>
+								</header>
+								{#if expandedIdx === i}
+									<div class="block-editor">
+										{@render blockEditor(block, i)}
+									</div>
+								{/if}
+							</li>
+						{/each}
+					</ol>
 
-				<div class="add-block">
-					{#if addingBlock}
-						<div class="add-block-list">
-							<header class="add-block-header">
-								<strong>Pick a block</strong>
-								<span class="add-block-count"
-									>{filteredBlockTypes.length}/{ALL_BLOCK_TYPES.length} types</span
-								>
-								<button
-									type="button"
-									class="mini"
-									onclick={() => {
-										addingBlock = false;
-										blockFilter = '';
-									}}
-								>
-									Cancel
-								</button>
-							</header>
-							<!-- svelte-ignore a11y_autofocus -->
-							<input
-								type="text"
-								class="add-block-filter"
-								placeholder="Filter — try 'action', 'list', 'chart'…"
-								bind:value={blockFilter}
-								autofocus
-							/>
-							{#each filteredBlockTypes as t (t)}
-								<button class="add-block-row" type="button" onclick={() => addBlock(t)}>
-									<span class="add-block-label">{BLOCK_META[t].label}</span>
-									<span class="add-block-desc">{BLOCK_META[t].description}</span>
-								</button>
-							{:else}
-								<p class="add-block-empty">
-									No block types match "{blockFilter}". Try a shorter word.
-								</p>
-							{/each}
-						</div>
-					{:else}
-						<button
-							type="button"
-							class="add-block-trigger"
-							onclick={() => {
-								addingBlock = true;
-								blockFilter = '';
-							}}
-						>
-							+ Add block
-						</button>
-					{/if}
-				</div>
+					<div class="add-block">
+						{#if addingBlock}
+							<div class="add-block-list">
+								<header class="add-block-header">
+									<strong>Pick a block</strong>
+									<span class="add-block-count"
+										>{filteredBlockTypes.length}/{ALL_BLOCK_TYPES.length} types</span
+									>
+									<button
+										type="button"
+										class="mini"
+										onclick={() => {
+											addingBlock = false;
+											blockFilter = '';
+										}}
+									>
+										Cancel
+									</button>
+								</header>
+								<!-- svelte-ignore a11y_autofocus -->
+								<input
+									type="text"
+									class="add-block-filter"
+									placeholder="Filter — try 'action', 'list', 'chart'…"
+									bind:value={blockFilter}
+									autofocus
+								/>
+								{#each filteredBlockTypes as t (t)}
+									<button class="add-block-row" type="button" onclick={() => addBlock(t)}>
+										<span class="add-block-label">{BLOCK_META[t].label}</span>
+										<span class="add-block-desc">{BLOCK_META[t].description}</span>
+									</button>
+								{:else}
+									<p class="add-block-empty">
+										No block types match "{blockFilter}". Try a shorter word.
+									</p>
+								{/each}
+							</div>
+						{:else}
+							<button
+								type="button"
+								class="add-block-trigger"
+								onclick={() => {
+									addingBlock = true;
+									blockFilter = '';
+								}}
+							>
+								+ Add block
+							</button>
+						{/if}
+					</div>
+				{/if}
 
 				<OutLine label="Danger zone" />
 				<div class="danger-zone">
@@ -852,17 +1004,43 @@
 
 			<!-- RIGHT: live preview -->
 			<aside class="preview-pane">
-				<header class="preview-head">
-					<span class="preview-label">Preview</span>
-					<a href="{base}/{customPage.slug}/" target="_blank" rel="noopener" class="mini">
-						Open live
-					</a>
-				</header>
-				<div class="preview-frame">
-					<RenderedPage blocks={customPage.blocks} />
-				</div>
+				{#if effectiveEditorMode === 'things-first'}
+					<!-- Things-first preview uses SurfacePreview so a wall
+					     surface renders at its actual target dims (scaled
+					     to fit). Falls back to natural flow when no
+					     customPage.surface is set. -->
+					<SurfacePreview blocks={customPage.blocks} surface={customPage.surface} />
+					<div class="preview-extras">
+						<a
+							href="{base}/{customPage.slug}/"
+							target="_blank"
+							rel="noopener"
+							class="mini"
+						>
+							Open live
+						</a>
+					</div>
+				{:else}
+					<header class="preview-head">
+						<span class="preview-label">Preview</span>
+						<a href="{base}/{customPage.slug}/" target="_blank" rel="noopener" class="mini">
+							Open live
+						</a>
+					</header>
+					<div class="preview-frame">
+						<RenderedPage blocks={customPage.blocks} />
+					</div>
+				{/if}
 			</aside>
 		</div>
+	{/if}
+
+	{#if composerOpenFor !== null}
+		<MacroComposer
+			initial={composerInitial}
+			onSave={saveComposer}
+			onClose={closeComposer}
+		/>
 	{/if}
 </PageShell>
 
@@ -1370,6 +1548,16 @@
 				const hours = block.config.hours ?? 24;
 				return lbl ? `${lbl} — ${id} · ${hours}h` : `${id} · ${hours}h`;
 			}
+			case 'thing': {
+				const id = block.config.entityId || '(no entity)';
+				const lbl = block.config.label;
+				const widget = block.config.widget ?? 'auto';
+				return lbl ? `${lbl} — ${id} (${widget})` : `${id} (${widget})`;
+			}
+			case 'macro': {
+				const n = block.config.steps.length;
+				return `${block.config.label} — ${n} step${n === 1 ? '' : 's'}`;
+			}
 		}
 	}
 </script>
@@ -1385,6 +1573,41 @@
 		.editor-grid {
 			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		}
+	}
+
+	/* 0.9.1 things-first: browser + canvas split inside the LEFT
+	   editor-pane. Stacks vertically on narrow viewports, splits
+	   2-up on wider screens. The canvas wants more room because
+	   it holds the row editor; the browser is denser. */
+	.things-first-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: var(--space-3);
+		margin-bottom: var(--space-3);
+		min-height: 480px;
+	}
+
+	@media (min-width: 720px) {
+		.things-first-grid {
+			grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+		}
+	}
+
+	.things-first-hint {
+		margin: 0 0 var(--space-6);
+		font-size: 0.82rem;
+		font-style: italic;
+		color: var(--fg-muted);
+	}
+	.things-first-hint em {
+		color: var(--accent);
+		font-style: italic;
+	}
+
+	.preview-extras {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: var(--space-2);
 	}
 
 	/* ── shared field styles (echo /settings/pages list) ─── */

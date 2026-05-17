@@ -48,10 +48,11 @@ describe('fresh-curation smoke — preset picker', () => {
 });
 
 describe('fresh-curation smoke — block picker', () => {
-	it('offers all 11 primitive types', () => {
+	it('offers all 13 primitive types', () => {
 		// Hard-coded count — if a primitive is added or removed this
 		// reminds the maintainer to update the dogfood expectations too.
-		expect(ALL_BLOCK_TYPES).toHaveLength(11);
+		// 11 pre-0.9.1 primitives + thing + macro (0.9.1) = 13.
+		expect(ALL_BLOCK_TYPES).toHaveLength(13);
 	});
 
 	it('includes Action grid + Entity list + Sparkline', () => {
@@ -61,6 +62,13 @@ describe('fresh-curation smoke — block picker', () => {
 		expect(ALL_BLOCK_TYPES).toContain('action-grid');
 		expect(ALL_BLOCK_TYPES).toContain('entity-list');
 		expect(ALL_BLOCK_TYPES).toContain('sparkline');
+	});
+
+	it('includes 0.9.1 things-first primitives', () => {
+		// The two things-first primitives are the authoring workhorses.
+		// Make sure they survive any future registry trimming.
+		expect(ALL_BLOCK_TYPES).toContain('thing');
+		expect(ALL_BLOCK_TYPES).toContain('macro');
 	});
 });
 

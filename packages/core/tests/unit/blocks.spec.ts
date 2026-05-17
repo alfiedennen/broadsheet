@@ -23,7 +23,10 @@ describe('block registry coverage', () => {
 			'boost-row',
 			'entity-list',
 			'action-grid',
-			'sparkline'
+			'sparkline',
+			// 0.9.1 things-first primitives
+			'thing',
+			'macro'
 		];
 		// Same set, order-insensitive
 		expect(ALL_BLOCK_TYPES.slice().sort()).toEqual(expected.slice().sort());
@@ -50,7 +53,10 @@ describe('defaultBlockConfig — every type returns a valid block', () => {
 		'boost-row',
 		'entity-list',
 		'action-grid',
-		'sparkline'
+		'sparkline',
+		// 0.9.1 things-first primitives
+		'thing',
+		'macro'
 	] as const) {
 		it(`${type} returns a block with matching type discriminator`, () => {
 			const block = defaultBlockConfig(type);
@@ -128,6 +134,26 @@ describe('defaultBlockConfig — type-specific invariants', () => {
 		if (b.type === 'sparkline') {
 			expect(b.config.hours).toBe(24);
 			expect(b.config.entityId).toBe('');
+		}
+	});
+
+	// 0.9.1 things-first primitives — defaults must round-trip
+	// through the editor's "add new" path safely (empty entityId
+	// produces a no-op renderer, not a crash).
+	it('thing starter has empty entityId + auto widget', () => {
+		const b = defaultBlockConfig('thing');
+		if (b.type === 'thing') {
+			expect(b.config.entityId).toBe('');
+			expect(b.config.widget).toBe('auto');
+		}
+	});
+
+	it('macro starter has a label + empty steps array', () => {
+		const b = defaultBlockConfig('macro');
+		if (b.type === 'macro') {
+			expect(b.config.label.length).toBeGreaterThan(0);
+			expect(Array.isArray(b.config.steps)).toBe(true);
+			expect(b.config.steps).toHaveLength(0);
 		}
 	});
 });

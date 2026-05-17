@@ -2835,3 +2835,96 @@ What v0.1.0 explicitly does NOT include (v0.1.x or v0.2):
 - eInk render mode
 - Pop-up / modal navigation
 - Re-import to update an existing custom page
+
+## 2026-05-17 — 0.9.1 — things-first wall builder
+
+After the 0.9.0 wall-builder ship (which kept the typed-block-picker
+editor and just added the kiosk URL + surface dimensions field), user
+feedback was immediate:
+
+> The pick a block section isn't actually what's needed, people want
+> to add a thing, drag and drop a functional thing. They don't care/
+> want to bother with how that thing renders per se, that's our job.
+
+The mismatch is straightforward. broadsheet's prior editor surface
+was "pick a block primitive, then configure it with domain / service /
+entity_id strings". The user's mental model is "I have an Edifier
+speaker in the living room — put a button on the wall for it." So
+0.9.1 replaces the primitive-picker UX with a things-first surface
+while leaving the underlying block contract untouched.
+
+**Two new primitives** under the existing `BlockDef` discriminated
+union (additive, no migrations, old pages render unchanged):
+
+- `thing` — wraps a single HA `entity_id`. The renderer reads the
+  entity's domain at render time and dispatches to the right widget
+  (light → toggle, scene → tap-to-fire, climate → temp+slider,
+  lock → unlock, media_player[tv] → media-tv, sensor → value-pill,
+  etc.). User picks the entity; broadsheet picks the widget. Override
+  is one-line if needed.
+- `macro` — composed action tile built in-editor: pick a thing → pick
+  an action ("turn on / activate / set temp / unlock / next option"
+  from `defaultActionsFor(entityId)`) → repeat → save. Tap on the
+  rendered tile fires every step in order. Distinct from the existing
+  hardcoded `macro-grid` block.
+
+The domain → widget map lives in `thing-mapping.ts` alongside
+`defaultActionsFor()` so future surfaces (TUI? voice?) can reuse it.
+
+**New editor surface** at `/settings/pages/[slug]/`, gated on
+`customPage.editorMode`:
+
+- **Browser** (`ThingsBrowser.svelte`): the user's controllable things
+  organised by area (sorted alphabetically; "Unsorted" pushed to the
+  end + collapsed) plus cross-area buckets for scenes / scripts /
+  automations / status sensors / other. Per-area buckets show only
+  controllable domains (light, switch, climate, lock, cover, camera,
+  media_player); cross-area buckets pool scene/script/sensor/etc.
+  across every area, dedup'd by entity_id. Search filters across
+  name / entity_id / area name; matches expand their groups. Each
+  thing renders as a tap-OR-drag row — tap appends to the canvas;
+  HTML5 drag sets `application/x-broadsheet-entity` for the canvas
+  drop handlers. "✓ on canvas" badge on already-placed entities.
+- **Canvas** (`ThingsCanvas.svelte`): the page being built, with drop
+  seams BETWEEN rows (drop to insert at that position), drag-to-
+  reorder, inline thing/macro/outline editors, "switch to advanced
+  to edit" hint for non-native block types (action-grid, sparkline,
+  entity-list, etc. still render correctly in the preview — they
+  just aren't tap-editable from this surface). "+ Section divider"
+  and "+ Macro" footer buttons.
+- **Composer** (`MacroComposer.svelte`): modal walking the user
+  through name → pick-thing → pick-action → repeat. The picker
+  reuses `buildBrowserTree` so it looks like the main browser. No
+  service.domain typing anywhere.
+- **Preview** (`SurfacePreview.svelte`): when `customPage.surface` is
+  set (1280×800 Fire HD, 1340×800 Galaxy Tab A9, etc.), renders the
+  page at the target device's native CSS dimensions and scales it to
+  fit the editor pane via CSS transform. The user sees what the wall
+  will actually show — not a phone-sized representation that's
+  misleading on a 1280×800 surface. Falls back to natural-flow render
+  when no surface is set (parity with the legacy preview).
+
+**Default behaviour change**: new pages — both blank and preset-built
+— default to `editorMode: 'things-first'`. Legacy pages without the
+field render with the advanced editor via the `editorMode ?? 'advanced'`
+fallback in the editor. The toggle in page meta flips either way per
+page; the underlying block list is the same shape both ways, so
+flipping doesn't lose work.
+
+**Ship-readiness gates** all green:
+- svelte-check: 0 errors, 0 warnings across 512 files.
+- vitest: 270 tests pass (added 4 new tests for `thing` + `macro`
+  registry coverage + default-config invariants).
+- production build: clean.
+
+**Deferred to 0.9.2** (per the locked spec in
+`docs/plans/plan-9.2-lovelace-import-layout.md`): `row` + `grid`
+primitives so things-first can express two-up tiles and grid
+arrangements (currently still vertical-only), plus the Lovelace
+import path landing imported pages directly in the things-first
+canvas with masonry/coverage report + the two-layer escape hatch
+(pre-import "Skip review" toggle + in-canvas "Save as-is" button).
+
+Plan: `docs/plans/plan-9.1-wall-builder-things-first.md` (full
+decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).

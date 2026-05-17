@@ -137,7 +137,12 @@
 					slug: newSlug,
 					label,
 					pageWidth: newWidth, // honour user override
-					navOrder: 100 + pages.length
+					navOrder: 100 + pages.length,
+					// 0.9.1: presets default to the things-first editor too
+					// (matches the blank-page default). A preset that wants
+					// the advanced surface can set editorMode in its build()
+					// return; this fallback only fires when the preset doesn't.
+					editorMode: built.editorMode ?? ('things-first' as const)
 				};
 			} else {
 				pageDef = {
@@ -145,6 +150,11 @@
 					label,
 					navOrder: 100 + pages.length,
 					pageWidth: newWidth,
+					// 0.9.1: new pages default to the things-first editor.
+					// Pre-existing pages without this field keep the legacy
+					// 'advanced' surface via the `editorMode ?? 'advanced'`
+					// fallback in the editor.
+					editorMode: 'things-first' as const,
 					blocks: [
 						{
 							type: 'hero' as const,

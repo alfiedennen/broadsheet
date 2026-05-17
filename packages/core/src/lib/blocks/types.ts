@@ -237,10 +237,109 @@ export interface EntityListBlockConfig {
 
 /* ── The discriminated union ──────────────────────────────────── */
 
+/* ── 0.9.1 things-first primitives ───────────────────────────────── */
+
+/**
+ * One of the named widgets the `thing` block renders. broadsheet
+ * picks the default automatically from the entity's domain via the
+ * mapping in `$lib/blocks/thing-mapping.ts`; the user can override
+ * per-thing via `widget` (rare — when they want a light as a
+ * scene-trigger or a sensor as a tile rather than a pill).
+ */
+export type ThingWidget =
+	| 'toggle'         // light, switch, input_boolean
+	| 'fire'           // scene, script (one-shot tap-to-fire)
+	| 'climate'        // climate (current + setpoint + slider on tap-expand)
+	| 'lock'           // lock (state + unlock-on-tap)
+	| 'cover'          // cover (open/close)
+	| 'media-tv'       // media_player with TV device_class
+	| 'media-speaker'  // media_player others (play/pause + source-toggle)
+	| 'camera'         // camera, image (snapshot tile)
+	| 'state-pill'     // binary_sensor (read-only state)
+	| 'value-pill'     // sensor (read-only value)
+	| 'pick'           // input_select (dropdown picker)
+	| 'auto';          // let broadsheet pick — the default
+
+/**
+ * 0.9.1 — the things-first primitive. Wraps one HA entity_id; the
+ * renderer reads the entity's domain at render time and dispatches
+ * to the right widget. ONE block per thing the user placed on the
+ * wall canvas. This is the workhorse for things-first authoring.
+ *
+ * The user never names a service domain or a widget type — they
+ * pick a thing from the browser, broadsheet picks the widget.
+ * `widget: 'auto'` (the default) defers to thing-mapping.ts;
+ * override only when the user explicitly picks a non-default.
+ */
+export interface ThingBlockConfig {
+	/** The HA entity_id this thing wraps. e.g. `light.kitchen_pendant`. */
+	entityId: string;
+	/**
+	 * Per-thing label override. When unset, the renderer reads
+	 * `friendly_name` from the entity at render time + the
+	 * curation rename if set. Override here only when the user wants
+	 * a tile labelled differently on this specific wall surface.
+	 */
+	label?: string | null;
+	/**
+	 * Per-thing icon override (mdi:*). When unset, the renderer
+	 * reads `icon` from the entity. Override only when the user
+	 * wants a tile glyph different from the entity's HA icon.
+	 */
+	icon?: string | null;
+	/**
+	 * Widget pick. 'auto' (default) → broadsheet picks from the
+	 * domain→widget map. Any other value → the user explicitly
+	 * overrode the default for this tile.
+	 */
+	widget?: ThingWidget;
+}
+
+/**
+ * One step in a composed macro — a service call + a human-readable
+ * description (which the macro composer fills in automatically based
+ * on the picked thing + action). Same shape as ActionServiceCall plus
+ * a description for the composer's preview.
+ */
+export interface MacroStep {
+	/** Human description ("Turn off Hallway Lights", "Fire scene.movie"). */
+	description: string;
+	/** The actual service call to fire. */
+	service: ActionServiceCall;
+}
+
+/**
+ * 0.9.1 — composed macro tile. A user-defined house-wide action
+ * built in the in-editor macro composer (pick a thing → pick an
+ * action → repeat → save). Renders as a single tile on the canvas;
+ * tap fires every step in order.
+ *
+ * Distinct from the existing 'macro-grid' (which is broadsheet's
+ * hardcoded 3-tile All-lights-off / Boost-heat / TVs-off set).
+ * Things-first pages don't use macro-grid; they use one or more
+ * `macro` blocks composed by the user.
+ */
+export interface MacroBlockConfig {
+	/** Tile label ("Cinema mode", "Goodnight", "Movie night"). */
+	label: string;
+	/** Optional sub-label ("→ 3 actions"). */
+	detail?: string | null;
+	/** mdi:* icon for the tile glyph. */
+	icon?: string | null;
+	/** Ordered list of steps to fire on tap. */
+	steps: MacroStep[];
+}
+
+/* ── BlockDef discriminated union ────────────────────────────────── */
+
 /**
  * One block, fully serialised. The `type` discriminator selects the
  * config shape AND the registered renderer. Add a new block type by
  * adding a member here AND an entry in the registry.
+ *
+ * 0.9.1 added `thing` and `macro` as the things-first authoring
+ * primitives; the existing block types remain for backwards-compat
+ * with previously-authored pages + the Lovelace importer.
  */
 export type BlockDef =
 	| { type: 'hero'; config: HeroBlockConfig }
@@ -253,7 +352,9 @@ export type BlockDef =
 	| { type: 'boost-row'; config: BoostRowBlockConfig }
 	| { type: 'entity-list'; config: EntityListBlockConfig }
 	| { type: 'action-grid'; config: ActionGridBlockConfig }
-	| { type: 'sparkline'; config: SparklineBlockConfig };
+	| { type: 'sparkline'; config: SparklineBlockConfig }
+	| { type: 'thing'; config: ThingBlockConfig }
+	| { type: 'macro'; config: MacroBlockConfig };
 
 /** Just the type discriminator — useful for builder UI listings. */
 export type BlockType = BlockDef['type'];
@@ -284,6 +385,20 @@ export interface CustomPageDef {
 	hiddenFromNav?: boolean;
 	pageWidth?: 'narrow' | 'default' | 'wide';
 	blocks: BlockDef[];
+	/**
+	 * 0.9.1: which editor surface to use when this page is opened
+	 * for editing.
+	 *  - 'things-first' — the new browser+canvas surface (default
+	 *     for new pages). User browses controllable entities + taps
+	 *     or drags them onto the canvas; broadsheet picks the widget.
+	 *  - 'advanced' — the legacy block-by-block picker + per-block
+	 *     config forms. Default for pre-0.9.1 pages (backwards-compat).
+	 *  - undefined — treat as 'advanced' so pages from before this
+	 *     field existed keep their familiar editor surface.
+	 * Each page's mode is persisted independently; the user can flip
+	 * either way in page meta.
+	 */
+	editorMode?: 'things-first' | 'advanced';
 	/**
 	 * 0.9.0 wall builder: optional target dimensions for a wall surface.
 	 * Used by the page editor's "Share with a device" panel to suggest
@@ -375,6 +490,16 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 			return {
 				type: 'sparkline',
 				config: { entityId: '', label: null, hours: 24 }
+			};
+		case 'thing':
+			return {
+				type: 'thing',
+				config: { entityId: '', widget: 'auto' }
+			};
+		case 'macro':
+			return {
+				type: 'macro',
+				config: { label: 'New macro', steps: [] }
 			};
 	}
 }

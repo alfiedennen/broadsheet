@@ -47,7 +47,11 @@ const REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	'action-grid': () =>
 		import('./renderers/ActionGridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	sparkline: () =>
-		import('./renderers/SparklineBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
+		import('./renderers/SparklineBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	thing: () =>
+		import('./renderers/ThingBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	macro: () =>
+		import('./renderers/MacroBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
 };
 
 /** Look up a renderer thunk for a block type. Throws on unknown type. */
@@ -117,5 +121,15 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 		label: 'Sparkline',
 		description:
 			'Inline SVG chart of one entity’s recent history pulled from HA. The first historical-data primitive — mini-graph-card / sensor / apexcharts importer landing zone.'
+	},
+	thing: {
+		label: 'Thing',
+		description:
+			'0.9.1 things-first primitive — wraps one HA entity, picks the right widget (toggle / scene / climate / lock / camera / etc.) from the domain. The workhorse of things-first authoring.'
+	},
+	macro: {
+		label: 'Macro',
+		description:
+			'0.9.1 composed macro tile — fires N service calls in order when tapped. Built in the macro composer; distinct from the legacy macro-grid block.'
 	}
 };
