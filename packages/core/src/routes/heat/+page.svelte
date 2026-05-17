@@ -21,6 +21,7 @@
 	import Explainer from '$lib/components/Explainer.svelte';
 	import RoomReveal from '$lib/components/RoomReveal.svelte';
 	import UnsortedSection from '$lib/components/UnsortedSection.svelte';
+	import VerticalSlider from '$lib/components/VerticalSlider.svelte';
 
 	const climateAreas = $derived(discovery.areasForPage('heat'));
 
@@ -108,7 +109,7 @@
 	<title>Heat · broadsheet</title>
 </svelte:head>
 
-<PageShell width="default">
+<PageShell width="wide">
 	<Hero size="md">
 		{#snippet eyebrow()}
 			<Eyebrow section="Heat" number={3} />
@@ -164,32 +165,30 @@
 									| undefined}
 								{@const action = c.state?.attributes?.hvac_action as string | undefined}
 								<li class="trv-row">
-									<div class="trv-name">{c.name}</div>
-									<div class="trv-temps">
-										<span class="setpoint" data-on={setpoint && setpoint > 6 ? 'true' : 'false'}>
-											{typeof setpoint === 'number' ? `${setpoint.toFixed(1)}°` : '—'}
-										</span>
-										{#if typeof current === 'number'}
-											<span class="current">{current.toFixed(1)}° now</span>
-										{/if}
-										{#if action && action !== 'idle' && action !== 'off'}
-											<span class="action">· {action}</span>
-										{/if}
+									<!-- Polish patch: vertical slider replaces ±0.5°
+									     buttons. Drag-during is local; commit on
+									     release fires the set_temperature call. -->
+									<div class="trv-meta">
+										<div class="trv-name">{c.name}</div>
+										<div class="trv-temps">
+											{#if typeof current === 'number'}
+												<span class="current">{current.toFixed(1)}° now</span>
+											{/if}
+											{#if action && action !== 'idle' && action !== 'off'}
+												<span class="action">· {action}</span>
+											{/if}
+										</div>
 									</div>
-									<div class="trv-nudge">
-										<button
-											type="button"
-											class="nudge minus"
-											onclick={() => nudge(c, -0.5)}
-											aria-label="Decrease 0.5"
-										>−</button>
-										<button
-											type="button"
-											class="nudge plus"
-											onclick={() => nudge(c, 0.5)}
-											aria-label="Increase 0.5"
-										>+</button>
-									</div>
+									<VerticalSlider
+										value={typeof setpoint === 'number' ? setpoint : 5}
+										min={5}
+										max={28}
+										step={0.5}
+										unit="°"
+										tone="warm"
+										label="Setpoint {c.name}"
+										onCommit={(v) => setTemp(c, v)}
+									/>
 								</li>
 							{/each}
 						</ul>
@@ -296,10 +295,12 @@
 		flex-direction: column;
 	}
 
+	/* Polish patch: trv-row reorganised. Meta on left (name + current
+	 * temp + action), vertical slider on right replacing ±-buttons. */
 	.trv-row {
 		display: grid;
-		grid-template-columns: 1fr auto auto;
-		gap: var(--space-3);
+		grid-template-columns: 1fr auto;
+		gap: var(--space-4);
 		align-items: center;
 		padding: var(--space-3) 0;
 		border-bottom: 1px solid var(--rule);
@@ -307,6 +308,13 @@
 
 	.trv-row:last-child {
 		border-bottom: none;
+	}
+
+	.trv-meta {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
 
 	.trv-name {
@@ -321,15 +329,8 @@
 		gap: var(--space-2);
 		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
-	}
-
-	.setpoint {
-		font-size: 1.1rem;
+		font-size: var(--text-caption);
 		color: var(--fg-muted);
-	}
-
-	.setpoint[data-on='true'] {
-		color: var(--accent);
 	}
 
 	.current {
@@ -341,27 +342,6 @@
 		font-size: var(--text-caption);
 		color: var(--state-on);
 		font-style: italic;
-	}
-
-	.trv-nudge {
-		display: flex;
-		gap: var(--space-1);
-	}
-
-	.nudge {
-		width: 36px;
-		height: 36px;
-		border-radius: var(--radius-card);
-		border: 1px solid var(--rule);
-		font-family: var(--font-mono);
-		font-size: 1.1rem;
-		color: var(--accent);
-		transition: border-color var(--ease-quick), background var(--ease-quick);
-	}
-
-	.nudge:hover {
-		border-color: var(--accent);
-		background: var(--accent-glow);
 	}
 
 	.empty {
