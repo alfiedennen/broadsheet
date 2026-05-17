@@ -13,6 +13,9 @@ import { discovery } from '$lib/discovery';
 import { curationStore } from './store.svelte';
 import { connection } from '$lib/stores/connection.svelte';
 import { base } from '$app/paths';
+import { pluginLoader } from '$lib/plugins/loader.svelte';
+import { FLOWS } from '$lib/flows/definitions';
+import { buildFlowStepContext, countDone, isFlowComplete, firstIncompleteIndex } from '$lib/flows/context';
 
 // SvelteKit's $app/paths.base is the URL prefix all internal links must
 // carry. Empty string in dev / standalone, but under HA Ingress it
@@ -242,6 +245,47 @@ export function computeAlerts(): Alert[] {
 				}
 			});
 		}
+	}
+
+	// 4b. Theme B: incomplete onboarding flows.
+	//
+	// For every flow whose gate condition is met (`always` always
+	// fires; `plugin-enabled:<id>` only fires when that plugin is on)
+	// and which isn't fully complete, surface a "Resume setup →" card
+	// with progress + a hash-link to the first incomplete step.
+	const loadedPlugins = pluginLoader.registry.map((r) => r.plugin);
+	const flowCtx = buildFlowStepContext(curationStore.current, {
+		floors: discovery.floors,
+		areas: discovery.areas,
+		persons: discovery.persons
+	});
+	for (const flow of FLOWS) {
+		// Evaluate gate first — cheaper than running every isComplete.
+		if (flow.whenIncomplete === 'never') continue;
+		if (flow.whenIncomplete.startsWith('plugin-enabled:')) {
+			const gateId = flow.whenIncomplete.slice('plugin-enabled:'.length);
+			const enabled = curationStore.current.plugins?.[gateId]?.enabled === true;
+			if (!enabled) continue;
+		}
+		if (isFlowComplete(flow, loadedPlugins, flowCtx)) continue;
+
+		const done = countDone(flow, loadedPlugins, flowCtx);
+		const total = flow.steps.length;
+		const next = firstIncompleteIndex(flow, loadedPlugins, flowCtx);
+		// Hash-navigate the user straight to the first step that
+		// actually needs them — landing them at the top would force a
+		// scroll past completed steps every time they resume.
+		const target = next >= 0 ? `#step-${next + 1}` : '';
+		out.push({
+			id: `flow-incomplete-${flow.id}`,
+			severity: 'attention',
+			title: flow.title,
+			body: `${done} of ${total} done — ${flow.description}`,
+			cta: {
+				label: done > 0 ? 'Resume setup →' : 'Start setup →',
+				href: href(`/settings/setup/${flow.id}/${target}`)
+			}
+		});
 	}
 
 	// 5. Connection unstable (5+ reconnects)

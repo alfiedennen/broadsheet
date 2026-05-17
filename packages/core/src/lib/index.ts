@@ -33,7 +33,11 @@ export type {
 	PluginDiscoverySnapshot,
 	PluginStatus,
 	RegisteredPlugin,
-	LazyComponent
+	LazyComponent,
+	// Theme B — onboarding flows
+	PluginFlowStep,
+	PluginFlowStepKind,
+	FlowStepContext
 } from './plugins/types';
 export { RESERVED_ROUTE_SLUGS } from './plugins/types';
 

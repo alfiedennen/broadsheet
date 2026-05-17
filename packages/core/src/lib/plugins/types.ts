@@ -175,6 +175,111 @@ export interface BroadsheetPlugin {
 	onActivate?: (ctx: PluginActivationContext) => void | Promise<void>;
 	/** Called when the plugin deactivates (disabled, or checks stop passing). */
 	onDeactivate?: () => void | Promise<void>;
+	/**
+	 * Theme B: onboarding flow steps this plugin contributes.
+	 * broadsheet aggregates these across all bundled plugins and
+	 * references them by `<plugin-id>:<step-id>` from flow definitions
+	 * shipped in `lib/flows/definitions.ts`. Each step's `isComplete`
+	 * is evaluated live from curation + discovery + local flags —
+	 * never a separate "done" flag — so partial outside-flow progress
+	 * is picked up on every render.
+	 */
+	flows?: PluginFlowStep[];
+}
+
+/**
+ * Theme B: how a flow step is shaped + what affordance broadsheet
+ * renders for it. See `docs/plans/plan-theme-B-onboarding-flows.md`.
+ */
+export type PluginFlowStepKind =
+	/** Step is complete when `plugins.<pluginId>.enabled === true`. */
+	| 'enable-plugin'
+	/** Step is complete when `curationField.path` resolves to a non-empty value. */
+	| 'set-curation-field'
+	/** Step is complete when the user clicks (tracked in localStorage). */
+	| 'external-link'
+	/** Step renders a plugin-provided component + supplies its own `isComplete`. */
+	| 'custom';
+
+/**
+ * Context handed to each step's `isComplete` predicate. Read-only
+ * snapshots of the surfaces a step might depend on. Plugins NEVER
+ * mutate via this context — they use the same hooks the rest of the
+ * SPA does (`useCurationField`, etc.) to write.
+ */
+export interface FlowStepContext {
+	curation: {
+		plugins: Record<string, { enabled?: boolean; config?: Record<string, unknown> }>;
+		people: { personId: string; presenceSensorId: string | null }[];
+		[k: string]: unknown;
+	};
+	discovery: PluginDiscoverySnapshot;
+	/**
+	 * localStorage-backed flags. `get(key)` returns `true` only after
+	 * the user has explicitly clicked the step's "done" affordance.
+	 * Used by `kind: 'external-link'` to remember "I clicked through".
+	 */
+	localFlags: { get: (key: string) => boolean };
+}
+
+/**
+ * Theme B: a single step in an onboarding flow. Steps are owned by
+ * plugins (each plugin exports its own steps via `flows: [...]`);
+ * the addon's `lib/flows/definitions.ts` composes them into named
+ * flows by reference.
+ */
+export interface PluginFlowStep {
+	/**
+	 * Stable id, unique within this plugin's `flows`. Flow definitions
+	 * reference steps as `<plugin-id>:<step-id>` (e.g. `voice:enable`).
+	 */
+	id: string;
+	/** Short imperative title — "Paste your Anthropic key". */
+	title: string;
+	/** One-paragraph dek explaining what + why. Same register as page deks. */
+	description: string;
+	/** When true, broadsheet surfaces a "Skip →" affordance. */
+	optional?: boolean;
+	/** Determines the affordance shape. */
+	kind: PluginFlowStepKind;
+	/**
+	 * Live completion predicate. Called on every render — must be
+	 * cheap (just a curation/discovery/localFlag lookup). Theme B
+	 * relies on this being idempotent so partial outside-flow
+	 * progress is detected on entry.
+	 */
+	isComplete: (ctx: FlowStepContext) => boolean;
+	/**
+	 * Required when `kind === 'custom'`; optional supplementary UI
+	 * for other kinds. Lazy-loaded so a missing/broken component
+	 * doesn't crash the rest of the flow page.
+	 */
+	component?: LazyComponent;
+	/**
+	 * For `kind: 'external-link'`. broadsheet renders an "Open
+	 * <label> ↗" anchor + an "I've done this →" button that sets
+	 * a localStorage flag (`flow:<plugin-id>:<step-id>:done`) so the
+	 * step flips to complete on the next render.
+	 */
+	link?: { href: string; label: string };
+	/**
+	 * For `kind: 'set-curation-field'`. broadsheet doesn't render
+	 * the input itself (the plugin's settings panel owns that) — it
+	 * just deep-links to that panel + reads the field for the
+	 * `isComplete` check.
+	 */
+	curationField?: {
+		/** Dotted path inside curation, e.g. `plugins.harold-preset.config.anthropicKey`. */
+		path: string;
+		/** Short hint shown under the title — e.g. "an `sk-ant-…` key". */
+		valueHint: string;
+		/**
+		 * Optional deep-link to the settings panel that hosts the
+		 * input. Surfaces as a "Set in settings ↗" anchor below the
+		 * description. Typically `/settings/plugins/<id>/config/`.
+		 */
+		settingsHref?: string;
+	};
 }
 
 /**

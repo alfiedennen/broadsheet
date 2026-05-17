@@ -139,12 +139,18 @@
 		{#if voiceEnabled.value === true}
 			<p class="hint dep-ok">
 				✓ Paired with <code>@broadsheet/voice</code>.
+				<a class="flow-link" href="/settings/setup/add-harold/"
+					>Or run the full setup ↗</a
+				>
 			</p>
 		{:else}
 			<p class="hint dep-missing">
 				Pairs with <a class="dep-link" href="/settings/plugins/#plugin-voice"
 					><code>@broadsheet/voice</code> — enable that first ↗</a
 				>.
+				<a class="flow-link" href="/settings/setup/add-harold/"
+					>Or run the full setup ↗</a
+				>
 			</p>
 		{/if}
 	</section>
@@ -305,6 +311,30 @@
 
 	.dep-missing .dep-link:hover,
 	.dep-missing .dep-link:focus {
+		border-bottom-style: solid;
+		border-bottom-color: var(--accent);
+		outline: none;
+	}
+
+	/* The "Or run the full setup ↗" link sits beside the dep-status —
+	 * deliberately quieter than the dep-link itself, since for already-
+	 * paired users it's just an alternative entry. */
+	.flow-link {
+		display: inline-block;
+		margin-left: var(--space-3);
+		font-family: var(--font-mono);
+		font-size: 0.75em;
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg-muted);
+		text-decoration: none;
+		border-bottom: 1px dashed color-mix(in srgb, var(--fg-muted) 50%, transparent);
+		transition: color var(--ease-quick), border-bottom-color var(--ease-quick), border-bottom-style var(--ease-quick);
+	}
+
+	.flow-link:hover,
+	.flow-link:focus {
+		color: var(--accent);
 		border-bottom-style: solid;
 		border-bottom-color: var(--accent);
 		outline: none;

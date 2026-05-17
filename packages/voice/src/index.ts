@@ -24,7 +24,7 @@
  * Spec: docs/plans/plan-voice-substrate.md (rubric Epic 8).
  */
 
-import type { BroadsheetPlugin } from '@broadsheet/core';
+import type { BroadsheetPlugin, PluginFlowStep } from '@broadsheet/core';
 
 /* Re-export the middleware registry + types so presets (Harold and
  * friends) can register hooks against the voice substrate without
@@ -43,12 +43,44 @@ export type {
 	VoiceDiscovery
 } from './lib/types';
 
+/**
+ * Theme B onboarding-flow steps voice contributes. Referenced by
+ * the addon-side "add-harold" flow as `voice:enable` + `voice:test-mic`.
+ * Each step's isComplete reads live state — no separate "done" flag —
+ * so the user who already pasted things outside the flow gets ✓
+ * immediately on entry.
+ */
+const VOICE_FLOW_STEPS: PluginFlowStep[] = [
+	{
+		id: 'enable',
+		title: 'Enable @broadsheet/voice',
+		description:
+			"The voice plugin wires HA's Assist pipeline into broadsheet — STT, " +
+			"TTS, and conversation routing. Everything else in this flow rides " +
+			"on top of it.",
+		kind: 'enable-plugin',
+		isComplete: (ctx) => ctx.curation.plugins?.voice?.enabled === true
+	},
+	{
+		id: 'test-mic',
+		title: 'Test the mic on /',
+		description:
+			"Open the moment page and tap the mic pill bottom-right. Speak. " +
+			"If you hear yourself echo back in your TTS engine's voice, " +
+			"everything's wired end-to-end.",
+		kind: 'external-link',
+		link: { href: '/', label: 'the moment' },
+		isComplete: (ctx) => ctx.localFlags.get('flow:voice:test-mic:done')
+	}
+];
+
 export const plugin: BroadsheetPlugin = {
 	id: 'voice',
 	version: '0.1.0',
 	displayName: 'Voice',
 	description:
 		"Push-to-talk + transcript pane wired through HA's assist pipeline. HA-native intent matching first; your LLM agent as fall-through.",
+	flows: VOICE_FLOW_STEPS,
 
 	pages: [
 		{
