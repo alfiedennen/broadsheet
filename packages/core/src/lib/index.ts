@@ -37,9 +37,14 @@ export type {
 	// Theme B — onboarding flows
 	PluginFlowStep,
 	PluginFlowStepKind,
-	FlowStepContext
+	FlowStepContext,
+	// 0.9.3 — block contributions + plugin-block host context
+	PluginBlockContribution,
+	PluginRecipeSuggestion,
+	PluginRecipePlacement,
+	PluginBlockHostContext
 } from './plugins/types';
-export { RESERVED_ROUTE_SLUGS } from './plugins/types';
+export { RESERVED_ROUTE_SLUGS, PLUGIN_BLOCK_HOST_CONTEXT_KEY } from './plugins/types';
 
 /* ── Discovery domain types the contract references (P0) ─────────── */
 export type { DomainArea, DomainEntity, DomainFloor, DomainPerson, PageSlug } from './discovery';

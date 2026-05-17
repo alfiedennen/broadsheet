@@ -230,6 +230,32 @@ class PluginLoader {
 		}
 		return null;
 	}
+
+	/**
+	 * 0.9.3: flat list of block contributions from every ACTIVE
+	 * plugin. The block registry consults this on lookup for any
+	 * block type that isn't in core's static REGISTRY; the things-
+	 * first browser walks this list to surface plugin-contributed
+	 * recipes per area or cross-area. Reactive on `this.registry`
+	 * — a plugin disable/enable invalidates the list and any
+	 * downstream `$derived`.
+	 */
+	activePluginBlocks = $derived.by(() => {
+		const out: import('./types').PluginBlockContribution[] = [];
+		for (const { plugin, status } of this.registry) {
+			// load-error / disabled plugins contribute no blocks. An
+			// 'errored' plugin (discoveryContributor threw) keeps its
+			// blocks — the error is in data, not the block contract.
+			if (status === 'load-error' || status === 'disabled') continue;
+			for (const block of plugin.extraBlocks ?? []) out.push(block);
+		}
+		return out;
+	});
+
+	/** Look up a plugin-contributed block by type id. Null when no active plugin provides it. */
+	pluginBlockByType(type: string): import('./types').PluginBlockContribution | null {
+		return this.activePluginBlocks.find((b) => b.type === type) ?? null;
+	}
 }
 
 /** Singleton — the route, KebabNav, /settings/plugins all read this. */

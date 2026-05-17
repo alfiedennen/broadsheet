@@ -242,6 +242,12 @@
 				return `Action grid (${block.config.actions.length} actions)`;
 			case 'sparkline':
 				return `Sparkline — ${block.config.entityId || '(no entity)'}`;
+			case 'area-lights-panel':
+				return `Lights panel — area ${block.config.areaId || '(unset)'}`;
+			case 'area-climate-panel':
+				return `Heating panel — area ${block.config.areaId || '(unset)'}`;
+			case 'area-media-panel':
+				return `Media panel — area ${block.config.areaId || '(unset)'}`;
 		}
 	}
 
@@ -259,7 +265,10 @@
 			'boost-row': 'Boost row',
 			'entity-list': 'Entity list',
 			'action-grid': 'Action grid',
-			sparkline: 'Sparkline'
+			sparkline: 'Sparkline',
+			'area-lights-panel': 'Lights panel',
+			'area-climate-panel': 'Heating panel',
+			'area-media-panel': 'Media panel'
 		};
 		return labels[block.type];
 	}

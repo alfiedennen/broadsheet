@@ -144,6 +144,149 @@ export interface PluginActivationContext {
 }
 
 /**
+ * Where a plugin recipe lands in the things-first browser.
+ *
+ *  - `area` + a known per-area sub-group key → the recipe shows
+ *     INSIDE that area's matching sub-group ("Living Room → TV").
+ *     The recipe placement engine reads the area's bucket arrays
+ *     (lights / tvs / media / climate / switches / locks / cameras /
+ *     sensors) for membership counts.
+ *  - `cross-area` + a bucket key → the recipe shows in one of the
+ *     cross-area buckets at the bottom of the browser. `components`
+ *     is the bucket reserved for plugin-contributed recipes that
+ *     don't fit elsewhere.
+ */
+export type PluginRecipePlacement =
+	| {
+			kind: 'area';
+			areaId: string;
+			subGroup:
+				| 'lights'
+				| 'tvs'
+				| 'media'
+				| 'climate'
+				| 'switches'
+				| 'locks'
+				| 'cameras'
+				| 'sensors';
+	  }
+	| {
+			kind: 'cross-area';
+			bucket: 'scenes' | 'scripts' | 'automations' | 'status' | 'other' | 'components';
+	  };
+
+/**
+ * A recipe a plugin suggests for the things-first browser. The
+ * shape mirrors `AccomplishmentRecipe` in `$lib/blocks/things-browser`
+ * but is decoupled from BlockDef — the browser's recipe walker
+ * lifts these into full AccomplishmentRecipe instances at slot
+ * time, building the actual blocks array from the contribution's
+ * `type` + the suggestion's `config`.
+ */
+export interface PluginRecipeSuggestion {
+	/**
+	 * Stable id. MUST be globally unique within this plugin's
+	 * suggestions; the browser uses it for placed-tracking + drag
+	 * payload. Convention: `<plugin-id>:<recipe-slug>`.
+	 */
+	id: string;
+	title: string;
+	description?: string;
+	/** mdi:* hint for the row icon. */
+	icon?: string;
+	/** Where the recipe shows up in the browser. */
+	placement: PluginRecipePlacement;
+	/**
+	 * The config object the placed block carries. Shape is plugin-
+	 * defined (matches whatever the renderer expects).
+	 */
+	config: Record<string, unknown>;
+	/**
+	 * entity_ids this recipe references. Drives the "✓ placed" badge:
+	 * a recipe is "placed" when every referenced entity already has
+	 * a `thing` block (or any block referencing it) on the canvas.
+	 * Pass an empty array for recipes that don't reference HA entities
+	 * (e.g. a page-level decorative block).
+	 */
+	referencedEntityIds: string[];
+}
+
+/**
+ * 0.9.3: the host-context plugin block renderers can read via Svelte's
+ * `getContext` to access core's curation + discovery snapshot
+ * reactively, without runtime-importing `@broadsheet/core` (which
+ * would create the execution cycle the contract forbids).
+ *
+ * Core's `RenderedPage` sets this context at mount; plugin block
+ * renderers call:
+ *
+ * ```ts
+ * import { getContext } from 'svelte';
+ * import type { PluginBlockHostContext } from '@broadsheet/core';
+ * const host = getContext<PluginBlockHostContext>(PLUGIN_BLOCK_HOST_CONTEXT_KEY);
+ * // host.curation is reactive — re-renders when curation updates
+ * // host.discovery is reactive — re-renders when discovery updates
+ * ```
+ *
+ * The key is a string so plugins can use it verbatim (`getContext('broadsheet:plugin-block-host')`)
+ * even when they only `import type` from core. The TYPE import is
+ * compile-time only and is erased; no runtime cycle.
+ */
+export const PLUGIN_BLOCK_HOST_CONTEXT_KEY = 'broadsheet:plugin-block-host';
+
+/**
+ * Reactive shape exposed via the plugin-block-host context. Plugin
+ * block renderers read from these getters — broadcasters wired by
+ * core's `RenderedPage` re-fire on curation / discovery updates.
+ */
+export interface PluginBlockHostContext {
+	/**
+	 * The full curation object. Plugins access:
+	 *  - their own config at `curation.plugins.<id>.config`
+	 *  - shared integrations at `curation.integrations.<id>`
+	 * Use it as a getter (`host.curation`) — Svelte 5 $state makes
+	 * the underlying read reactive.
+	 */
+	curation: Record<string, unknown>;
+	/** Read-only discovery snapshot — same shape as plugin pages get. */
+	discovery: PluginDiscoverySnapshot;
+}
+
+/**
+ * One block-type contribution from a plugin. Each contribution
+ * declares a block type id, a default config + label + description
+ * for the (legacy) advanced block picker, and a lazy renderer thunk.
+ * Plugins MAY additionally declare `suggestRecipes` to surface the
+ * block as recipe(s) in the things-first browser; without it the
+ * block is still placeable via the advanced editor but doesn't
+ * appear in the things-first surface.
+ */
+export interface PluginBlockContribution {
+	/**
+	 * Block type id. MUST be plugin-id-prefixed (`tmdb-tv:rows`,
+	 * `emanations:painting`) so it never collides with core block
+	 * types OR with another plugin's contributions. Validated at
+	 * registration time; load-error on collision.
+	 */
+	type: string;
+	/** Human label for the advanced block picker + things-first row title fallback. */
+	label: string;
+	/** Short description for the advanced block picker. */
+	description: string;
+	/** Default config when the block is added via "+ Add" in advanced mode. */
+	defaultConfig: Record<string, unknown>;
+	/** Lazy renderer component. Receives `{ config }` as its sole prop. */
+	renderer: LazyComponent;
+	/**
+	 * Optional things-first recipe suggestions. Called once per
+	 * `buildBrowserTree` recompute with the discovery snapshot;
+	 * returned suggestions slot into the browser per `placement`.
+	 * Keep cheap — runs on every reactive recompute of the tree.
+	 */
+	suggestRecipes?: (discovery: PluginDiscoverySnapshot) => PluginRecipeSuggestion[];
+}
+
+/**
  * The plugin contract. See the FROZEN note at the top of this file.
  */
 export interface BroadsheetPlugin {
@@ -185,6 +328,18 @@ export interface BroadsheetPlugin {
 	 * is picked up on every render.
 	 */
 	flows?: PluginFlowStep[];
+	/**
+	 * 0.9.3: block types this plugin contributes. Each declared
+	 * block becomes lookup-able via core's `blockRenderer(type)` AND
+	 * (when `suggestRecipes` is provided) shows up as recipe(s) in
+	 * the things-first browser. Block type ids MUST be plugin-id-
+	 * prefixed (`tmdb-tv:rows`) to avoid collisions with core block
+	 * types and with other plugins' contributions.
+	 *
+	 * Additive + optional — plugins that don't contribute blocks
+	 * leave this undefined; the FROZEN-at-v0.1 contract is preserved.
+	 */
+	extraBlocks?: PluginBlockContribution[];
 }
 
 /**

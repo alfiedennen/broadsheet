@@ -330,6 +330,41 @@ export interface MacroBlockConfig {
 	steps: MacroStep[];
 }
 
+/* ── 0.9.3 area-panel composites ─────────────────────────────────── */
+
+/**
+ * Per-area lights panel. Takes an `areaId` and renders one toggle
+ * per light in that area at render-time. One block per panel,
+ * grows + shrinks with the area's light list.
+ */
+export interface AreaLightsPanelBlockConfig {
+	/** The area_id this panel surfaces lights from. */
+	areaId: string;
+	/** Optional inline section label rendered as an OutLine above the grid. */
+	label?: string | null;
+}
+
+/**
+ * Per-area heating (climate / TRV) panel. Takes an `areaId` and
+ * renders one climate tile per TRV in that area at render-time.
+ * Tap-expand surfaces a setpoint slider.
+ */
+export interface AreaClimatePanelBlockConfig {
+	areaId: string;
+	label?: string | null;
+}
+
+/**
+ * Per-area media panel. Renders the area's TVs (widget=media-tv) +
+ * speakers (widget=media-speaker) together as a single block. Adapts
+ * to the device mix: if the area has only speakers, the panel
+ * collapses to a speaker grid; only TVs → remote grid; both → mixed.
+ */
+export interface AreaMediaPanelBlockConfig {
+	areaId: string;
+	label?: string | null;
+}
+
 /* ── BlockDef discriminated union ────────────────────────────────── */
 
 /**
@@ -354,7 +389,10 @@ export type BlockDef =
 	| { type: 'action-grid'; config: ActionGridBlockConfig }
 	| { type: 'sparkline'; config: SparklineBlockConfig }
 	| { type: 'thing'; config: ThingBlockConfig }
-	| { type: 'macro'; config: MacroBlockConfig };
+	| { type: 'macro'; config: MacroBlockConfig }
+	| { type: 'area-lights-panel'; config: AreaLightsPanelBlockConfig }
+	| { type: 'area-climate-panel'; config: AreaClimatePanelBlockConfig }
+	| { type: 'area-media-panel'; config: AreaMediaPanelBlockConfig };
 
 /** Just the type discriminator — useful for builder UI listings. */
 export type BlockType = BlockDef['type'];
@@ -501,5 +539,11 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 				type: 'macro',
 				config: { label: 'New macro', steps: [] }
 			};
+		case 'area-lights-panel':
+			return { type: 'area-lights-panel', config: { areaId: '' } };
+		case 'area-climate-panel':
+			return { type: 'area-climate-panel', config: { areaId: '' } };
+		case 'area-media-panel':
+			return { type: 'area-media-panel', config: { areaId: '' } };
 	}
 }

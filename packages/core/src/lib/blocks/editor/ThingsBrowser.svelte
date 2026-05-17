@@ -20,6 +20,7 @@
 	 */
 
 	import { discovery } from '$lib/discovery';
+	import { pluginLoader } from '$lib/plugins/loader.svelte';
 	import {
 		buildBrowserTree,
 		filterBrowserTree,
@@ -44,7 +45,14 @@
 
 	let query = $state('');
 
-	const tree = $derived(buildBrowserTree(discovery.areas));
+	// 0.9.3: feed plugin block contributions into the tree builder so
+	// active plugins' suggestRecipes() can surface recipes per area
+	// (or in cross-area buckets). pluginLoader.activePluginBlocks is
+	// $derived on the registry, so this re-runs when a plugin is
+	// enabled / disabled.
+	const tree = $derived(
+		buildBrowserTree(discovery.areas, pluginLoader.activePluginBlocks)
+	);
 	const filtered = $derived(filterBrowserTree(tree, query));
 	const totalRecipes = $derived(countRecipes(tree));
 

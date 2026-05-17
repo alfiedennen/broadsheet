@@ -20,21 +20,57 @@
  * LazyComponent thunks — code-split, fetched only when used.
  */
 
-import type { BroadsheetPlugin } from '@broadsheet/core';
+import type { BroadsheetPlugin, PluginRecipeSuggestion } from '@broadsheet/core';
 
 export const plugin: BroadsheetPlugin = {
 	id: 'tmdb-tv',
-	version: '0.1.0',
+	version: '0.2.0',
 	displayName: 'TMDB Content',
 	description:
-		'Trending + New content rows on the /tv page, from TMDB. Needs a free TMDB API key.',
+		'Trending + New content rows from TMDB. Lives on /tv by default; can also be dropped on any wall surface as a block (0.9.3). Needs a free TMDB API key.',
 
 	// The renderer core's /tv page opts into via
-	// useRenderer('tmdb-content-rows'). No `pages` — tmdb-tv adds no
-	// route of its own; it lives inside an existing core page.
+	// useRenderer('tmdb-content-rows'). Continues to power /tv.
 	renderers: {
 		'tmdb-content-rows': () => import('./renderers/ContentRows.svelte')
 	},
+
+	// 0.9.3: TMDB rows as a droppable block on any wall surface. The
+	// things-first browser surfaces ONE recipe per area that has TVs
+	// — "<area> TV — TMDB show & movie rows" — slotted into that
+	// area's `tvs` sub-group right next to the per-TV recipes.
+	extraBlocks: [
+		{
+			type: 'tmdb-tv:rows',
+			label: 'TMDB rows',
+			description:
+				'Trending + new shows / movies from TMDB. Reads the same API key as /tv. Drop alongside a TV remote for "browse + play" together.',
+			defaultConfig: {
+				// Empty = use the curation.integrations.tmdb defaults
+				// (matches the /tv page behaviour). Authors can override
+				// per placement via the block editor.
+				trendingWindows: [],
+				newReleasesWindowDays: []
+			},
+			renderer: () => import('./renderers/RowsBlock.svelte'),
+			suggestRecipes: (discovery) => {
+				const out: PluginRecipeSuggestion[] = [];
+				for (const area of discovery.areas) {
+					if (area.tvs.length === 0) continue;
+					out.push({
+						id: `tmdb-tv:rows:${area.id}`,
+						title: `${area.name} TV — TMDB show & movie rows`,
+						description: 'Trending + new releases inline; same source as /tv',
+						icon: 'mdi:movie-open-star',
+						placement: { kind: 'area', areaId: area.id, subGroup: 'tvs' },
+						config: { trendingWindows: [], newReleasesWindowDays: [] },
+						referencedEntityIds: area.tvs.map((tv) => tv.id)
+					});
+				}
+				return out;
+			}
+		}
+	],
 
 	// Where the user's TMDB API key + region go in. Binds
 	// integrations.tmdb.* — the same curation fields /tv reads.

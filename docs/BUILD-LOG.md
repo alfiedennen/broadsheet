@@ -3019,8 +3019,130 @@ should not pre-compose.
 - production build: clean.
 
 **Deferred** (per the locked plan): the 0.9.3 row + grid + Lovelace
-import work at `docs/plans/plan-9.3-lovelace-import-layout.md`.
+import work at `docs/plans/plan-9.4-lovelace-import-layout.md`
+(reslotted from 0.9.3 after 0.9.2 dogfood surfaced this work as
+a higher priority).
 
 Plan: `docs/plans/plan-9.2-browser-accomplishments.md` (full
 recipe enumeration + sequenced impl plan, locked then marked
 IMPLEMENTED with file inventory).
+
+## 2026-05-17 — 0.9.3 — composite area-panels + inline plugin blocks
+
+Same-day dogfood of 0.9.2 against the live HA install surfaced two
+related misses. User feedback:
+
+> Really good, the only thing missing would be to add any components
+> already built. For example I don't really want an on button for
+> the tv, I want the remote. If I want the remote, I might also want
+> to add the TMDB component. If I want to add all lights in a room,
+> I want a component if it exists, not a bunch of single bulbs, etc.
+
+Same shape as 0.9.0 → 0.9.1 and 0.9.1 → 0.9.2 — one layer in each
+time, the surface keeps reflecting broadsheet's internal mental
+model when the user thinks in something coarser. 0.9.3 fixes the
+two specific shapes:
+
+1. **"Panel" recipes were dropping atoms.** 0.9.2's "Living Room
+   lights — panel" emitted `outline + N thing blocks` — the user
+   had to delete N tiles to remove a panel, and the panel didn't
+   grow when they added a 5th light to the area. The right shape is
+   ONE block that internally enumerates entities at render-time.
+2. **Plugin renderers were page-bound.** TMDB rows lived at `/tv`;
+   no way to drop them on the same wall surface as a TV remote,
+   even though every piece needed already existed.
+
+Both fixes are additive. Old pages keep rendering; the contract is
+preserved.
+
+### A. Composite area-panel blocks (core)
+
+Three new core block types — `area-lights-panel`,
+`area-climate-panel`, `area-media-panel`. Each takes just an
+`areaId` and renders an inline grid of one widget per entity in
+that area, at render-time. One block, one drop, one remove, one
+undo. Grows + shrinks with discovery:
+
+| Block type | Renders | Recipe verb |
+|---|---|---|
+| `area-lights-panel` | One toggle per light in the area | `<area> lights — panel` |
+| `area-climate-panel` | One climate tile per TRV in the area | `<area> heating — panel` |
+| `area-media-panel` | TV remote(s) + speaker(s), correct widget per device | `<area> media — panel` |
+
+The 0.9.2 "panel" recipe now emits ONE composite block instead of
+the section + N atoms. Two NEW recipes: `<area> heating — panel`
+(missing from 0.9.2) and `<area> media — panel` (only emitted when
+the area has ≥ 2 media devices OR mixed TV + speaker — single-TV
+areas keep the more-useful per-TV recipes uncluttered).
+
+### B. Plugin block contributions (contract extension)
+
+One new optional field on the FROZEN-at-v0.1 `BroadsheetPlugin`
+contract: `extraBlocks?: PluginBlockContribution[]`. Each
+contribution declares a colon-prefixed block type id
+(`tmdb-tv:rows`, `emanations:painting`), a lazy renderer thunk, a
+default config + label + description (for the legacy advanced
+picker), and an optional `suggestRecipes(discovery)` that surfaces
+the block as one or more recipes in the things-first browser at
+specific sub-group placements.
+
+The block registry's `blockRenderer(type)` now consults
+`pluginLoader.activePluginBlocks` after the static core REGISTRY;
+unknown types render a "missing renderer" placeholder rather than
+crashing (a plugin disabled after authoring still leaves the page
+viewable). `ThingsBrowser.svelte` feeds `activePluginBlocks` into
+`buildBrowserTree`, which calls each contribution's
+`suggestRecipes` and slots returned suggestions into the right
+per-area sub-group or cross-area bucket (lazy-creating a
+`Components` bucket if a plugin lands there). A misbehaving plugin
+that throws inside `suggestRecipes` is caught with a `console.warn`
+— the rest of the browser still builds.
+
+**The plugin-block host context.** Plugin block renderers can't
+runtime-import `@broadsheet/core` (the contract forbids it; runtime
+back-imports would close the execution cycle). They need curation +
+discovery to render correctly. Solution: core's `RenderedPage`
+publishes a `PluginBlockHostContext` via Svelte's `setContext` at
+a stable string key `PLUGIN_BLOCK_HOST_CONTEXT_KEY =
+'broadsheet:plugin-block-host'`. Plugin block renderers read it via
+`getContext`. The host object is GETTER-shaped, so Svelte 5
+reactivity flows through every access — the block re-renders when
+curation or discovery updates. Type imports are compile-time only
+and erased at runtime; the cycle never closes.
+
+**Proof contribution: `@broadsheet/tmdb-tv`** (bumped to 0.2.0).
+Declares one `extraBlocks` entry (`tmdb-tv:rows`) whose
+`suggestRecipes` walks the discovery snapshot and returns one
+recipe per area with TVs:
+
+```
+▼ Living Room
+   …
+   ├─ TV ──────────────────────────────────
+   │  ▸ Living Room media — panel
+   │  ▸ Living Room TV — full remote
+   │  ▸ Living Room TV — TMDB show & movie rows  ← NEW (plugin)
+   │  ▸ Living Room TV — power toggle
+   │  …
+```
+
+New `RowsBlock.svelte` wraps the existing `ContentRows.svelte`
+renderer, reads `curation.integrations.tmdb` via the host context.
+No runtime core import — types only. The `/tv` page continues to
+work unchanged.
+
+**Ship-readiness** all green:
+- svelte-check: 0 errors, 0 warnings across 517 files.
+- vitest: 306 tests pass (+14 new across `things-browser.spec.ts`
+  + `blocks.spec.ts` covering panel-composites + plugin recipe
+  slotting + lazy cross-area bucket creation + misbehaving-plugin
+  graceful handling + missing-placement graceful drop).
+- production build: clean.
+
+**Deferred** (per the locked plan): `row` + `grid` primitives + the
+Lovelace import landing-in-things-first work. Spec at
+`docs/plans/plan-9.4-lovelace-import-layout.md`.
+
+Plan: `docs/plans/plan-9.3-composites-and-plugin-blocks.md`
+(full recipe enumeration + sequenced impl plan, locked then
+marked IMPLEMENTED with file inventory).

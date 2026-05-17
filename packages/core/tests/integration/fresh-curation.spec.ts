@@ -48,11 +48,11 @@ describe('fresh-curation smoke — preset picker', () => {
 });
 
 describe('fresh-curation smoke — block picker', () => {
-	it('offers all 13 primitive types', () => {
+	it('offers all 16 primitive types', () => {
 		// Hard-coded count — if a primitive is added or removed this
 		// reminds the maintainer to update the dogfood expectations too.
-		// 11 pre-0.9.1 primitives + thing + macro (0.9.1) = 13.
-		expect(ALL_BLOCK_TYPES).toHaveLength(13);
+		// 11 pre-0.9.1 + thing + macro (0.9.1) + 3 area-panels (0.9.3) = 16.
+		expect(ALL_BLOCK_TYPES).toHaveLength(16);
 	});
 
 	it('includes Action grid + Entity list + Sparkline', () => {

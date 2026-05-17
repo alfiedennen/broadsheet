@@ -22,10 +22,42 @@
 	 *   - Renderer throws on mount → Svelte error boundary catches it;
 	 *     the rest of the page still renders.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, setContext } from 'svelte';
 	import { blockRenderer } from './registry';
 	import type { BlockDef, CustomPageDef } from './types';
 	import type { Component } from 'svelte';
+	import { curationStore } from '$lib/curation/store.svelte';
+	import { discovery } from '$lib/discovery';
+	import {
+		PLUGIN_BLOCK_HOST_CONTEXT_KEY,
+		type PluginBlockHostContext
+	} from '$lib/plugins/types';
+
+	/*
+	 * 0.9.3 — plugin-block host context.
+	 *
+	 * Plugin-contributed block renderers can't runtime-import core
+	 * (the plugin contract forbids it). They get curation + discovery
+	 * via Svelte context — core publishes here, plugin reads via
+	 * `getContext(PLUGIN_BLOCK_HOST_CONTEXT_KEY)`.
+	 *
+	 * The host object is GETTER-shaped: every access re-reads the
+	 * underlying $state, so the plugin block re-renders when curation
+	 * or discovery updates.
+	 */
+	const hostContext: PluginBlockHostContext = {
+		get curation() {
+			return curationStore.current as unknown as Record<string, unknown>;
+		},
+		get discovery() {
+			return {
+				floors: discovery.floors,
+				areas: discovery.areas,
+				persons: discovery.persons
+			};
+		}
+	};
+	setContext(PLUGIN_BLOCK_HOST_CONTEXT_KEY, hostContext);
 
 	let {
 		blocks,

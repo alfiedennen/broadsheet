@@ -7,16 +7,29 @@
  * so editors / authors get fast-loading customised pages without
  * shipping every block's CSS to every install.
  *
- * Adding a block type:
+ * Two tiers of lookup as of 0.9.3:
+ *   - CORE_REGISTRY: the static map of core-shipped block types
+ *   - pluginLoader.activePluginBlocks: block types contributed by
+ *     active plugins (via `extraBlocks` on the plugin contract)
+ *
+ * `blockRenderer(type)` checks core first, falls through to plugin
+ * blocks. Plugin block types are colon-prefixed (`tmdb-tv:rows`) so
+ * they can never collide with core types.
+ *
+ * Adding a CORE block type:
  *   1. Add the variant to `BlockDef` in ./types.ts
  *   2. Write the renderer (a Svelte component that takes
  *      `{ config }` props matching the block's config shape)
  *   3. Add a thunk here keyed by the block's `type`
  *   4. (Phase 2) Register an editor stub for the builder UI
+ *
+ * Adding a PLUGIN block type: declare it on the plugin's
+ * `extraBlocks` array — no edits to this file required.
  */
 
 import type { Component } from 'svelte';
 import type { BlockType } from './types';
+import { pluginLoader } from '$lib/plugins/loader.svelte';
 
 /**
  * A lazy thunk returning a Svelte component module — same shape the
@@ -25,7 +38,7 @@ import type { BlockType } from './types';
  */
 export type BlockRendererThunk = () => Promise<{ default: Component<{ config: never }> }>;
 
-const REGISTRY: Record<BlockType, BlockRendererThunk> = {
+const CORE_REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	hero: () =>
 		import('./renderers/HeroBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	markdown: () =>
@@ -51,20 +64,39 @@ const REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	thing: () =>
 		import('./renderers/ThingBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	macro: () =>
-		import('./renderers/MacroBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
+		import('./renderers/MacroBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	'area-lights-panel': () =>
+		import(
+			'./renderers/AreaLightsPanelBlockRenderer.svelte'
+		) as unknown as ReturnType<BlockRendererThunk>,
+	'area-climate-panel': () =>
+		import(
+			'./renderers/AreaClimatePanelBlockRenderer.svelte'
+		) as unknown as ReturnType<BlockRendererThunk>,
+	'area-media-panel': () =>
+		import(
+			'./renderers/AreaMediaPanelBlockRenderer.svelte'
+		) as unknown as ReturnType<BlockRendererThunk>
 };
 
-/** Look up a renderer thunk for a block type. Throws on unknown type. */
-export function blockRenderer(type: BlockType): BlockRendererThunk {
-	const thunk = REGISTRY[type];
-	if (!thunk) {
-		throw new Error(`No renderer registered for block type "${type}"`);
-	}
-	return thunk;
+/**
+ * Look up a renderer thunk for a block type. Checks core first,
+ * falls through to plugin-contributed block types from active
+ * plugins. Throws if nothing matches — surface this as a "missing
+ * renderer" message in the page renderer rather than crashing the
+ * page; an unknown type usually means a plugin was disabled after
+ * authoring a page that used its blocks.
+ */
+export function blockRenderer(type: string): BlockRendererThunk {
+	const core = (CORE_REGISTRY as Record<string, BlockRendererThunk>)[type];
+	if (core) return core;
+	const plugin = pluginLoader.pluginBlockByType(type);
+	if (plugin) return plugin.renderer as BlockRendererThunk;
+	throw new Error(`No renderer registered for block type "${type}"`);
 }
 
-/** Every registered block type — for builder UI listings. */
-export const ALL_BLOCK_TYPES: BlockType[] = Object.keys(REGISTRY) as BlockType[];
+/** Every CORE registered block type — for the legacy builder picker. */
+export const ALL_BLOCK_TYPES: BlockType[] = Object.keys(CORE_REGISTRY) as BlockType[];
 
 /**
  * Human-readable label + short description for each block type.
@@ -131,5 +163,20 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 		label: 'Macro',
 		description:
 			'0.9.1 composed macro tile — fires N service calls in order when tapped. Built in the macro composer; distinct from the legacy macro-grid block.'
+	},
+	'area-lights-panel': {
+		label: 'Lights panel (per area)',
+		description:
+			'0.9.3 composite — one block, takes an areaId, renders one toggle per light in that area at render-time. Grows + shrinks with discovery (add a new light to the area → it appears in the panel).'
+	},
+	'area-climate-panel': {
+		label: 'Heating panel (per area)',
+		description:
+			'0.9.3 composite — one block, takes an areaId, renders one climate tile per TRV in that area at render-time. Tap-expand for setpoint slider.'
+	},
+	'area-media-panel': {
+		label: 'Media panel (per area)',
+		description:
+			'0.9.3 composite — one block, takes an areaId, renders TV remote(s) + speaker(s) together with the right widget per device. Single drop, single remove.'
 	}
 };

@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { DomainArea, DomainEntity } from '$lib/discovery';
+import type { PluginBlockContribution, PluginRecipeSuggestion } from '$lib/plugins/types';
 import {
 	buildBrowserTree,
 	filterBrowserTree,
@@ -113,17 +114,20 @@ describe('buildBrowserTree — light recipes', () => {
 		expect(titles).toContain('Office Table Lamp');
 	});
 
-	it('panel recipe drops a section divider + N thing blocks in order', () => {
+	it('panel recipe drops a single area-lights-panel composite block (0.9.3 change)', () => {
 		const lr = mkArea('living_room', 'Living Room', {
 			lights: [mkEnt('light.a'), mkEnt('light.b')]
 		});
 		const tree = buildBrowserTree([lr]);
 		const panel = tree[0].subGroups[0].recipes.find((r) => r.title.endsWith('— panel'));
 		expect(panel).toBeDefined();
-		expect(panel!.blocks).toHaveLength(3); // outline + 2 lights
-		expect(panel!.blocks[0].type).toBe('outline');
-		expect(panel!.blocks[1].type).toBe('thing');
-		expect(panel!.blocks[2].type).toBe('thing');
+		// 0.9.2 used to drop outline + N thing blocks. 0.9.3 emits one
+		// composite block whose renderer reads discovery at render time.
+		expect(panel!.blocks).toHaveLength(1);
+		expect(panel!.blocks[0].type).toBe('area-lights-panel');
+		if (panel!.blocks[0].type === 'area-lights-panel') {
+			expect(panel!.blocks[0].config.areaId).toBe('living_room');
+		}
 	});
 
 	it('off recipe drops a single macro block with N turn_off steps', () => {
@@ -370,5 +374,165 @@ describe('filterEntityPicker', () => {
 		expect(filterEntityPicker(picker, 'lr_pendant')[0].items).toHaveLength(1);
 		expect(filterEntityPicker(picker, 'living room')[0].items).toHaveLength(1);
 		expect(filterEntityPicker(picker, 'zzz')).toHaveLength(0);
+	});
+});
+
+/* ── 0.9.3 area-panel composite recipes ────────────────────────── */
+
+describe('buildBrowserTree — 0.9.3 area-panel composites', () => {
+	it('climate panel emits one area-climate-panel block when ≥ 2 TRVs', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			climates: [mkEnt('climate.a'), mkEnt('climate.b')]
+		});
+		const tree = buildBrowserTree([lr]);
+		const heat = tree[0].subGroups.find((sg) => sg.label === 'Heating');
+		const panel = heat!.recipes.find((r) => r.title.endsWith('— panel'));
+		expect(panel).toBeDefined();
+		expect(panel!.blocks).toHaveLength(1);
+		expect(panel!.blocks[0].type).toBe('area-climate-panel');
+	});
+
+	it('media panel emits one area-media-panel block when ≥ 2 media OR mixed TV + speaker', () => {
+		// Mixed TV + speaker
+		const lr = mkArea('living_room', 'Living Room', {
+			tvs: [mkEnt('media_player.tv', 'TV')],
+			media: [mkEnt('media_player.speaker', 'Speaker')]
+		});
+		const tree = buildBrowserTree([lr]);
+		const tvSub = tree[0].subGroups.find((sg) => sg.label === 'TV');
+		const panel = tvSub!.recipes.find((r) => r.title.endsWith('media — panel'));
+		expect(panel).toBeDefined();
+		expect(panel!.blocks[0].type).toBe('area-media-panel');
+		expect(panel!.referencedEntityIds).toEqual(['media_player.tv', 'media_player.speaker']);
+	});
+
+	it('media panel does NOT appear when area has just one TV (and no speakers)', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			tvs: [mkEnt('media_player.lr_tv', 'TV')]
+		});
+		const tree = buildBrowserTree([lr]);
+		const tvSub = tree[0].subGroups.find((sg) => sg.label === 'TV');
+		const panel = tvSub!.recipes.find((r) => r.title.endsWith('media — panel'));
+		expect(panel).toBeUndefined();
+	});
+});
+
+/* ── 0.9.3 plugin recipe walker ────────────────────────────────── */
+
+describe('buildBrowserTree — plugin recipe slotting', () => {
+	function makePluginBlock(
+		type: string,
+		suggest: (areas: DomainArea[]) => PluginRecipeSuggestion[]
+	): PluginBlockContribution {
+		return {
+			type,
+			label: type,
+			description: 'test',
+			defaultConfig: {},
+			renderer: () => Promise.resolve({ default: (() => null) as never }),
+			suggestRecipes: (snapshot) => suggest(snapshot.areas)
+		};
+	}
+
+	it('slots a per-area suggestion into the named sub-group', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			tvs: [mkEnt('media_player.lr_tv', 'TV')]
+		});
+		const tmdb = makePluginBlock('tmdb-tv:rows', (areas) =>
+			areas
+				.filter((a) => a.tvs.length > 0)
+				.map((a) => ({
+					id: `tmdb-tv:rows:${a.id}`,
+					title: `${a.name} TV — TMDB show & movie rows`,
+					placement: { kind: 'area', areaId: a.id, subGroup: 'tvs' as const },
+					config: {},
+					referencedEntityIds: a.tvs.map((tv) => tv.id)
+				}))
+		);
+		const tree = buildBrowserTree([lr], [tmdb]);
+		const tvSub = tree[0].subGroups.find((sg) => sg.label === 'TV');
+		const tmdbRecipe = tvSub!.recipes.find((r) => r.id === 'tmdb-tv:rows:living_room');
+		expect(tmdbRecipe).toBeDefined();
+		expect(tmdbRecipe!.blocks).toHaveLength(1);
+		expect(tmdbRecipe!.blocks[0].type).toBe('tmdb-tv:rows');
+		expect(tmdbRecipe!.referencedEntityIds).toEqual(['media_player.lr_tv']);
+	});
+
+	it('lazy-creates the "components" cross-area bucket when a cross-area suggestion lands', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			lights: [mkEnt('light.a')]
+		});
+		const decorative = makePluginBlock('emanations:painting', () => [
+			{
+				id: 'emanations:painting:home',
+				title: 'House painting',
+				placement: { kind: 'cross-area', bucket: 'components' as const },
+				config: {},
+				referencedEntityIds: []
+			}
+		]);
+		const tree = buildBrowserTree([lr], [decorative]);
+		const components = tree.find((g) => g.id === 'bucket-components');
+		expect(components).toBeDefined();
+		expect(components!.subGroups[0].recipes[0].title).toBe('House painting');
+	});
+
+	it('drops suggestions whose placement target is missing (no error, no crash)', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			lights: [mkEnt('light.a')]
+		});
+		const ghost = makePluginBlock('ghost:tube', () => [
+			{
+				id: 'ghost:tube:nonexistent',
+				title: 'Ghost tube',
+				placement: { kind: 'area', areaId: 'nonexistent', subGroup: 'lights' as const },
+				config: {},
+				referencedEntityIds: []
+			}
+		]);
+		// Should not throw, recipe just doesn't appear anywhere.
+		expect(() => buildBrowserTree([lr], [ghost])).not.toThrow();
+	});
+
+	it('a misbehaving plugin (suggestRecipes throws) does not crash the tree builder', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			lights: [mkEnt('light.a')]
+		});
+		const broken: PluginBlockContribution = {
+			type: 'broken',
+			label: 'broken',
+			description: 'broken',
+			defaultConfig: {},
+			renderer: () => Promise.resolve({ default: (() => null) as never }),
+			suggestRecipes: () => {
+				throw new Error('boom');
+			}
+		};
+		// Silence the console.warn the walker emits for the broken
+		// plugin so the test output stays clean.
+		const orig = console.warn;
+		console.warn = () => {};
+		try {
+			expect(() => buildBrowserTree([lr], [broken])).not.toThrow();
+		} finally {
+			console.warn = orig;
+		}
+	});
+
+	it('omitted suggestRecipes is fine (plugin block placeable via advanced mode only)', () => {
+		const lr = mkArea('living_room', 'Living Room', {
+			lights: [mkEnt('light.a')]
+		});
+		const noSuggest: PluginBlockContribution = {
+			type: 'quiet',
+			label: 'quiet',
+			description: 'no recipe suggestions',
+			defaultConfig: {},
+			renderer: () => Promise.resolve({ default: (() => null) as never })
+		};
+		const tree = buildBrowserTree([lr], [noSuggest]);
+		// Tree built normally; no extra recipes from the plugin.
+		const allRecipes = tree.flatMap((g) => g.subGroups.flatMap((sg) => sg.recipes));
+		expect(allRecipes.every((r) => !r.id.startsWith('quiet:'))).toBe(true);
 	});
 });

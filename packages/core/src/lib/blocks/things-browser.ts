@@ -41,6 +41,12 @@
 
 import type { DomainArea, DomainEntity } from '$lib/discovery';
 import type { BlockDef, MacroStep } from '$lib/blocks/types';
+import type {
+	PluginBlockContribution,
+	PluginRecipePlacement,
+	PluginRecipeSuggestion,
+	PluginDiscoverySnapshot
+} from '$lib/plugins/types';
 
 /* ── Types ──────────────────────────────────────────────────────── */
 
@@ -92,20 +98,18 @@ function lightSubGroup(area: DomainArea): BrowserSubGroup | null {
 	const ids = area.lights.map((l) => l.id);
 
 	if (area.lights.length >= 2) {
-		// Composed: panel — section divider + 1 thing per light.
+		// Composed: panel — 0.9.3 emits ONE composite block that reads
+		// `discovery.byAreaId(areaId)` at render time. Grows + shrinks
+		// when lights are added or removed from the area in HA. (0.9.2
+		// emitted outline + N thing blocks; that flat-atom form is
+		// still placeable via the atomic recipes below.)
 		recipes.push({
 			id: `${area.id}/lights/panel`,
 			title: `${area.name} lights — panel`,
-			description: `Section header + one tile per light (${area.lights.length} lights)`,
+			description: `One block, one toggle per light (${area.lights.length} lights, grows automatically)`,
 			icon: 'mdi:lightbulb-group',
 			blocks: [
-				{ type: 'outline', config: { label: `${area.name} lights` } },
-				...area.lights.map(
-					(l): BlockDef => ({
-						type: 'thing',
-						config: { entityId: l.id, widget: 'auto' }
-					})
-				)
+				{ type: 'area-lights-panel', config: { areaId: area.id } }
 			],
 			referencedEntityIds: ids
 		});
@@ -185,6 +189,25 @@ function lightSubGroup(area: DomainArea): BrowserSubGroup | null {
 function tvSubGroup(area: DomainArea): BrowserSubGroup | null {
 	if (area.tvs.length === 0) return null;
 	const recipes: AccomplishmentRecipe[] = [];
+
+	// Composed media panel (TV + speakers together) — only when the
+	// area has > 1 media device OR mixed TVs + speakers. A single-TV
+	// area gets the more detailed per-TV recipes below without the
+	// extra panel-tile clutter.
+	const totalMedia = area.tvs.length + area.media.length;
+	const isMixed = area.tvs.length > 0 && area.media.length > 0;
+	if (totalMedia >= 2 || isMixed) {
+		const allMediaIds = [...area.tvs.map((t) => t.id), ...area.media.map((m) => m.id)];
+		recipes.push({
+			id: `${area.id}/tvs/panel`,
+			title: `${area.name} media — panel`,
+			description: `One block, TV remote${area.tvs.length === 1 ? '' : 's'} + speaker${area.media.length === 1 ? '' : 's'} together`,
+			icon: 'mdi:multimedia',
+			blocks: [{ type: 'area-media-panel', config: { areaId: area.id } }],
+			referencedEntityIds: allMediaIds
+		});
+	}
+
 	for (const tv of area.tvs) {
 		recipes.push(
 			{
@@ -360,6 +383,16 @@ function climateSubGroup(area: DomainArea): BrowserSubGroup | null {
 	const ids = area.climates.map((c) => c.id);
 
 	if (area.climates.length >= 2) {
+		// Composed: panel — one block, one climate tile per TRV. Grows
+		// + shrinks with discovery.
+		recipes.push({
+			id: `${area.id}/climate/panel`,
+			title: `${area.name} heating — panel`,
+			description: `One block, one tile per TRV (${area.climates.length} TRVs, grows automatically)`,
+			icon: 'mdi:radiator-fan',
+			blocks: [{ type: 'area-climate-panel', config: { areaId: area.id } }],
+			referencedEntityIds: ids
+		});
 		// Composed: boost-to-21 (matches the existing `boost-row` block's
 		// canonical default; same one-tap heat-up macro the user runs all
 		// winter).
@@ -639,12 +672,100 @@ const PER_AREA_SUBGROUP_BUILDERS: Array<
 ];
 
 /**
+ * 0.9.3: lift a `PluginRecipeSuggestion` (decoupled, plugin-side
+ * shape) into a full `AccomplishmentRecipe` ready to slot into the
+ * browser tree. The lifted recipe carries ONE block of the plugin's
+ * contributed type, configured with the suggestion's `config`.
+ */
+function liftPluginSuggestion(
+	contribution: PluginBlockContribution,
+	suggestion: PluginRecipeSuggestion
+): AccomplishmentRecipe {
+	return {
+		id: suggestion.id,
+		title: suggestion.title,
+		description: suggestion.description,
+		icon: suggestion.icon,
+		blocks: [
+			// The block carries the plugin-contributed type id. Block
+			// registry looks this up via pluginLoader.activePluginBlocks
+			// at render time; an unknown type (plugin disabled after the
+			// page was saved) renders a "missing renderer" placeholder
+			// instead of crashing.
+			{
+				type: contribution.type,
+				config: suggestion.config
+			} as BlockDef
+		],
+		referencedEntityIds: suggestion.referencedEntityIds
+	};
+}
+
+/**
+ * 0.9.3: slot a lifted plugin recipe into the right sub-group of a
+ * group tree, based on the suggestion's `placement`. Mutates `tree`
+ * in place. Returns true iff a slot was found and the recipe landed;
+ * false means the placement target wasn't present in the tree (e.g.
+ * a per-area suggestion for an area the user doesn't have) and the
+ * recipe was dropped on the floor with no error.
+ */
+function slotPluginRecipe(
+	tree: BrowserGroup[],
+	placement: PluginRecipePlacement,
+	recipe: AccomplishmentRecipe
+): boolean {
+	if (placement.kind === 'area') {
+		const groupId = `area-${placement.areaId}`;
+		const group = tree.find((g) => g.id === groupId);
+		if (!group) return false;
+		// Sub-group ids are `${areaId}/${slug}`; resolve the matching slug.
+		const sgId = `${placement.areaId}/${placement.subGroup}`;
+		const sg = group.subGroups.find((s) => s.id === sgId);
+		if (!sg) return false;
+		sg.recipes.push(recipe);
+		return true;
+	}
+	// Cross-area
+	const bucketId = `bucket-${placement.bucket}`;
+	let group = tree.find((g) => g.id === bucketId);
+	if (!group) {
+		// Lazy-create the bucket — 'components' is the canonical home
+		// for plugin recipes that don't fit any natural cross-area
+		// category. Same default-collapsed behaviour as the other
+		// cross-area buckets.
+		const label = placement.bucket === 'components'
+			? 'Components'
+			: placement.bucket.charAt(0).toUpperCase() + placement.bucket.slice(1);
+		group = {
+			id: bucketId,
+			label,
+			defaultCollapsed: placement.bucket !== 'scenes',
+			subGroups: [{ id: `${bucketId}/all`, label, recipes: [] }]
+		};
+		tree.push(group);
+	}
+	const sg = group.subGroups[0];
+	sg.recipes.push(recipe);
+	return true;
+}
+
+/**
  * Build the things-browser tree from discovery's areas. Per-area
  * groups come first (sorted by area name; unsorted area last,
  * default-collapsed). Cross-area buckets follow (scenes / scripts /
  * automations / status / other).
+ *
+ * 0.9.3 extension: `pluginBlocks` (optional) is a list of plugin
+ * block contributions from active plugins. For each contribution
+ * with a `suggestRecipes`, the returned suggestions are lifted into
+ * `AccomplishmentRecipe`s and slotted into the right per-area sub-
+ * group (or cross-area bucket). Omitted → no plugin recipes (used
+ * by tests + by surfaces that don't want plugin contributions).
  */
-export function buildBrowserTree(areas: DomainArea[]): BrowserGroup[] {
+export function buildBrowserTree(
+	areas: DomainArea[],
+	pluginBlocks: PluginBlockContribution[] = []
+): BrowserGroup[] {
 	const groups: BrowserGroup[] = [];
 
 	// Per-area pass.
@@ -724,6 +845,38 @@ export function buildBrowserTree(areas: DomainArea[]): BrowserGroup[] {
 			defaultCollapsed: def.key !== 'scenes',
 			subGroups: [{ id: `bucket-${def.key}/all`, label: def.label, recipes: sorted }]
 		});
+	}
+
+	/* ── 0.9.3: plugin recipe walk ─────────────────────────────────
+	 * For each plugin block contribution with a `suggestRecipes`
+	 * hook, call it against the discovery snapshot + slot returned
+	 * suggestions into the right sub-group. Cross-area `components`
+	 * bucket is lazily created if any suggestion lands there.
+	 */
+	if (pluginBlocks.length > 0) {
+		const snapshot: PluginDiscoverySnapshot = {
+			floors: [],
+			areas,
+			persons: []
+		};
+		for (const contribution of pluginBlocks) {
+			if (!contribution.suggestRecipes) continue;
+			let suggestions: PluginRecipeSuggestion[] = [];
+			try {
+				suggestions = contribution.suggestRecipes(snapshot);
+			} catch (err) {
+				// A misbehaving plugin shouldn't crash the browser.
+				console.warn(
+					`[things-browser] plugin ${contribution.type} suggestRecipes() threw — dropping`,
+					err
+				);
+				continue;
+			}
+			for (const s of suggestions) {
+				const recipe = liftPluginSuggestion(contribution, s);
+				slotPluginRecipe(groups, s.placement, recipe);
+			}
+		}
 	}
 
 	return groups;

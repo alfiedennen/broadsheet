@@ -26,7 +26,11 @@ describe('block registry coverage', () => {
 			'sparkline',
 			// 0.9.1 things-first primitives
 			'thing',
-			'macro'
+			'macro',
+			// 0.9.3 area-panel composites
+			'area-lights-panel',
+			'area-climate-panel',
+			'area-media-panel'
 		];
 		// Same set, order-insensitive
 		expect(ALL_BLOCK_TYPES.slice().sort()).toEqual(expected.slice().sort());
@@ -56,7 +60,11 @@ describe('defaultBlockConfig — every type returns a valid block', () => {
 		'sparkline',
 		// 0.9.1 things-first primitives
 		'thing',
-		'macro'
+		'macro',
+		// 0.9.3 area-panel composites
+		'area-lights-panel',
+		'area-climate-panel',
+		'area-media-panel'
 	] as const) {
 		it(`${type} returns a block with matching type discriminator`, () => {
 			const block = defaultBlockConfig(type);
@@ -155,5 +163,22 @@ describe('defaultBlockConfig — type-specific invariants', () => {
 			expect(Array.isArray(b.config.steps)).toBe(true);
 			expect(b.config.steps).toHaveLength(0);
 		}
+	});
+
+	// 0.9.3 area-panel composites — empty areaId is the deliberate
+	// default; the things-first browser's panel recipe fills it in
+	// at recipe-generation time, but blocks added via the advanced
+	// picker need the author to type the areaId.
+	it('area-lights-panel starter has empty areaId', () => {
+		const b = defaultBlockConfig('area-lights-panel');
+		if (b.type === 'area-lights-panel') expect(b.config.areaId).toBe('');
+	});
+	it('area-climate-panel starter has empty areaId', () => {
+		const b = defaultBlockConfig('area-climate-panel');
+		if (b.type === 'area-climate-panel') expect(b.config.areaId).toBe('');
+	});
+	it('area-media-panel starter has empty areaId', () => {
+		const b = defaultBlockConfig('area-media-panel');
+		if (b.type === 'area-media-panel') expect(b.config.areaId).toBe('');
 	});
 });

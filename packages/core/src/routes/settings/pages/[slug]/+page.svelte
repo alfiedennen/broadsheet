@@ -1559,6 +1559,12 @@
 				const n = block.config.steps.length;
 				return `${block.config.label} — ${n} step${n === 1 ? '' : 's'}`;
 			}
+			case 'area-lights-panel':
+				return `Lights panel — area ${block.config.areaId || '(unset)'}`;
+			case 'area-climate-panel':
+				return `Heating panel — area ${block.config.areaId || '(unset)'}`;
+			case 'area-media-panel':
+				return `Media panel — area ${block.config.areaId || '(unset)'}`;
 		}
 	}
 </script>
