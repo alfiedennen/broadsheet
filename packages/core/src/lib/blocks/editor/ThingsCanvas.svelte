@@ -275,8 +275,45 @@
 
 	function isThingsFirstNative(t: BlockDef['type']): boolean {
 		// Block types the things-first editor has inline editors for.
-		// Others get a "switch to advanced to edit" hint.
-		return t === 'thing' || t === 'macro' || t === 'outline';
+		// Others get a "switch to advanced to edit" hint. 0.9.3.2
+		// added the 3 area-panel composites.
+		return (
+			t === 'thing' ||
+			t === 'macro' ||
+			t === 'outline' ||
+			t === 'area-lights-panel' ||
+			t === 'area-climate-panel' ||
+			t === 'area-media-panel'
+		);
+	}
+
+	/**
+	 * 0.9.3.2 — area panels share an editor shape: pick the area +
+	 * (optional) label override. The renderers read `discovery.byAreaId`
+	 * at render time, so changing the area instantly re-renders the
+	 * panel with the new area's entities.
+	 */
+	function isAreaPanel(
+		t: BlockDef['type']
+	): t is 'area-lights-panel' | 'area-climate-panel' | 'area-media-panel' {
+		return t === 'area-lights-panel' || t === 'area-climate-panel' || t === 'area-media-panel';
+	}
+
+	/** Friendly noun for the panel's empty-state hint. */
+	function panelNoun(t: 'area-lights-panel' | 'area-climate-panel' | 'area-media-panel'): string {
+		if (t === 'area-lights-panel') return 'lights';
+		if (t === 'area-climate-panel') return 'TRVs';
+		return 'media devices';
+	}
+
+	/** Areas eligible for the panel type — filters by which buckets they have. */
+	function eligibleAreas(t: 'area-lights-panel' | 'area-climate-panel' | 'area-media-panel') {
+		return discovery.areas.filter((a) => {
+			if (a.id === '__unsorted__') return false;
+			if (t === 'area-lights-panel') return a.lights.length > 0;
+			if (t === 'area-climate-panel') return a.climates.length > 0;
+			return a.tvs.length + a.media.length > 0;
+		});
 	}
 
 	/* ── Footer "add" actions ──────────────────────────────────────── */
@@ -490,6 +527,67 @@
 												label: (e.target as HTMLInputElement).value
 											})}
 									/>
+								</label>
+							{:else if isAreaPanel(block.type)}
+								{@const cfg = block.config as { areaId: string; label?: string | null }}
+								{@const picked = cfg.areaId ? discovery.byAreaId(cfg.areaId) : null}
+								{@const candidates = eligibleAreas(block.type)}
+								<dl class="thing-readout">
+									<dt>Area</dt>
+									<dd>
+										{#if picked}
+											{picked.name}
+											{#if block.type === 'area-lights-panel'}
+												<span class="muted">— {picked.lights.length} light{picked.lights.length === 1 ? '' : 's'}</span>
+											{:else if block.type === 'area-climate-panel'}
+												<span class="muted">— {picked.climates.length} TRV{picked.climates.length === 1 ? '' : 's'}</span>
+											{:else}
+												<span class="muted">— {picked.tvs.length + picked.media.length} media device{picked.tvs.length + picked.media.length === 1 ? '' : 's'}</span>
+											{/if}
+										{:else if cfg.areaId}
+											<span class="muted">area_id "{cfg.areaId}" — not found in discovery</span>
+										{:else}
+											<span class="muted">(none picked yet)</span>
+										{/if}
+									</dd>
+								</dl>
+								<label class="field">
+									<span class="field-label">Area</span>
+									<select
+										class="field-input"
+										value={cfg.areaId}
+										onchange={(e) =>
+											onPatchBlock(i, {
+												areaId: (e.target as HTMLSelectElement).value
+											})}
+									>
+										<option value="">— pick an area —</option>
+										{#each candidates as area (area.id)}
+											<option value={area.id}>{area.name}</option>
+										{/each}
+									</select>
+									<span class="field-hint">
+										Only areas with {panelNoun(block.type)} are listed.
+										The panel renders one tile per {panelNoun(block.type)}
+										in the chosen area, growing + shrinking with discovery.
+									</span>
+								</label>
+								<label class="field">
+									<span class="field-label">Label override</span>
+									<input
+										type="text"
+										class="field-input"
+										value={cfg.label ?? ''}
+										placeholder={picked ? `${picked.name} ${panelNoun(block.type)}` : ''}
+										oninput={(e) =>
+											onPatchBlock(i, {
+												label: (e.target as HTMLInputElement).value || null
+											})}
+									/>
+									<span class="field-hint">
+										Heads the panel as an OutLine. Leave blank to use the
+										default ("<em>{picked?.name ?? '…'}</em> {panelNoun(block.type)}").
+									</span>
 								</label>
 							{:else if !isThingsFirstNative(block.type)}
 								<p class="non-native-hint">
