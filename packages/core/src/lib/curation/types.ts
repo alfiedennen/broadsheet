@@ -85,6 +85,26 @@ export interface IntegrationsConfig {
 		apiKey?: string | null;
 		region?: string;
 		enabledLenses?: string[];
+		/**
+		 * Theme E — content depth. TMDB watch_providers IDs to filter
+		 * trending + new releases by (e.g. [8, 337] = Netflix + Disney+).
+		 * Region-dependent — UK Netflix is 8, US Netflix is also 8, but
+		 * iPlayer (38) is GB-only etc. Empty / undefined = no filter
+		 * (show everything available in the region).
+		 */
+		providers?: number[];
+		/**
+		 * Theme E — number of days to look back for the "New" row.
+		 * Defaults to 45 (current behaviour). Sensible options: 7
+		 * (this week), 30 (this month), 90 (this quarter), 180
+		 * (this half-year), 365 (this year).
+		 */
+		newReleasesWindowDays?: number;
+		/**
+		 * Theme E — "Trending" window. TMDB natively supports `day`
+		 * (last 24h) and `week` (last 7 days). Defaults to `week`.
+		 */
+		trendingWindow?: 'day' | 'week';
 	};
 	healthConnect?: {
 		platformDetected?: boolean;
@@ -127,6 +147,25 @@ export interface MomentSensorsConfig {
 	primaryElectricityRateSensorId?: string | null;
 }
 
+/**
+ * Theme D — view preferences that change WHAT broadsheet shows but
+ * never WHAT IT MEANS. Distinct from curation overrides (which
+ * mutate semantic state). v0.6 ships one knob — `showPlumbing` —
+ * gating the /settings/devices view between "physical objects
+ * only" (default) and "every device row HA's registry returns".
+ *
+ * Optional + nullable so legacy curation docs without the field
+ * read as defaults; no migration needed.
+ */
+export interface ViewPreferences {
+	/**
+	 * /settings/devices toggle. False / undefined → show only rows
+	 * classifyDevice() flags as 'user-facing'. True → show everything,
+	 * including plumbing.
+	 */
+	showPlumbing?: boolean;
+}
+
 /** The top-level shape of broadsheet.json v1. */
 export interface Curation {
 	version: CurationVersion;
@@ -147,6 +186,8 @@ export interface Curation {
 	customPages: _CustomPageDef[]; // ordered — kebab nav respects array order
 	integrations: IntegrationsConfig;
 	plugins: Record<string, PluginConfig>;
+	/** Theme D — view preferences (additive, optional). */
+	view?: ViewPreferences;
 }
 
 /** Default curation for fresh installs (no overrides). */

@@ -24,30 +24,43 @@
 		return computeAlerts();
 	});
 
+	// Punch-list 0.4.1 → 0.6.0: gate every discovery- or curation-
+	// derived count on `discovery.booted` to suppress the pre-hydration
+	// "0 DISCOVERED" / "0 AREAS, 0 ENTITIES" flash that the 0.4.1 walk
+	// caught. Home tile already does this with "Reading the house…";
+	// the settings cards now follow the same pattern with a quiet "—"
+	// placeholder until the discovery snapshot is real.
 	const sections = [
 		{
 			slug: 'house',
 			label: 'House',
 			tagline: 'Areas + entities. Rename, hide, pin to pages.',
-			count: () => `${discovery.areas.length} areas, ${discovery.rawCounts.entities} entities`
+			count: () =>
+				discovery.booted
+					? `${discovery.areas.length} areas, ${discovery.rawCounts.entities} entities`
+					: '—'
 		},
 		{
 			slug: 'people',
 			label: 'People',
 			tagline: 'Who lives here, and which sensor tracks them.',
-			count: () => `${discovery.persons.length} discovered`
+			count: () => (discovery.booted ? `${discovery.persons.length} discovered` : '—')
 		},
 		{
 			slug: 'voice',
 			label: 'Voice',
 			tagline: 'Override the editorial strings broadsheet uses.',
-			count: () => `${Object.keys(curationStore.current.voice).length} overrides`
+			count: () =>
+				discovery.booted
+					? `${Object.keys(curationStore.current.voice).length} overrides`
+					: '—'
 		},
 		{
 			slug: 'plugins',
 			label: 'Plugins',
 			tagline: 'What ships in the box. Opt in, opt out, see why.',
 			count: () => {
+				if (!discovery.booted) return '—';
 				const enabled = Object.values(curationStore.current.plugins).filter(
 					(p) => p.enabled
 				).length;
@@ -60,6 +73,7 @@
 			tagline:
 				'Compose your own broadsheet pages from typed primitives. Same surface as the core pages, written in the same register.',
 			count: () => {
+				if (!discovery.booted) return '—';
 				const n = (curationStore.current.customPages ?? []).length;
 				return n === 0 ? 'none yet' : `${n} custom page${n === 1 ? '' : 's'}`;
 			}

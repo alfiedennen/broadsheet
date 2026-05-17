@@ -100,6 +100,21 @@ export { default as SettingsRow } from './components/SettingsRow.svelte';
 export { default as InlinePin } from './components/InlinePin.svelte';
 export { wireHashHighlight } from './utils/hashNavigate';
 
+/* ── Theme C — presence-aware routing primitive ──────────────────── */
+// Plugins consume routeTo() to dispatch audio / screen / notification
+// actions to a PERSON rather than a specific media_player / dashboard.
+// The router wraps the unified presence resolver so routing decisions
+// match what the home tile + manifest line see. Spec:
+// .dogfood/V3-PIVOT-TO-V02.md § C.
+export {
+	routeTo,
+	routeToAll,
+	buildRouteContext,
+	type RouteTarget,
+	type RouteContext,
+	type RouteModality
+} from './routing';
+
 /* ── HA connection surface (for plugins that need WS access) ─────── */
 // Most plugins read state via discovery + curation. The @broadsheet/voice
 // substrate needs WS-level access to discover HA's assist_pipeline +

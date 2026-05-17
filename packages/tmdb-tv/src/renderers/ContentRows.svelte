@@ -18,7 +18,22 @@
 	import { createTmdbClient, type TmdbItem } from '../lib/tmdb';
 	import PosterRow from '../components/PosterRow.svelte';
 
-	let { apiKey = null, region = 'GB' }: { apiKey?: string | null; region?: string } = $props();
+	// Theme E — depth knobs flow in as props alongside apiKey + region.
+	// All optional with sensible defaults; the /tv page passes them
+	// through from curation.integrations.tmdb.*.
+	let {
+		apiKey = null,
+		region = 'GB',
+		providers = [],
+		trendingWindow = 'week',
+		newReleasesWindowDays = 45
+	}: {
+		apiKey?: string | null;
+		region?: string;
+		providers?: number[];
+		trendingWindow?: 'day' | 'week';
+		newReleasesWindowDays?: number;
+	} = $props();
 
 	interface RowState {
 		items: TmdbItem[];
@@ -30,15 +45,24 @@
 	let trending = $state<RowState>(fresh());
 	let recent = $state<RowState>(fresh());
 
-	// Fetch whenever the key or region changes. The TMDB client caches
-	// in localStorage (1h TTL), so a re-render with the same inputs is
-	// effectively free.
+	// Fetch whenever the key, region, OR depth knobs change. The TMDB
+	// client caches in localStorage (1h TTL) keyed by region+path+query
+	// so changing providers / window invalidates only the relevant cache
+	// keys, not the whole store.
 	$effect(() => {
 		const key = apiKey;
 		const reg = region || 'GB';
+		// Bind reactive deps so $effect re-runs on changes
+		const provs = providers;
+		const win = trendingWindow;
+		const windowDays = newReleasesWindowDays;
 		if (!key) return;
 
-		const client = createTmdbClient(key, reg);
+		const client = createTmdbClient(key, reg, {
+			providers: provs,
+			trendingWindow: win,
+			newReleasesWindowDays: windowDays
+		});
 		let cancelled = false;
 		trending = fresh();
 		recent = fresh();
@@ -46,7 +70,7 @@
 		const fail = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 		client
-			.trendingThisWeek()
+			.trending()
 			.then((items) => {
 				if (!cancelled) trending = { items, loading: false, error: null };
 			})
@@ -67,6 +91,18 @@
 			cancelled = true;
 		};
 	});
+
+	// Subtitle reflects the active depth knobs so the user knows what
+	// they're looking at. "Trending this week" → "Trending on Netflix +
+	// Disney+ this week" when providers are set.
+	const providerLabels = $derived(providers.length);
+	const trendingSubtitle = $derived(
+		(providerLabels > 0 ? `on ${providerLabels} provider${providerLabels === 1 ? '' : 's'} ` : 'across film + TV ') +
+			`(${trendingWindow === 'day' ? 'today' : 'this week'})`
+	);
+	const newSubtitle = $derived(
+		`released in the last ${newReleasesWindowDays} day${newReleasesWindowDays === 1 ? '' : 's'}`
+	);
 </script>
 
 {#if !apiKey}
@@ -80,15 +116,15 @@
 {:else}
 	<div class="rows">
 		<PosterRow
-			title="Trending this week"
-			subtitle="across film + TV"
+			title={trendingWindow === 'day' ? 'Trending today' : 'Trending this week'}
+			subtitle={trendingSubtitle}
 			items={trending.items}
 			loading={trending.loading}
 			error={trending.error}
 		/>
 		<PosterRow
 			title="New"
-			subtitle="released recently"
+			subtitle={newSubtitle}
 			items={recent.items}
 			loading={recent.loading}
 			error={recent.error}

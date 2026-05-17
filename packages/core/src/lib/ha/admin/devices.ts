@@ -30,6 +30,14 @@ export interface DeviceRecord {
 	identifiers: Array<[string, string]>;
 	sw_version: string | null;
 	hw_version: string | null;
+	/**
+	 * HA's own device-class taxonomy field. When set to `'service'`,
+	 * HA itself marks the device as plumbing (e.g. HACS, Sun, the
+	 * weather integration's per-location "device"). Theme D's
+	 * classifyDevice() reads this first as the highest-confidence
+	 * signal that a row is plumbing rather than a user-facing object.
+	 */
+	entry_type?: 'service' | null;
 }
 
 export async function listDevices(): Promise<DeviceRecord[]> {

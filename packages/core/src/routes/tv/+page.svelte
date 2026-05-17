@@ -243,7 +243,13 @@
 	<OutLine label="Watch" />
 	{#if content.current}
 		{@const ContentRows = content.current}
-		<ContentRows apiKey={tmdb.apiKey ?? null} region={tmdb.region ?? 'GB'} />
+		<ContentRows
+			apiKey={tmdb.apiKey ?? null}
+			region={tmdb.region ?? 'GB'}
+			providers={tmdb.providers ?? []}
+			trendingWindow={tmdb.trendingWindow ?? 'week'}
+			newReleasesWindowDays={tmdb.newReleasesWindowDays ?? 45}
+		/>
 	{:else}
 		<div class="content-slot">
 			<p class="slot-headline"><em>Content browser slot</em></p>

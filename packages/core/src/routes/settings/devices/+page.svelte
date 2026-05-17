@@ -29,6 +29,8 @@
 		type DeviceRecord
 	} from '$lib/ha/admin/devices';
 	import { listConfigEntries, type ConfigEntry } from '$lib/ha/admin/integrations';
+	import { splitByTaxonomy } from '$lib/ha/admin/taxonomy';
+	import { useCurationField } from '$lib/curation/store.svelte';
 
 	let devices = $state<DeviceRecord[]>([]);
 	let entries = $state<ConfigEntry[]>([]);
@@ -36,9 +38,23 @@
 	let busyDevice = $state<string | null>(null);
 	let renameDraft = $state<Record<string, string>>({});
 
+	// Theme D: persistent "show plumbing" toggle.
+	// Default: false (hide plumbing — physical objects only).
+	const showPlumbing = useCurationField<boolean>('view.showPlumbing');
+	const showPlumbingValue = $derived(showPlumbing.value === true);
+
 	const entriesById = $derived(new Map(entries.map((e) => [e.entry_id, e])));
+
+	// Theme D: partition into user-facing vs plumbing once per render.
+	// `visibleDevices` is the subset rendered in the grouped list;
+	// counts feed the summary line below.
+	const taxonomy = $derived(splitByTaxonomy(devices, entriesById));
+	const visibleDevices = $derived(
+		showPlumbingValue ? devices : taxonomy.userFacing
+	);
+
 	const grouped = $derived.by(() => {
-		const byIntegration = devicesByIntegration(devices);
+		const byIntegration = devicesByIntegration(visibleDevices);
 		const groups: StatusGroup<DeviceRecord>[] = [];
 		for (const [entryId, items] of byIntegration) {
 			const entry = entriesById.get(entryId);
@@ -55,14 +71,21 @@
 
 	const summary = $derived.by(() => {
 		if (devices.length === 0) return 'No devices discovered yet.';
-		const integrationCount = new Set(devices.map((d) => d.config_entries[0] ?? '__unknown__')).size;
+		const userCount = taxonomy.userFacing.length;
+		const plumbingCount = taxonomy.plumbing.length;
+		const integrationCount = new Set(
+			visibleDevices.map((d) => d.config_entries[0] ?? '__unknown__')
+		).size;
 		const disabledCount = devices.filter((d) => d.disabled_by).length;
-		const parts = [
-			`${devices.length} ${devices.length === 1 ? 'device' : 'devices'} from ${integrationCount} ${integrationCount === 1 ? 'integration' : 'integrations'}.`
-		];
-		if (disabledCount > 0) parts.push(`${disabledCount} disabled.`);
-		return parts.join(' ');
+		const lead = showPlumbingValue
+			? `${devices.length} ${devices.length === 1 ? 'device' : 'devices'} from ${integrationCount} ${integrationCount === 1 ? 'integration' : 'integrations'} (${plumbingCount} plumbing visible).`
+			: `${userCount} physical ${userCount === 1 ? 'device' : 'devices'} from ${integrationCount} ${integrationCount === 1 ? 'integration' : 'integrations'}. ${plumbingCount} plumbing ${plumbingCount === 1 ? 'row' : 'rows'} hidden.`;
+		return disabledCount > 0 ? `${lead} ${disabledCount} disabled.` : lead;
 	});
+
+	async function togglePlumbing() {
+		showPlumbing.value = !showPlumbingValue;
+	}
 
 	async function refresh() {
 		const [d, e] = await Promise.all([listDevices(), listConfigEntries()]);
@@ -120,6 +143,24 @@
 	{#if loading}
 		<p class="loading">Reading the device registry…</p>
 	{:else}
+		<!-- Theme D: plumbing toggle. Default-off filters HA's
+		     long tail of HACS / energy / service-shaped integrations
+		     out of the list so the page reflects PHYSICAL objects. -->
+		<label class="plumbing-toggle">
+			<input
+				type="checkbox"
+				checked={showPlumbingValue}
+				onchange={togglePlumbing}
+			/>
+			<span class="plumbing-label">
+				Show plumbing
+				<span class="plumbing-hint">
+					— HACS, HA-Core service integrations, weather + energy plumbing.
+					Off by default; flick on when you need to debug an integration.
+				</span>
+			</span>
+		</label>
+
 		<StatusGrouped {summary} groups={grouped}>
 			{#snippet row(item)}
 				{@const d = item as DeviceRecord}
@@ -205,6 +246,51 @@
 		color: var(--fg-muted);
 		text-align: center;
 		padding: var(--space-6);
+	}
+
+	/* Theme D — plumbing toggle row. Subtle, sits above the grouped
+	 * list. Same register as other settings affordances. */
+	.plumbing-toggle {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		margin-bottom: var(--space-4);
+		background: var(--bg-card);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-card);
+		cursor: pointer;
+		transition: border-color var(--ease-quick);
+	}
+
+	.plumbing-toggle:hover {
+		border-color: var(--accent);
+	}
+
+	.plumbing-toggle input[type='checkbox'] {
+		margin-top: 4px;
+		cursor: pointer;
+		accent-color: var(--accent);
+	}
+
+	.plumbing-label {
+		font-family: var(--font-mono);
+		font-size: var(--text-caption);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		color: var(--fg);
+	}
+
+	.plumbing-hint {
+		display: block;
+		margin-top: var(--space-1);
+		font-family: var(--font-body);
+		font-size: var(--text-caption);
+		font-style: italic;
+		color: var(--fg-muted);
+		text-transform: none;
+		letter-spacing: 0;
+		line-height: var(--leading-snug);
 	}
 
 	.rename-input {

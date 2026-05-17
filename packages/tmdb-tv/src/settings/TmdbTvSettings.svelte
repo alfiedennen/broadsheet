@@ -18,11 +18,48 @@
 	 * matches the threat model better.
 	 */
 	import { SettingsRow, useCurationField } from '@broadsheet/core';
+	import { providersForRegion, type ProviderCatalogueEntry } from '../lib/tmdb';
 
 	const apiKey = useCurationField<string | null>('integrations.tmdb.apiKey');
 	const region = useCurationField<string>('integrations.tmdb.region');
 
+	// Theme E depth knobs
+	const providers = useCurationField<number[]>('integrations.tmdb.providers');
+	const trendingWindow = useCurationField<'day' | 'week'>('integrations.tmdb.trendingWindow');
+	const newReleasesWindowDays = useCurationField<number>(
+		'integrations.tmdb.newReleasesWindowDays'
+	);
+
 	const DEFAULT_REGION = 'GB';
+
+	const currentRegion = $derived(region.value ?? DEFAULT_REGION);
+	const availableProviders = $derived(providersForRegion(currentRegion));
+	const selectedProviderIds = $derived(new Set(providers.value ?? []));
+
+	function toggleProvider(entry: ProviderCatalogueEntry) {
+		const next = new Set(selectedProviderIds);
+		if (next.has(entry.id)) next.delete(entry.id);
+		else next.add(entry.id);
+		providers.value = [...next];
+	}
+
+	function setTrendingWindow(value: 'day' | 'week') {
+		trendingWindow.value = value;
+	}
+
+	function setWindowDays(days: number) {
+		newReleasesWindowDays.value = days;
+	}
+
+	const WINDOW_PRESETS: { label: string; days: number }[] = [
+		{ label: 'This week', days: 7 },
+		{ label: 'This month', days: 30 },
+		{ label: '90 days', days: 90 },
+		{ label: '6 months', days: 180 },
+		{ label: 'This year', days: 365 }
+	];
+	const currentWindowDays = $derived(newReleasesWindowDays.value ?? 45);
+	const currentTrendingWindow = $derived(trendingWindow.value ?? 'week');
 
 	let saveBlink = $state<'saving' | 'saved' | null>(null);
 	let blinkTimer: ReturnType<typeof setTimeout> | null = null;
@@ -102,6 +139,76 @@
 			onchange={(e) =>
 				(region.value = e.currentTarget.value.trim().toUpperCase() || DEFAULT_REGION)}
 		/>
+	</SettingsRow>
+
+	<!-- Theme E — depth knobs: providers + trending window + new-releases window. -->
+	<SettingsRow
+		label="Streaming services"
+		hint={`Filter trending + new to only items available on the providers you ticked. Unticked = no filter (everything available in ${currentRegion}). Region-aware: GB / US-specific entries appear when you change Region.`}
+	>
+		<div class="provider-grid">
+			{#each availableProviders as p (p.id)}
+				<button
+					type="button"
+					class="provider-chip"
+					class:on={selectedProviderIds.has(p.id)}
+					onclick={() => toggleProvider(p)}
+				>
+					{p.name}
+				</button>
+			{/each}
+		</div>
+		{#if selectedProviderIds.size > 0}
+			<button
+				type="button"
+				class="clear-providers"
+				onclick={() => (providers.value = [])}
+			>
+				Clear ({selectedProviderIds.size} selected)
+			</button>
+		{/if}
+	</SettingsRow>
+
+	<SettingsRow
+		label="Trending window"
+		hint="TMDB exposes two trending lenses — last 24 hours or last 7 days. Day-scale catches breakout news; week-scale is steadier."
+	>
+		<div class="seg">
+			<button
+				type="button"
+				class="seg-btn"
+				class:on={currentTrendingWindow === 'day'}
+				onclick={() => setTrendingWindow('day')}
+			>
+				Today
+			</button>
+			<button
+				type="button"
+				class="seg-btn"
+				class:on={currentTrendingWindow === 'week'}
+				onclick={() => setTrendingWindow('week')}
+			>
+				This week
+			</button>
+		</div>
+	</SettingsRow>
+
+	<SettingsRow
+		label="New releases window"
+		hint="How far back the 'New' row looks. Shorter = sharper, longer = more catalogue. Default 45 days."
+	>
+		<div class="seg seg-narrow">
+			{#each WINDOW_PRESETS as preset (preset.days)}
+				<button
+					type="button"
+					class="seg-btn"
+					class:on={currentWindowDays === preset.days}
+					onclick={() => setWindowDays(preset.days)}
+				>
+					{preset.label}
+				</button>
+			{/each}
+		</div>
 	</SettingsRow>
 </div>
 
@@ -186,5 +293,101 @@
 
 	.get-key:hover {
 		border-bottom-color: var(--accent);
+	}
+
+	/* Theme E depth-knob controls */
+	.provider-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		max-width: 32rem;
+	}
+
+	.provider-chip {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		padding: var(--space-1) var(--space-3);
+		background: transparent;
+		color: var(--fg-muted);
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-pill);
+		cursor: pointer;
+		transition: color var(--ease-quick), border-color var(--ease-quick),
+			background var(--ease-quick);
+	}
+
+	.provider-chip:hover {
+		color: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.provider-chip.on {
+		color: var(--accent);
+		border-color: var(--accent);
+		background: var(--accent-glow, rgba(192, 138, 74, 0.08));
+	}
+
+	.clear-providers {
+		display: inline-block;
+		margin-top: var(--space-3);
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		padding: var(--space-1) var(--space-3);
+		background: transparent;
+		color: var(--fg-muted);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-pill);
+		cursor: pointer;
+		transition: color var(--ease-quick), border-color var(--ease-quick);
+	}
+
+	.clear-providers:hover {
+		color: var(--accent);
+		border-color: var(--accent);
+		border-style: solid;
+	}
+
+	.seg {
+		display: inline-flex;
+		gap: 0;
+		border: 1px solid var(--rule);
+		border-radius: var(--radius-pill);
+		overflow: hidden;
+		background: var(--bg-raised);
+	}
+
+	.seg-narrow {
+		flex-wrap: wrap;
+	}
+
+	.seg-btn {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		padding: var(--space-2) var(--space-3);
+		background: transparent;
+		color: var(--fg-muted);
+		border: none;
+		border-right: 1px solid var(--rule);
+		cursor: pointer;
+		transition: color var(--ease-quick), background var(--ease-quick);
+	}
+
+	.seg-btn:last-child {
+		border-right: none;
+	}
+
+	.seg-btn:hover {
+		color: var(--accent);
+	}
+
+	.seg-btn.on {
+		color: var(--accent);
+		background: var(--accent-glow, rgba(192, 138, 74, 0.08));
 	}
 </style>
