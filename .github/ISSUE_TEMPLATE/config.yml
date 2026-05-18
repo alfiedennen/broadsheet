@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question, idea, or general feedback
+    url: https://github.com/alfiedennen/broadsheet/discussions
+    about: Open a Discussion — better than an issue for "how do I…", "what about…", or "this is great because…".
+  - name: Read TROUBLESHOOTING first
+    url: https://github.com/alfiedennen/broadsheet/blob/main/docs/TROUBLESHOOTING.md
+    about: A handful of known limits + their workarounds. Saves a round trip for the most-common gotchas.

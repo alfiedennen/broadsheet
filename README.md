@@ -16,6 +16,18 @@ wanted it to feel less like software.
 
 ---
 
+> **🛠 Early-tester soak.** broadsheet is in a small private soak —
+> a handful of trusted HA users running it on real installs while it
+> bakes. If you're testing it, please read
+> [docs/EARLY-TESTERS.md](docs/EARLY-TESTERS.md) — it covers what's
+> stable vs fresh, what kind of feedback is most useful, and how to
+> file what. Bug reports go to
+> [Issues](https://github.com/alfiedennen/broadsheet/issues); everything
+> else lives in
+> [Discussions](https://github.com/alfiedennen/broadsheet/discussions).
+
+---
+
 ## Install
 
 broadsheet ships as a **Home Assistant add-on**. One install path, zero

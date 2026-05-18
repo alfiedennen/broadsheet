@@ -1,0 +1,101 @@
+name: Bug report
+description: Something broadsheet did wrong — crash, wrong content, broken layout, unresponsive UI.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. broadsheet is in early-tester soak —
+        every concrete repro you can give me makes the fix tractable.
+        If you're not sure whether something is a bug or just rough
+        v0.1 behaviour, file it anyway; I'd rather hear it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: One or two sentences. What did you see?
+      placeholder: "On `/lights`, tapping the Library reveal froze the page for ~3s before the sliders appeared."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What did you think would happen instead?
+      placeholder: "The reveal would be instant, like on `/heat`."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered list works best. If you can repro it once, it's almost always enough.
+      placeholder: |
+        1. Open broadsheet at `/lights`
+        2. Scroll to the Library row
+        3. Tap to reveal
+      render: markdown
+    validations:
+      required: true
+
+  - type: input
+    id: ha-version
+    attributes:
+      label: HA version
+      description: From Settings → System → About. e.g. 2024.11.3
+      placeholder: "2024.11.3"
+    validations:
+      required: true
+
+  - type: input
+    id: addon-version
+    attributes:
+      label: broadsheet add-on version
+      description: From Settings → Add-ons → broadsheet → Info. e.g. 0.9.4.6
+      placeholder: "0.9.4.6"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      description: What CPU is HA running on?
+      options:
+        - amd64 (x86_64) — Intel/AMD
+        - aarch64 (ARM64) — Raspberry Pi 4/5, Apple Silicon VM
+        - other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: Browser + version. Helpful especially for layout / rendering issues.
+      placeholder: "Chrome 130 on macOS"
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console errors (optional)
+      description: |
+        If you opened DevTools (F12 → Console), paste anything red/yellow that appeared around the same time.
+        Skip this if you didn't.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshot, HA config detail, things you tried, hunches.
+    validations:
+      required: false

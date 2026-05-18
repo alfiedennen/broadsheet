@@ -1,20 +1,32 @@
 # @broadsheet/ghost-cloud
 
-24-hour radar event playback rendered as a translucent water-membrane
-time-tube.
+The Long Take — 24-hour radar event playback rendered as a
+translucent water-membrane time-tube. Three.js + WebGL2 + custom
+GLSL; pentatonic water-drop synth on bin-centre crossings.
 
-**Status: stub at M0.** Implementation deferred until after v0.1.0
-ships. Source for harold-home's working v22 renderer lives at
-`harold-home/static/exposure/` for porting.
+**Status: shipped, v0.1.0.** Renderer is harold-home's proven
+lock-state-v22 piece, ported verbatim and bundled as plugin
+static assets (vendored Three.js r169 alongside the renderer JS).
 
-When implemented, this plugin will:
-- Add per-room `/long-take` views (Office / Library / Living Room /
-  Kitchen) that iframe a Three.js + WebGL2 + GLSL renderer
-- Pull radar (LD2450) data from a 24h sliding window
-- Encode body presence + speed at each 30s bin as circumferential
-  bulges along a horizontal time-axis tube
-- Sync pentatonic A-minor water-drop synth to bin-centre crossings
-- Per-room AudioContext + visibility-aware mute via Page Visibility
-  API
-- Requires HA-side precompute (`exposure_precompute.py` in
-  `precompute/`)
+## What it contributes
+
+- **`/long-take` page** — per-room playback views, iframed.
+- **Bundled demo data** for one captured day per room, so the
+  plugin works for any user with zero hardware or HA-side
+  setup. Live-radar pull (querying HA recorder history for
+  LD2450 sensors) is a deferred follow-on.
+- **Room discovery** — fetches the room manifest and merges
+  it into discovery so the page knows which rooms have
+  playback data.
+
+## Requires
+
+- A WebGL2-capable browser (recent Chromium/Firefox/Safari).
+- The iframe runs at full opacity; for ambient use, drop the
+  iframe brightness via your kiosk app's per-tab settings.
+
+## Future (deferred)
+
+- Live LD2450 radar pull via HA recorder history (replace
+  demo data with the user's own captured days).
+- Per-room audio mute persistence across sessions.

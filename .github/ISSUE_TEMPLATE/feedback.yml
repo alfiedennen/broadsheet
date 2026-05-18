@@ -1,0 +1,52 @@
+name: Early-tester feedback
+description: Dogfooding observations — "this confused me", "this was nice", "I expected X". Not a bug, not a feature request.
+title: "[feedback] "
+labels: ["feedback", "early-tester"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is for the *texture* of using broadsheet —
+        the stuff that isn't quite a bug and isn't quite a feature
+        request. Confusions, surprises, half-formed reactions. All
+        useful at this stage.
+
+        Be as half-formed as you like; I'll do the work of turning
+        it into something actionable.
+
+  - type: textarea
+    id: observation
+    attributes:
+      label: What you noticed
+      description: Free-form. What stood out — good or bad?
+      placeholder: |
+        "The painting on `/` is gorgeous but I couldn't tell at first that the wash means 'no one home' — I expected an explicit label."
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context (optional)
+      description: Where you were, what you were trying to do, what device you were on.
+    validations:
+      required: false
+
+  - type: input
+    id: surface
+    attributes:
+      label: Which surface (optional)
+      description: e.g. /, /lights, /heat, /tv, /wall, /settings, the things-first wall builder, an embedded Lovelace block…
+    validations:
+      required: false
+
+  - type: dropdown
+    id: confidence
+    attributes:
+      label: How strongly do you feel about this?
+      options:
+        - Mild — just noting it
+        - Moderate — would be nice to address
+        - Strong — this matters for the experience
+    validations:
+      required: false

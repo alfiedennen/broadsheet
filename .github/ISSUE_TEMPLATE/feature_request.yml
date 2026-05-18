@@ -1,0 +1,55 @@
+name: Feature request
+description: Something broadsheet doesn't do that you wish it did.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two notes before you fill this in:
+
+        1. **Lead with the problem, not the solution.** "I want a
+           toggle here" is harder to act on than "I'm trying to do
+           X and the current flow gets in my way." If you have a
+           preferred solution, include it — but frame the problem
+           first so I can think about other ways to solve it.
+        2. **It's OK for the answer to be "no" or "later."**
+           broadsheet is opinionated; some asks won't fit the
+           shape, and v0.1 has a deliberately narrow scope.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve
+      description: One paragraph. The "why" not the "what".
+      placeholder: |
+        "I have three people in my household and my living room TRV is shared. When my wife is reading on the sofa and I'm in the office, I want the heating to follow whoever's home — but right now broadsheet only knows about per-room schedule, not per-person."
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you're doing now (if anything)
+      description: How are you working around the absence of the feature?
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: A possible solution (optional)
+      description: Sketch what you'd want — UI, behaviour, anything. Just a starting point.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: How important is this for you to be useful?
+      options:
+        - Nice to have — broadsheet works for me without it
+        - Would significantly improve my use
+        - Blocker — I can't actually use broadsheet for my case without it
+    validations:
+      required: false
