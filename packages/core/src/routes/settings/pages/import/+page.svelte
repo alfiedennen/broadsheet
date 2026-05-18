@@ -237,24 +237,25 @@
 	});
 
 	/**
-	 * Compose the HA Lovelace URL for the embed. Uses
-	 * `window.location.origin` switched to port 8123 (HA Core), which
-	 * is broadsheet's host's HA. The `?kiosk=true` suffix suppresses
-	 * HA's sidebar + header so the iframe shows clean content.
+	 * Compose the embed URL. 0.9.4.3 — produces same-origin proxy
+	 * URLs (`/embed/<dashboard>/<view>?kiosk=true`) instead of
+	 * cross-origin direct URLs (`http://<host>:8123/...`). The addon's
+	 * nginx forwards `/embed/<path>` to HA Core via the Supervisor
+	 * token + strips X-Frame-Options so the iframe renders.
+	 *
+	 * Falls back to a cross-origin URL when no window (SSR) — but
+	 * the editor's renderer rewrites that on render anyway.
 	 */
 	function embedHaUrl(dashUrlPath: string | null, viewIdx: number | null): string {
-		// Default to the same hostname as broadsheet's running on,
-		// but with port 8123 (HA Core). The user can edit this in
-		// the review step's block editor if their setup differs.
-		const host = typeof window === 'undefined' ? 'homeassistant.local' : window.location.hostname;
-		const base = `http://${host}:8123`;
 		const dashSegment = dashUrlPath ? `/${dashUrlPath}` : '/lovelace';
 		const viewPath =
 			viewIdx !== null && translated
 				? translated.views[viewIdx]?.path
 				: null;
 		const viewSegment = viewPath ? `/${viewPath}` : '';
-		return `${base}${dashSegment}${viewSegment}?kiosk=true`;
+		// Same-origin proxy path. broadsheet's nginx forwards to HA
+		// Core, strips X-Frame-Options, returns to browser.
+		return `/embed${dashSegment}${viewSegment}?kiosk=true`;
 	}
 
 	function slugError(): string | null {

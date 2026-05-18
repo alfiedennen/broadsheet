@@ -4,6 +4,46 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.4.3] — embed proxy strips X-Frame-Options (2026-05-18)
+
+### Fixed
+- **Lovelace embed now works out of the box.** 0.9.4.2's embed
+  block iframed HA Lovelace URLs directly, but HA serves
+  `X-Frame-Options: SAMEORIGIN` which blocks the cross-origin
+  frame (broadsheet at port 8124, HA at port 8123). 0.9.4.3 adds
+  a same-origin proxy inside broadsheet's nginx that fetches HA
+  content via the Supervisor + strips X-Frame-Options on the
+  response → iframe renders.
+- The embed block's renderer auto-rewrites HA URLs to the
+  same-origin proxy path (`/embed/<dashboard>/<view>`).
+  Both bare paths (`/wall-tablet/home`) and absolute HA URLs
+  (`http://homeassistant.local:8123/wall-tablet/home`) are
+  recognised. Cross-host embeds (broadsheet on host A iframing HA
+  on host B) still need user-side HA framing config.
+- The import flow's "Embed (don't translate)" actions now compose
+  same-origin proxy URLs directly. Pages saved via 0.9.4.2's
+  cross-origin format keep working because the renderer rewrites
+  on render.
+
+### Added (addon-side)
+- New nginx routes proxying HA Core paths through the addon:
+  `/embed/<path>` (with X-Frame-Options + CSP stripped), plus
+  auxiliary HA-asset routes the embedded Lovelace needs at the
+  root level — `/static/`, `/frontend_latest/`, `/auth/`,
+  `/manifest.json`, `/service_worker.js`. All authenticate via
+  the Supervisor token (admin-level view; documented).
+
+### Changed
+- `TROUBLESHOOTING.md` "Lovelace embed shows blank" section flips
+  from "you need to configure HA to allow framing" to "0.9.4.3+
+  handles this automatically; here's what to do if you saved a
+  pre-0.9.4.3 embed."
+
+### Honest caveat
+- The proxy authenticates as the addon's Supervisor user (admin).
+  Embedded Lovelace renders with full admin visibility — fine for
+  wall-tablet use, worth knowing for multi-user installs.
+
 ## [0.9.4.2] — lovelace-embed escape hatch + honest import scoping (2026-05-18)
 
 ### Added

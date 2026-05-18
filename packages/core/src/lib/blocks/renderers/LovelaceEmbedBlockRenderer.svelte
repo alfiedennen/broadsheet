@@ -25,8 +25,56 @@
 
 	let { config }: { config: LovelaceEmbedBlockConfig } = $props();
 
-	const url = $derived((config.url ?? '').trim());
+	const rawUrl = $derived((config.url ?? '').trim());
 	const height = $derived(Math.max(120, config.height ?? 800));
+
+	/**
+	 * 0.9.4.3 — rewrite same-host HA URLs to the same-origin embed
+	 * proxy. HA serves X-Frame-Options: SAMEORIGIN which blocks the
+	 * cross-origin frame (broadsheet at :8124, HA at :8123). The
+	 * addon's nginx now exposes `/embed/<path>` which proxies to HA
+	 * Core via the Supervisor + strips X-Frame-Options on the way
+	 * back. By rewriting the iframe SRC to that path, the iframe is
+	 * same-origin with broadsheet → renders fine.
+	 *
+	 * Rewrite rules:
+	 *  - Empty / whitespace → return as-is (renders the empty-state
+	 *    placeholder)
+	 *  - Absolute URL on same hostname pointing at HA's port 8123 →
+	 *    rewrite to `/embed/<path>` (relative; resolves to broadsheet's
+	 *    own origin)
+	 *  - Absolute URL on a DIFFERENT host → leave as-is (cross-host
+	 *    embeds need user-side HA framing config; documented)
+	 *  - Already-relative URL starting with `/embed/` → leave as-is
+	 *  - Bare path like `/wall-tablet` → prepend `/embed`
+	 *  - Other absolute URL not on the addon's host → leave as-is
+	 */
+	const url = $derived.by(() => {
+		const v = rawUrl;
+		if (!v) return '';
+		if (typeof window === 'undefined') return v;
+		// Bare path → assume HA path, route through proxy
+		if (v.startsWith('/embed/')) return v;
+		if (v.startsWith('/') && !v.startsWith('//')) return '/embed' + v;
+		try {
+			const parsed = new URL(v, window.location.origin);
+			// Same hostname as broadsheet's own?
+			if (parsed.hostname === window.location.hostname) {
+				// HA on port 8123 specifically — rewrite to proxy.
+				// (Other ports on the same host: leave alone — the user
+				// might be running broadsheet behind a custom reverse
+				// proxy with multiple services.)
+				if (parsed.port === '8123' || parsed.port === '') {
+					return '/embed' + parsed.pathname + parsed.search + parsed.hash;
+				}
+			}
+			return v;
+		} catch {
+			return v;
+		}
+	});
+
+	const proxied = $derived(url.startsWith('/embed'));
 
 	// Hint when the iframe likely failed to load (most common cause:
 	// HA's X-Frame-Options DENY blocks framing). The iframe's `load`
@@ -44,6 +92,9 @@
 		// Reset on URL change.
 		loadFired = false;
 		iframeLoadTimedOut = false;
+		// Same-origin proxy responses load reliably; the timeout
+		// hint is mainly for unproxied URLs (cross-host embeds).
+		if (proxied) return;
 		const t = setTimeout(() => {
 			if (!loadFired) iframeLoadTimedOut = true;
 		}, 5000);

@@ -823,18 +823,20 @@
 										type="text"
 										class="field-input mono"
 										value={cfg.url}
-										placeholder="http://homeassistant.local:8123/wall-tablet/home?kiosk=true"
+										placeholder="/wall-tablet/home?kiosk=true (or full http://...:8123/... URL)"
 										oninput={(e) =>
 											onPatchBlock(i, {
 												url: (e.target as HTMLInputElement).value
 											})}
 									/>
 									<span class="field-hint">
-										Full URL to an HA Lovelace dashboard. Append
-										<code>?kiosk=true</code> to suppress HA's sidebar +
-										header for a chrome-free render. Cross-origin: HA
-										must allow framing — see
-										<a href="https://github.com/alfiedennen/broadsheet/blob/main/docs/TROUBLESHOOTING.md#lovelace-embed-shows-blank">TROUBLESHOOTING.md</a>.
+										HA Lovelace path. Either a bare path
+										(<code>/wall-tablet/home</code>) OR a full URL
+										(<code>http://homeassistant.local:8123/wall-tablet/home</code>).
+										Append <code>?kiosk=true</code> for a chrome-free
+										render. 0.9.4.3+ routes the embed through the
+										addon's same-origin proxy automatically — no
+										X-Frame-Options config needed.
 									</span>
 								</label>
 								<label class="field">

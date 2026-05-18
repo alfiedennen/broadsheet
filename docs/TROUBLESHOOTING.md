@@ -49,43 +49,41 @@ for the honest "when each path works" list.
 
 **Symptom**: you added a `lovelace-embed` block (or used the
 "Embed the whole dashboard" import option), but the iframe
-shows blank / empty / a refused-connection message.
+shows blank / empty / a refused-connection message + the
+browser console shows:
 
-**Cause**: HA defaults to `X-Frame-Options: DENY` in its HTTP
-response headers — a security default that prevents HA's UI from
-being framed by other origins. broadsheet's iframe gets the
-DENY header back from HA and the embedded content never renders.
-
-**Fix — allow framing in HA's configuration.yaml**:
-
-```yaml
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 127.0.0.1
-    - ::1
-    # add any reverse-proxy IPs you have
+```
+Refused to display 'http://homeassistant.local:8123/...' in a
+frame because it set 'X-Frame-Options' to 'sameorigin'.
 ```
 
-If you're running broadsheet as an add-on through HA Ingress,
-that's same-origin and should "just work" once `use_x_forwarded_for`
-is on. For cross-origin embeds (broadsheet at port 8124 → HA
-Lovelace at port 8123), you also need to allow your hostname
-as a frame ancestor. The cleanest way is HA's
-[`http.cors_allowed_origins`](https://www.home-assistant.io/integrations/http/#cors_allowed_origins)
-config, but the X-Frame-Options DENY is set elsewhere — depending
-on your HA version you may need an `add_header` rule in a
-reverse-proxy in front of HA. There's no universal recipe; the
-HA setup varies.
+**Cause**: HA serves `X-Frame-Options: SAMEORIGIN` on its frontend
+responses — a security default that blocks cross-origin framing.
+broadsheet's addon runs on a dedicated host port (default 8124),
+which is cross-origin to HA's port 8123 → blocked.
 
-**Workaround**: use Ingress URLs rather than port-direct URLs
-for the embed. broadsheet's addon ingress runs same-origin as
-HA's frontend, so iframing a Lovelace path under the same
-ingress chain avoids X-Frame-Options entirely.
+**Fix (0.9.4.3+ — automatic)**: the addon's nginx now exposes a
+same-origin proxy route (`/embed/<path>`) that fetches HA Core
+via the Supervisor and strips X-Frame-Options on the way back.
+The embed block's renderer auto-rewrites HA URLs to the proxy
+path; the import flow composes proxy URLs directly. No HA-side
+config needed.
 
-**Honest caveat**: this is one of the few things broadsheet can't
-fix entirely from its side. The framing decision is HA's; we
-just consume whatever HA serves.
+If you saved a `lovelace-embed` block with a cross-origin URL
+BEFORE 0.9.4.3 and the iframe still shows blank after the
+update, edit the block (Settings → Pages → your page → expand
+the embed block in the canvas) and replace the URL with a bare
+path (`/wall-tablet/home?kiosk=true`) — the new auto-rewrite
+catches both bare paths and same-host:8123 URLs.
+
+**Cross-host embeds** (broadsheet on host A iframing HA on
+host B) still need user-side HA framing config. The addon's
+proxy only routes to the local HA Core via the Supervisor.
+
+**Auth model caveat**: the proxy authenticates as the addon's
+Supervisor user (admin). The embedded Lovelace renders with full
+admin visibility — fine for wall-tablet use, worth knowing for
+multi-user installs where access scoping matters.
 
 ## The addon shows the old version after I push a new one
 

@@ -3555,3 +3555,84 @@ ship absent a specific user request.
 Plan: `docs/plans/plan-9.4.2-lovelace-embed-escape-hatch.md`
 (full decision-set + sequenced impl plan, locked then marked
 IMPLEMENTED with file inventory).
+
+## 2026-05-18 — 0.9.4.3 — embed proxy strips X-Frame-Options
+
+Dogfood of 0.9.4.2's lovelace-embed against the wall-tablet
+produced the predicted browser error:
+
+```
+Refused to display 'http://homeassistant.local:8123/' in a frame
+because it set 'X-Frame-Options' to 'sameorigin'.
+```
+
+Diagnosis: HA serves `X-Frame-Options: SAMEORIGIN` (verified via
+`curl -I`). broadsheet's addon is configured with `ingress: false`
+— runs on port 8124 (direct). ALWAYS cross-origin to HA's 8123 →
+SAMEORIGIN always blocks. The fix in 0.9.4.2's docs ("configure
+HA to allow framing") works in theory but requires user-side HA
+config; broadsheet should solve this itself.
+
+### What 0.9.4.3 ships
+
+**Addon-side: same-origin proxy in nginx.** New routes in
+`nginx.conf.tpl`:
+
+- `location ~ ^/embed/(.*)$` — proxies arbitrary paths to HA
+  Core via the Supervisor + strips `X-Frame-Options` AND
+  `Content-Security-Policy` (Lovelace sets CSP that would also
+  block framing). Auth via Supervisor token.
+- `/static/`, `/frontend_latest/`, `/auth/`, `/manifest.json`,
+  `/service_worker.js` — auxiliary HA-asset proxy routes that
+  the embedded Lovelace's frontend needs at the root level
+  (XHR/fetch / module loads / auth flow / PWA). All authenticate
+  via the Supervisor token.
+
+`/api/` + `/api/websocket` were already proxied before 0.9.4.3 —
+embedded Lovelace's REST + WebSocket inherit that plumbing.
+
+**SPA-side: URL rewriting in the renderer + import flow.**
+`LovelaceEmbedBlockRenderer.svelte` rewrites the user's `url`
+config on render:
+
+- Bare paths (`/wall-tablet/home?kiosk=true`) → `/embed/wall-tablet/home?kiosk=true`
+- Absolute URLs on same-host:8123 → path extracted + prepended
+  with `/embed`
+- Cross-host URLs → left as-is (user-side HA config needed)
+- Already-`/embed/`-prefixed URLs → left as-is (idempotent)
+
+The import flow's `embedHaUrl()` now produces same-origin proxy
+URLs directly. Pages saved via 0.9.4.2's cross-origin format keep
+working because the renderer's rewrite is idempotent + handles
+both forms.
+
+**Honest caveats** (documented in TROUBLESHOOTING):
+
+- The proxy authenticates as the addon's Supervisor user (admin).
+  Embedded Lovelace renders with full admin visibility — fine for
+  wall-tablet use; worth knowing for multi-user installs.
+- Cross-host embeds (broadsheet on host A iframing HA on host B)
+  still need user-side HA framing config. The addon's proxy only
+  routes to the local HA Core via the Supervisor.
+
+### Worked example — wall-tablet embed before vs after
+
+**Before (0.9.4.2)**: iframe SRC = `http://homeassistant.local:8123/wall-tablet?kiosk=true`
+→ browser refuses per SAMEORIGIN → `chrome-error://chromewebdata/`.
+
+**After (0.9.4.3)**: iframe SRC = `/embed/wall-tablet?kiosk=true`
+(resolves to `http://homeassistant.local:8124/embed/wall-tablet?kiosk=true`)
+→ broadsheet's nginx proxies to HA Core, strips X-Frame-Options,
+returns to browser → same-origin frame → renders the actual
+wall-tablet dashboard.
+
+### Ship-readiness
+
+- svelte-check: 0 errors, 0 warnings (523 files).
+- vitest: 343 tests pass (no test changes — this is a runtime
+  nginx + URL-rewrite change with no public-contract additions).
+- production build: clean.
+
+Plan: `docs/plans/plan-9.4.3-embed-proxy-strip-xframe.md`
+(full decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).
