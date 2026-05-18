@@ -3636,3 +3636,60 @@ wall-tablet dashboard.
 Plan: `docs/plans/plan-9.4.3-embed-proxy-strip-xframe.md`
 (full decision-set + sequenced impl plan, locked then marked
 IMPLEMENTED with file inventory).
+
+## 2026-05-18 — 0.9.4.4 — embed proxy upstream fix (same-day patch on 0.9.4.3)
+
+Same-day Chrome-MCP verification of 0.9.4.3 found the embed still
+broken: the iframe rendered with `403 Forbidden` body text. The
+0.9.4.3 nginx config used `proxy_pass http://supervisor/core/$1`
+which only works for REST API paths — Supervisor's `/core/` proxy
+returns 403 for arbitrary frontend paths like `/wall-tablet`.
+
+Verified via:
+
+```
+docker exec addon_68fa04fc_broadsheet sh -c '
+  curl -sI -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+    http://supervisor/core/wall-tablet'
+# → HTTP/1.1 403 Forbidden
+
+curl -sI http://homeassistant:8123/wall-tablet
+# → HTTP/1.1 405 Method Not Allowed (HEAD)
+# → headers prove HA frontend is reachable + ready on GET
+```
+
+Fix: switch `/embed/` + auxiliary routes to use
+`http://homeassistant:8123/<path>` as the proxy upstream
+(Supervisor's well-known DNS for HA Core's frontend port).
+Frontend page loads don't need auth (HA returns them; auth is
+cookie/localStorage at iframe-render time). Authorization header
+injection removed from these routes (was harmless but unnecessary).
+
+`/api/` + `/api/websocket` routes still inject the Supervisor
+token for REST + WS calls the embedded Lovelace makes after
+page load — unchanged.
+
+### After 0.9.4.4 — Chrome-MCP verification
+
+iframe SRC = `/embed/wall-tablet?kiosk=true` → broadsheet's
+nginx → HA Core → X-Frame-Options stripped → same-origin frame
+→ HA's actual frontend renders inside the iframe → standard
+OAuth login screen (because `:8124` is a new client to HA's auth
+state). User logs in once → token stored in `:8124`'s
+localStorage → subsequent embed loads use it automatically.
+
+### Known limit (documented in TROUBLESHOOTING)
+
+The one-time login is correct cross-origin OAuth behaviour, not
+a bug. For wall tablets it's a one-time setup step when
+commissioning the tablet. Power users with trusted home networks
+can configure HA's `trusted_networks` auth provider with
+`allow_bypass_login: true` to skip the login entirely — security
+trade-off documented.
+
+### Companion to 0.9.4.3
+
+Same one logical fix in two ship attempts. 0.9.4.3 added the
+proxy route + URL rewrite (right shape); 0.9.4.4 corrected the
+upstream URL (so it actually works). Counted as one logical
+ship in the BUILD-LOG narrative.

@@ -4,6 +4,29 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.4.4] — embed proxy upstream fix (2026-05-18)
+
+### Fixed
+- 0.9.4.3's proxy upstream `http://supervisor/core/<path>` returned
+  403 Forbidden for non-API paths — the Supervisor `/core/` route
+  only serves REST API, not arbitrary frontend paths like
+  `/wall-tablet`. 0.9.4.4 switches the upstream to
+  `http://homeassistant:8123/<path>` (Supervisor's well-known DNS
+  name for HA Core's frontend port). Frontend pages don't require
+  Bearer auth — HA returns them; auth happens via browser cookie/
+  localStorage at iframe-render time. The existing `/api/` +
+  `/api/websocket` routes still inject the Supervisor token for
+  the REST + WS calls the embedded Lovelace makes after page load.
+
+### Known limit (documented)
+- The embedded HA Lovelace requires a **one-time login per
+  broadsheet origin**. broadsheet runs at `:8124`; the iframe loads
+  HA's frontend through the proxy, but HA treats `:8124` as a new
+  OAuth client → standard login screen renders inside the iframe
+  on first use. Log in once → token stored in localStorage at
+  `:8124` → subsequent embed loads use it automatically. For
+  always-on wall tablets, this is a one-time setup step.
+
 ## [0.9.4.3] — embed proxy strips X-Frame-Options (2026-05-18)
 
 ### Fixed

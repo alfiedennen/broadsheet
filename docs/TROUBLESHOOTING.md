@@ -80,10 +80,40 @@ catches both bare paths and same-host:8123 URLs.
 host B) still need user-side HA framing config. The addon's
 proxy only routes to the local HA Core via the Supervisor.
 
-**Auth model caveat**: the proxy authenticates as the addon's
-Supervisor user (admin). The embedded Lovelace renders with full
-admin visibility — fine for wall-tablet use, worth knowing for
-multi-user installs where access scoping matters.
+**One-time login per broadsheet origin**: broadsheet runs at
+`:8124`, HA runs at `:8123`. Even with the X-Frame-Options proxy
+in place, HA's frontend treats `:8124` as a new OAuth client →
+standard login screen renders inside the iframe on first use.
+
+The flow:
+1. First embed load → HA login screen renders inside the iframe
+2. Log in with your normal HA credentials
+3. HA stores an auth token in localStorage at `:8124`'s origin
+4. All subsequent embed loads use it automatically
+
+For always-on wall tablets, this is a one-time setup step done
+when you commission the tablet. It does NOT need to be redone
+unless the tablet's localStorage is cleared (e.g. Fully Kiosk's
+"Clear Webstorage" — use "Clear Cache" instead, which preserves
+localStorage tokens).
+
+**To skip the login**: configure HA's `trusted_networks` auth
+provider in your `configuration.yaml`:
+
+```yaml
+homeassistant:
+  auth_providers:
+    - type: trusted_networks
+      trusted_networks:
+        - 172.30.32.0/23  # HA Supervisor's addon bridge range
+      allow_bypass_login: true
+    - type: homeassistant  # keep this — your normal auth
+```
+
+Note this allows ANY traffic from those networks to skip login,
+not just embed traffic. Security trade-off: simpler embed UX,
+slightly looser auth. Worth it for trusted home networks; not
+recommended for installs with shared user accounts.
 
 ## The addon shows the old version after I push a new one
 
