@@ -21,12 +21,74 @@
 	 * Spec: docs/plans/plan-9.4.2-lovelace-embed-escape-hatch.md.
 	 */
 	import OutLine from '$lib/components/OutLine.svelte';
+	import { onMount } from 'svelte';
 	import type { LovelaceEmbedBlockConfig } from '../types';
 
 	let { config }: { config: LovelaceEmbedBlockConfig } = $props();
 
 	const rawUrl = $derived((config.url ?? '').trim());
 	const height = $derived(Math.max(120, config.height ?? 800));
+
+	/**
+	 * 0.9.4.5 — auth injection.
+	 *
+	 * The iframe is same-origin with broadsheet (both at :8124), so
+	 * localStorage is shared. HA's frontend reads its auth tokens from
+	 * localStorage["hassTokens"] on boot. If we pre-populate that
+	 * BEFORE the iframe mounts, HA skips the OAuth login flow entirely
+	 * and proceeds to render the dashboard.
+	 *
+	 * Token: broadsheet's runtime-env exposes the Supervisor token
+	 * (`window.__BROADSHEET_ENV__.supervisorToken`). HA accepts it as
+	 * a Bearer token for API calls (broadsheet's `/api/` proxy uses
+	 * the same token successfully). Injecting it as `access_token` in
+	 * hassTokens makes HA's frontend treat the session as
+	 * authenticated.
+	 *
+	 * `expires` set to far-future so the frontend doesn't try to
+	 * refresh via /auth/token (which would 400 — broadsheet's origin
+	 * isn't a registered OAuth client). The Supervisor token actually
+	 * rotates per container; we re-inject on every iframe mount so
+	 * stale tokens never persist long.
+	 *
+	 * Risk: HA might reject the Supervisor token's signature for
+	 * frontend purposes. If it does, the iframe will fall back to the
+	 * OAuth login screen — no worse than 0.9.4.4. Empirical test on
+	 * mount.
+	 */
+	function injectHaTokens() {
+		if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+		const env = window.__BROADSHEET_ENV__;
+		if (!env?.supervisorToken) return;
+		try {
+			const farFuture = Date.now() + 31536000 * 1000; // 1 year
+			const hassTokens = {
+				hassUrl: window.location.origin,
+				clientId: window.location.origin + '/',
+				access_token: env.supervisorToken,
+				token_type: 'Bearer',
+				refresh_token: '', // unused — expires is far-future
+				expires_in: 31536000,
+				expires: farFuture
+			};
+			localStorage.setItem('hassTokens', JSON.stringify(hassTokens));
+		} catch (err) {
+			// Best-effort. If injection fails, the iframe falls back to
+			// the OAuth flow (login screen). User-visible but not fatal.
+			// eslint-disable-next-line no-console
+			console.warn('[lovelace-embed] auth injection failed:', err);
+		}
+	}
+
+	// Inject tokens on mount + before every URL change so the iframe
+	// always boots with valid auth state.
+	onMount(injectHaTokens);
+	$effect(() => {
+		// re-inject when url changes (URL access triggers re-inject)
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		rawUrl;
+		injectHaTokens();
+	});
 
 	/**
 	 * 0.9.4.3 — rewrite same-host HA URLs to the same-origin embed
