@@ -3693,3 +3693,157 @@ Same one logical fix in two ship attempts. 0.9.4.3 added the
 proxy route + URL rewrite (right shape); 0.9.4.4 corrected the
 upstream URL (so it actually works). Counted as one logical
 ship in the BUILD-LOG narrative.
+
+## 2026-05-18 — 0.9.4.5 — embed auth injection + asset-extension fallback proxy
+
+Same-day Chrome-MCP verification of 0.9.4.4 confirmed the
+X-Frame-Options bypass worked: the iframe rendered HA's frontend
+inside broadsheet. But it landed on HA's OAuth login screen with
+a cascade of asset-resolution errors in the console:
+
+```
+/local/studio-fonts.js          → 403 Forbidden (wrong upstream)
+/hacsfiles/<repo>/<file>.js     → SPA fallback returned text/html
+/room_presence/<file>.js        → SPA fallback returned text/html
+/auth/token                     → 400 Bad Request (origin not a
+                                   registered OAuth client)
+```
+
+The 0.9.4.4 TROUBLESHOOTING doc framed the login screen as "log
+in once per broadsheet origin" — true but not finished work.
+The asset cascade was a separate gap: broadsheet's proxy covered
+the routes HA's own frontend hits (`/static`, `/frontend_latest`,
+etc) but HACS-integration paths and the broken `/local/` upstream
+fell through to broadsheet's SPA fallback, returning `index.html`
+as `text/html` for what the browser was loading as JS modules.
+
+### What 0.9.4.5 ships
+
+**Auth injection in the renderer.** Same-origin localStorage
+(broadsheet renderer + iframe both at `:8124`) means we can
+pre-populate `localStorage["hassTokens"]` before the iframe
+boots. HA's frontend reads it on first turn, treats the session
+as authenticated, never opens the login.
+
+`LovelaceEmbedBlockRenderer.svelte` calls `injectHaTokens()` on
+`onMount` AND in an `$effect` reactive to `rawUrl` changes. The
+synthesised entry uses `window.__BROADSHEET_ENV__.supervisorToken`
+as the access_token. `expires` is set far-future so HA's frontend
+doesn't try `/auth/token` refresh (which would 400 — the addon's
+`:8124` origin isn't a registered OAuth client).
+
+The Supervisor token rotates per container restart; re-injection
+on every mount + URL change means a rotation just refreshes the
+injected token on the next iframe load. Long-running iframes
+that hit mid-session rotation would see REST/WS calls 401 + the
+dashboard stale — page reload recovers cleanly via re-injection.
+If real-world users hit this, we'd add auto-recovery on 401.
+
+**Asset routing in nginx.** Three complementary fixes:
+
+1. `/local/` upstream flipped from `supervisor/core/local/`
+   (REST API listing — returned 403 for actual files) to
+   `homeassistant:8123/local/` (HA Core's frontend serving from
+   `/config/www/`). No Bearer auth — HA serves `/local/` to
+   authenticated sessions, and the auth injection makes the
+   session authenticated.
+2. New explicit `/hacsfiles/` route proxying to
+   `homeassistant:8123/hacsfiles/` for HACS-installed Lovelace
+   plugins.
+3. A regex catch-all for ANY path with a known asset extension:
+   ```nginx
+   location ~* ^/[^/]+/.+\.(js|mjs|css|png|jpg|jpeg|svg|ico|woff2?|ttf|json|wasm|webp|gif|map)$ {
+       try_files $uri @ha_asset_proxy;
+   }
+   location @ha_asset_proxy {
+       proxy_pass http://homeassistant:8123$request_uri;
+       proxy_set_header Host $host;
+       proxy_hide_header X-Frame-Options;
+   }
+   ```
+   Catches arbitrary HACS-integration static paths broadsheet
+   can't enumerate (`/room_presence/<file>.js`,
+   `/<other-repo>/<file>.js`). `try_files` checks broadsheet's
+   own filesystem first; falls back to the HA proxy. SPA routes
+   without file extensions still hit the existing `location /`
+   fallback returning `index.html`.
+
+**Priority modifier on broadsheet's own routes.** nginx prefers
+regex locations over prefix locations unless the prefix is
+marked `^~`. Without it, the new asset-extension regex would
+steal `/_app/immutable/<hash>.js` requests and try to proxy them
+to HA Core. Added `^~` to every broadsheet-owned prefix:
+`/_app/immutable/`, `/_app/`, `/plugin-assets/`, `/plugin-data/`,
+`/api/broadsheet/`, `/api/harold-preset/`, `/api/websocket`,
+`/api/`, plus the existing aux HA routes.
+
+### After 0.9.4.5 — Chrome-MCP verification
+
+Method: navigate to a broadsheet page, run the injection manually
+in the console (`localStorage.setItem('hassTokens', ...)` with
+the same shape the renderer produces), then navigate to
+`/embed/wall-tablet?kiosk=true`.
+
+Result: HA's Overview dashboard rendered fully — sidebar with
+all 16 dashboards (Overview, Broadsheet, Cast Display, Elena,
+Emanations, Harold, harold home, Harold Road, Lights, Map,
+Studio, Energy, Activity, History, Calendar, HACS), Favourites
+(3 lights with correct colours + states), Areas (11 areas with
+icons), Summaries (Repairs/Updates/Devices/Lights "3 on" /
+Climate / Security "All secure" / Media players "1 playing" /
+Maintenance "1 low battery" / Weather "9.8°C Partly cloudy").
+
+All entity states populated → both REST API AND WebSocket auth
+passed. Zero auth/token/login/error console messages. Asset icons
+loaded from `/static/`, `/hacsfiles/`, `/local/`. No regression.
+
+Aside: HA's frontend rewrote the URL to `/home/overview?kiosk=true`
+rather than preserving `/wall-tablet?kiosk=true` — that's a
+separate path-resolution quirk (the frontend can't resolve the
+slug on first turn because dashboards load async). Doesn't block
+the auth verification, which is what 0.9.4.5 is about.
+
+### Why this is the right shape
+
+The temptation was to set up a full per-user OAuth flow with
+broadsheet's `:8124` as a registered client. That's the
+"correct" answer for multi-user installs but it's a much bigger
+change (register with HA's auth provider, handle refresh tokens,
+wire up the callback) for a benefit that doesn't apply to the
+target use case (single-user wall tablets). Injecting the
+Supervisor token gets the same end-state (iframe boots in
+"already authenticated") with one localStorage write per mount.
+
+The honest caveat: admin-level visibility for every embed.
+Documented in CHANGELOG + plan. If a multi-user broadsheet user
+shows up, we revisit.
+
+### Ship-readiness
+
+- svelte-check: 0 errors, 0 warnings (523 files).
+- vitest: 343 tests pass (no test changes — runtime nginx +
+  localStorage write only; no public contract additions to test).
+- production build: clean.
+- Live-verified against the production canary
+  (`68fa04fc_broadsheet` on the real ProDesk HA): auth injection
+  works as designed; assets resolve; dashboard renders with full
+  state. No regression on the X-Frame-Options bypass shipped in
+  0.9.4.4.
+
+Plan: `docs/plans/plan-9.4.5-auth-injection-and-asset-fallback.md`
+(full decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).
+
+### Combined arc: 0.9.4.3 + 0.9.4.4 + 0.9.4.5
+
+| Ship | What it added | Outcome |
+|---|---|---|
+| 0.9.4.3 | `/embed/` proxy route + URL rewrite in renderer | Proxy upstream wrong (supervisor/core/) → 403 |
+| 0.9.4.4 | Flipped upstream to `homeassistant:8123` | Iframe loaded HA frontend → OAuth login screen |
+| 0.9.4.5 | Auth injection + asset-extension fallback | Iframe boots authenticated → dashboard renders |
+
+Three ships in two days for one logical user feature ("paste
+URL, get a working embed, no user-side config"). The next
+embed-shaped iteration is whatever real-world dogfood surfaces
+once users start putting `lovelace-embed` blocks in their
+pages.

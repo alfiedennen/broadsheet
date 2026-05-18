@@ -80,40 +80,47 @@ catches both bare paths and same-host:8123 URLs.
 host B) still need user-side HA framing config. The addon's
 proxy only routes to the local HA Core via the Supervisor.
 
-**One-time login per broadsheet origin**: broadsheet runs at
-`:8124`, HA runs at `:8123`. Even with the X-Frame-Options proxy
-in place, HA's frontend treats `:8124` as a new OAuth client →
-standard login screen renders inside the iframe on first use.
+**OAuth login bypass (0.9.4.5+ — automatic)**: broadsheet runs
+at `:8124`, HA runs at `:8123`. HA treats `:8124` as a new OAuth
+client; in 0.9.4.4 this meant a standard login screen rendered
+inside the iframe on first use.
 
-The flow:
-1. First embed load → HA login screen renders inside the iframe
-2. Log in with your normal HA credentials
-3. HA stores an auth token in localStorage at `:8124`'s origin
-4. All subsequent embed loads use it automatically
+0.9.4.5 fixes this by pre-populating the iframe's
+`localStorage["hassTokens"]` with a synthesised entry built from
+the addon's Supervisor token before the iframe mounts. HA's
+frontend reads it on boot, treats the session as authenticated,
+never opens the login screen. Re-injected on every URL change so
+Supervisor token rotation is handled cleanly.
 
-For always-on wall tablets, this is a one-time setup step done
-when you commission the tablet. It does NOT need to be redone
-unless the tablet's localStorage is cleared (e.g. Fully Kiosk's
-"Clear Webstorage" — use "Clear Cache" instead, which preserves
-localStorage tokens).
+The embed authenticates as the addon's Supervisor user (admin),
+not as your personal HA account — fine for single-user wall-
+tablet installs; worth knowing for multi-user setups where
+different users should see different dashboards.
 
-**To skip the login**: configure HA's `trusted_networks` auth
-provider in your `configuration.yaml`:
+**If the login screen still appears** (HA frontend changed the
+`hassTokens` shape, or some edge case the injection doesn't
+cover): the iframe falls back to the OAuth login. Two options:
 
-```yaml
-homeassistant:
-  auth_providers:
-    - type: trusted_networks
-      trusted_networks:
-        - 172.30.32.0/23  # HA Supervisor's addon bridge range
-      allow_bypass_login: true
-    - type: homeassistant  # keep this — your normal auth
-```
+1. Log in once — HA stores its own token at `:8124`'s
+   localStorage, subsequent loads use it. NOT preserved across
+   Fully Kiosk's "Clear Webstorage" (use "Clear Cache" instead).
+2. Configure HA's `trusted_networks` auth provider in
+   `configuration.yaml` to skip the login entirely:
 
-Note this allows ANY traffic from those networks to skip login,
-not just embed traffic. Security trade-off: simpler embed UX,
-slightly looser auth. Worth it for trusted home networks; not
-recommended for installs with shared user accounts.
+   ```yaml
+   homeassistant:
+     auth_providers:
+       - type: trusted_networks
+         trusted_networks:
+           - 172.30.32.0/23  # HA Supervisor's addon bridge range
+         allow_bypass_login: true
+       - type: homeassistant  # keep this — your normal auth
+   ```
+
+   This allows ANY traffic from those networks to skip login, not
+   just embed traffic. Security trade-off: simpler embed UX,
+   slightly looser auth. Worth it for trusted home networks; not
+   recommended for installs with shared user accounts.
 
 ## The addon shows the old version after I push a new one
 

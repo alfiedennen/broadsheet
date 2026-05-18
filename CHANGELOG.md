@@ -4,6 +4,60 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.4.5] — embed auth injection + asset fallback proxy (2026-05-18)
+
+### Fixed
+- **Lovelace embed no longer shows the OAuth login screen.** 0.9.4.4's
+  proxy bypassed `X-Frame-Options` but the iframe still landed on
+  HA's login because `:8124` is a new OAuth client to HA's auth
+  state and `/auth/token` 400s on code exchange (the addon's origin
+  isn't a registered client). 0.9.4.5 pre-populates the iframe's
+  `localStorage["hassTokens"]` with a synthesised entry built from
+  `window.__BROADSHEET_ENV__.supervisorToken` on every renderer
+  mount. HA's frontend reads it on boot, treats the session as
+  already authenticated, never opens the login screen. Re-injects
+  on URL changes so Supervisor token rotation is handled cleanly.
+- **HACS-installed plugin assets now load.** Two complementary
+  routes: (a) explicit `/hacsfiles/` proxy to HA Core for
+  HACS-installed Lovelace plugins; (b) a regex catch-all for any
+  path with a file extension (`/[^/]+/.+\.(js|css|png|...)`) that
+  tries broadsheet's own filesystem first via `try_files`, falls
+  back to the HA proxy. Catches arbitrary HACS-integration static
+  paths broadsheet can't enumerate (e.g.
+  `/room_presence/room-presence-card.js`).
+- **`/local/` files now resolve.** 0.9.4.4's proxy upstream was
+  `supervisor/core/local/` — the REST API listing endpoint, not
+  the static-file serving. Flipped to `homeassistant:8123/local/`
+  (HA Core's frontend serving from `/config/www/`). No Bearer auth —
+  HA serves `/local/` to authenticated sessions, and the auth
+  injection provides that.
+
+### Added (addon-side)
+- `^~` priority modifier on all of broadsheet's own asset routes
+  (`/_app/immutable/`, `/_app/`, `/plugin-assets/`, `/plugin-data/`,
+  `/api/broadsheet/`, `/api/harold-preset/`, `/api/websocket`,
+  `/api/`, `/static/`, `/frontend_latest/`, `/auth/`, `/local/`,
+  `/hacsfiles/`). Without it, the new asset-extension regex would
+  cannibalise them — nginx gives regex priority over prefix
+  matches unless `^~` is set.
+
+### Changed
+- `TROUBLESHOOTING.md` "One-time login per broadsheet origin"
+  section — flipped from "log in once, token persists" to
+  "0.9.4.5+ auto-authenticates via Supervisor token injection".
+  The `trusted_networks` recipe stays as the user-side fallback
+  for installs that disable the injection or run into edge cases.
+
+### Honest caveat
+- Auth injection grants admin-level visibility (the Supervisor
+  token's level). Fine for single-user wall-tablet installs;
+  worth knowing for multi-user setups where different users
+  should see different dashboards. Per-user OAuth is out of
+  scope until requested.
+- If HA's auth module changes the `hassTokens` shape in a future
+  release, the injection fails open to the OAuth login screen —
+  no regression vs 0.9.4.4. Documented as a known fragility.
+
 ## [0.9.4.4] — embed proxy upstream fix (2026-05-18)
 
 ### Fixed
