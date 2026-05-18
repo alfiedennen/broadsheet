@@ -1,5 +1,12 @@
 # Agent-executed dogfood framework
 
+> **Status note (2026-05-18):** This doc was written during v0.1
+> planning. Current shipped state is **0.9.4.6**, M0–M6 complete,
+> add-on in **T2 friendly soak**. See [CHANGELOG.md](../CHANGELOG.md)
+> and [BUILD-LOG.md](BUILD-LOG.md) for the actual ship history. The
+> framing below describes planning-time thinking, not current
+> reality — kept as a record of the path taken.
+
 The MCP-driven, programmatically-executed variant of `DOGFOOD-FRAMEWORK.md`.
 This is what I (the agent) follow when running the dogfood myself
 using Chrome MCP + Bash + sidecar APIs.

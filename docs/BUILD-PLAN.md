@@ -1,5 +1,12 @@
 # broadsheet — v0.1 build plan
 
+> **Status note (2026-05-18):** This doc was written during v0.1
+> planning. Current shipped state is **0.9.4.6**, M0–M6 complete,
+> add-on in **T2 friendly soak**. See [CHANGELOG.md](../CHANGELOG.md)
+> and [BUILD-LOG.md](BUILD-LOG.md) for the actual ship history. The
+> framing below describes planning-time thinking, not current
+> reality — kept as a record of the path taken.
+
 The committed sequence from "scaffold the repo" to "ship v0.1.0". Each
 milestone has hard exit criteria so we know when to stop and move on.
 

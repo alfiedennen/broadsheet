@@ -1,5 +1,12 @@
 # Home Assistant user landscape
 
+> **Status note (2026-05-18):** This doc was written during v0.1
+> planning. Current shipped state is **0.9.4.6**, M0–M6 complete,
+> add-on in **T2 friendly soak**. See [CHANGELOG.md](../CHANGELOG.md)
+> and [BUILD-LOG.md](BUILD-LOG.md) for the actual ship history. The
+> framing below describes planning-time thinking, not current
+> reality — kept as a record of the path taken.
+
 A research-grounded synthesis of who actually uses Home Assistant,
 what they build dashboards for, what they struggle with, and where
 broadsheet sits relative to their habits + needs. Compiled from

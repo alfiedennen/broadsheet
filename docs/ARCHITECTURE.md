@@ -357,10 +357,15 @@ import — `registry.ts` imports the plugin, so a back-import cycles).
   (procedural default + painting-capable), settings panel, painting-
   set discoveryContributor, static painting assets.
 - **`@broadsheet/ghost-cloud`** — 24-hour radar event playback.
-  Three.js + Web Audio. Contract-ready stub; renderer + precompute
-  port is post-v0.1.
+  Three.js + Web Audio + custom GLSL. **Shipped v0.1.0** — renderer
+  ported verbatim from harold-home's lock-state-v22 piece, bundled
+  alongside a vendored Three.js r169. Ships with bundled demo data
+  (one captured day per room) so it works for any user without
+  hardware; live LD2450 radar precompute is the deferred follow-on.
 - **`@broadsheet/tmdb-tv`** — TMDB-driven content rows on `/tv`.
-  Contract-ready stub; renderer port is post-v0.1.
+  **Shipped v0.2.0** — renderer + settings panel + a droppable
+  `tmdb-tv:rows` block that surfaces as a recipe per area that has
+  a TV.
 
 ---
 
