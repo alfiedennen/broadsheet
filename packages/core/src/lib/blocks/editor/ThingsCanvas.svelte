@@ -261,6 +261,10 @@
 				const n = block.config.tabs.length;
 				return `Tabs — ${n} tab${n === 1 ? '' : 's'}: ${block.config.tabs.map((t) => t.label).slice(0, 3).join(', ')}${n > 3 ? '…' : ''}`;
 			}
+			case 'lovelace-embed': {
+				const url = block.config.url;
+				return url ? `Lovelace embed — ${url}` : 'Lovelace embed — (no URL)';
+			}
 		}
 	}
 
@@ -284,7 +288,8 @@
 			'area-media-panel': 'Media panel',
 			row: 'Row',
 			grid: 'Grid',
-			tabs: 'Tabs'
+			tabs: 'Tabs',
+			'lovelace-embed': 'Lovelace embed'
 		};
 		return labels[block.type];
 	}
@@ -293,8 +298,7 @@
 		// Block types the things-first editor has inline editors for.
 		// Others get a "switch to advanced to edit" hint. 0.9.3.2
 		// added the 3 area-panel composites; 0.9.4 added row + grid;
-		// 0.9.4.1 added tabs (container blocks; nested-edit routes
-		// to advanced as with row/grid).
+		// 0.9.4.1 added tabs; 0.9.4.2 added lovelace-embed.
 		return (
 			t === 'thing' ||
 			t === 'macro' ||
@@ -304,7 +308,8 @@
 			t === 'area-media-panel' ||
 			t === 'row' ||
 			t === 'grid' ||
-			t === 'tabs'
+			t === 'tabs' ||
+			t === 'lovelace-embed'
 		);
 	}
 
@@ -348,6 +353,14 @@
 		// Macros are composed via the modal — opening with null index
 		// signals "new macro" mode. The parent appends on save.
 		onComposeMacro(null);
+	}
+
+	function addLovelaceEmbed() {
+		// 0.9.4.2 — escape hatch for embedding an HA Lovelace URL
+		// directly. Lands with an empty URL; the user fills it in
+		// via the inline editor that opens automatically below.
+		onAppendBlocks([{ type: 'lovelace-embed', config: { url: '', height: 800 } }]);
+		expandedIdx = blocks.length;
 	}
 </script>
 
@@ -796,6 +809,65 @@
 									things-first canvas edits the tab structure here; the
 									tab CONTENT is edited block-by-block over there.
 								</p>
+							{:else if block.type === 'lovelace-embed'}
+								{@const cfg = block.config as { url: string; label?: string | null; height?: number }}
+								<dl class="thing-readout">
+									<dt>URL</dt>
+									<dd class="mono">
+										{cfg.url || '(none — embed will show a placeholder)'}
+									</dd>
+								</dl>
+								<label class="field">
+									<span class="field-label">URL</span>
+									<input
+										type="text"
+										class="field-input mono"
+										value={cfg.url}
+										placeholder="http://homeassistant.local:8123/wall-tablet/home?kiosk=true"
+										oninput={(e) =>
+											onPatchBlock(i, {
+												url: (e.target as HTMLInputElement).value
+											})}
+									/>
+									<span class="field-hint">
+										Full URL to an HA Lovelace dashboard. Append
+										<code>?kiosk=true</code> to suppress HA's sidebar +
+										header for a chrome-free render. Cross-origin: HA
+										must allow framing — see
+										<a href="https://github.com/alfiedennen/broadsheet/blob/main/docs/TROUBLESHOOTING.md#lovelace-embed-shows-blank">TROUBLESHOOTING.md</a>.
+									</span>
+								</label>
+								<label class="field">
+									<span class="field-label">Section label (optional)</span>
+									<input
+										type="text"
+										class="field-input"
+										value={cfg.label ?? ''}
+										placeholder="(no header)"
+										oninput={(e) =>
+											onPatchBlock(i, {
+												label: (e.target as HTMLInputElement).value || null
+											})}
+									/>
+								</label>
+								<label class="field">
+									<span class="field-label">Iframe height (px)</span>
+									<input
+										type="number"
+										class="field-input mono"
+										min="120"
+										max="4000"
+										value={cfg.height ?? 800}
+										oninput={(e) =>
+											onPatchBlock(i, {
+												height: Number((e.target as HTMLInputElement).value) || 800
+											})}
+									/>
+									<span class="field-hint">
+										iframes don't auto-size to content. Match the
+										embedded view's natural height for a clean fit.
+									</span>
+								</label>
 							{:else if !isThingsFirstNative(block.type)}
 								<p class="non-native-hint">
 									This block type — <strong>{blockTypeLabel(block)}</strong>
@@ -828,6 +900,9 @@
 		</button>
 		<button type="button" class="action" onclick={addMacro}>
 			+ Macro
+		</button>
+		<button type="button" class="action" onclick={addLovelaceEmbed}>
+			+ Lovelace embed
 		</button>
 		<span class="canvas-foot-hint">
 			Add a thing from the browser on the left — tap or drag.

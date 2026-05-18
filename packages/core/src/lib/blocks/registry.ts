@@ -82,7 +82,11 @@ const CORE_REGISTRY: Record<BlockType, BlockRendererThunk> = {
 	grid: () =>
 		import('./renderers/GridBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
 	tabs: () =>
-		import('./renderers/TabsBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>
+		import('./renderers/TabsBlockRenderer.svelte') as unknown as ReturnType<BlockRendererThunk>,
+	'lovelace-embed': () =>
+		import(
+			'./renderers/LovelaceEmbedBlockRenderer.svelte'
+		) as unknown as ReturnType<BlockRendererThunk>
 };
 
 /**
@@ -199,5 +203,10 @@ export const BLOCK_META: Record<BlockType, { label: string; description: string 
 		label: 'Tabs (chip-bar nav)',
 		description:
 			'0.9.4.1 navigation primitive — chip-bar at the top, switches the visible content section. URL-bound active tab (?tab=<id>) so refresh + back + deep-link work. Multi-view Lovelace dashboards land here.'
+	},
+	'lovelace-embed': {
+		label: 'Lovelace embed (iframe escape hatch)',
+		description:
+			'0.9.4.2 escape hatch — thin iframe wrapping an HA Lovelace URL. Perfect fidelity to the source (it IS the source rendering); zero translation gaps. Use this when a Lovelace dashboard is card-mod-heavy / mushroom-heavy / HACS-component-heavy and the translator can\'t reproduce it faithfully. HA must allow framing — see TROUBLESHOOTING.md.'
 	}
 };

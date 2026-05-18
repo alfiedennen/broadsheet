@@ -68,6 +68,12 @@
 	// import (the default for multi-view dashboards). False = single
 	// view import (the legacy behaviour).
 	let tabbedMode = $state(false);
+	// 0.9.4.2 — true when the user has picked the embed escape hatch
+	// (iframe of the source instead of translation). When set,
+	// `embedViewIdx` is null for the whole-dashboard embed OR the
+	// view index for a single-view embed.
+	let embedMode = $state(false);
+	let embedViewIdx = $state<number | null>(null);
 
 	// Editable destination meta
 	let destLabel = $state('');
@@ -97,6 +103,8 @@
 		translated = null;
 		translatedAsTabs = null;
 		tabbedMode = false;
+		embedMode = false;
+		embedViewIdx = null;
 		try {
 			const cfg = await getLovelaceConfig(d.url_path);
 			if (!cfg) {
@@ -125,6 +133,7 @@
 	/** 0.9.4.1 — commit the whole dashboard as one tabbed broadsheet page. */
 	function pickTabbed() {
 		tabbedMode = true;
+		embedMode = false;
 		pickedViewIdx = null;
 		const dashTitle = (translated?.title ?? translatedAsTabs?.title) || 'Imported dashboard';
 		destLabel = dashTitle;
@@ -135,8 +144,38 @@
 		step = 'review';
 	}
 
+	/**
+	 * 0.9.4.2 — embed the whole dashboard (or one view) as an iframe.
+	 * Used when the source uses card-mod / mushroom / HACS components
+	 * the translator can't reproduce. `viewIdx` null = embed the whole
+	 * dashboard as one page (URL points at the dashboard root);
+	 * `viewIdx` number = embed that single view.
+	 */
+	function pickEmbed(viewIdx: number | null = null) {
+		embedMode = true;
+		tabbedMode = false;
+		embedViewIdx = viewIdx;
+		pickedViewIdx = viewIdx;
+		const view = viewIdx !== null ? translated?.views[viewIdx] : null;
+		if (view) {
+			destLabel = view.title ?? `Embedded view ${viewIdx! + 1}`;
+			destSlug = view.path
+				? slugifyForBroadsheet(view.path)
+				: slugifyForBroadsheet(destLabel);
+		} else {
+			const dashTitle = translated?.title || 'Embedded dashboard';
+			destLabel = dashTitle;
+			destSlug = slugifyForBroadsheet(
+				pickedDashboard?.url_path || slugifyForBroadsheet(dashTitle)
+			);
+		}
+		slugEdited = false;
+		step = 'review';
+	}
+
 	function pickView(idx: number) {
 		tabbedMode = false;
+		embedMode = false;
 		pickedViewIdx = idx;
 		const view = translated?.views[idx];
 		if (view) {
@@ -167,18 +206,56 @@
 
 	/**
 	 * The view about to be committed.
-	 *  - tabbedMode: the aggregated "all views as tabs" view
-	 *    (single block, the tabs primitive).
+	 *  - embedMode: a synthetic view containing one lovelace-embed
+	 *    block pointing at the source URL (whole dashboard OR single
+	 *    view, depending on embedViewIdx).
+	 *  - tabbedMode: the aggregated "all views as tabs" view.
 	 *  - otherwise: the user's picked single view from the per-view
 	 *    translation.
 	 */
-	const pickedView = $derived(
-		tabbedMode
-			? (translatedAsTabs?.views[0] ?? null)
-			: pickedViewIdx !== null && translated
-				? translated.views[pickedViewIdx]
-				: null
-	);
+	const pickedView = $derived.by((): TranslatedView | null => {
+		if (embedMode) {
+			const url = embedHaUrl(pickedDashboard?.url_path ?? null, embedViewIdx);
+			const title =
+				embedViewIdx !== null && translated
+					? translated.views[embedViewIdx]?.title ?? null
+					: (translated?.title ?? null);
+			return {
+				title,
+				path: null,
+				blocks: [
+					{
+						type: 'lovelace-embed',
+						config: { url, height: 800 }
+					}
+				],
+				reports: []
+			};
+		}
+		if (tabbedMode) return translatedAsTabs?.views[0] ?? null;
+		return pickedViewIdx !== null && translated ? translated.views[pickedViewIdx] : null;
+	});
+
+	/**
+	 * Compose the HA Lovelace URL for the embed. Uses
+	 * `window.location.origin` switched to port 8123 (HA Core), which
+	 * is broadsheet's host's HA. The `?kiosk=true` suffix suppresses
+	 * HA's sidebar + header so the iframe shows clean content.
+	 */
+	function embedHaUrl(dashUrlPath: string | null, viewIdx: number | null): string {
+		// Default to the same hostname as broadsheet's running on,
+		// but with port 8123 (HA Core). The user can edit this in
+		// the review step's block editor if their setup differs.
+		const host = typeof window === 'undefined' ? 'homeassistant.local' : window.location.hostname;
+		const base = `http://${host}:8123`;
+		const dashSegment = dashUrlPath ? `/${dashUrlPath}` : '/lovelace';
+		const viewPath =
+			viewIdx !== null && translated
+				? translated.views[viewIdx]?.path
+				: null;
+		const viewSegment = viewPath ? `/${viewPath}` : '';
+		return `${base}${dashSegment}${viewSegment}?kiosk=true`;
+	}
 
 	function slugError(): string | null {
 		const s = destSlug.trim();
@@ -360,13 +437,54 @@
 						</div>
 						<span class="dash-arrow" aria-hidden="true">›</span>
 					</button>
+				</div>
+				<!-- 0.9.4.2 — escape hatch for card-mod / mushroom / HACS-
+				     heavy dashboards. Honest about what it is: an iframe
+				     of the source. Use when translation gives unusable
+				     results (lots of markdown placeholders, dead labels,
+				     unsupported card placeholders). -->
+				<div class="embed-recommend">
+					<button class="embed-row" type="button" onclick={() => pickEmbed(null)}>
+						<div class="embed-meta">
+							<span class="embed-title">
+								Embed the whole dashboard (don't translate)
+							</span>
+							<span class="embed-summary">
+								One broadsheet page with the original HA Lovelace
+								embedded inline as an iframe. Perfect fidelity, zero
+								translation gaps. Use this if your dashboard uses lots
+								of card-mod / mushroom / custom HACS components.
+							</span>
+						</div>
+						<span class="dash-arrow" aria-hidden="true">›</span>
+					</button>
 					<p class="tabbed-hint">
-						<em>Or</em> pick a single view below to import on its own.
+						<em>Or</em> pick a single view below to import or embed on
+						its own.
 					</p>
 				</div>
 				<OutLine label="Or import a single view" />
 			{:else}
-				<OutLine label="Pick a view to import" />
+				<!-- Single-view dashboard — the embed option still applies. -->
+				<div class="embed-recommend">
+					<button class="embed-row" type="button" onclick={() => pickEmbed(null)}>
+						<div class="embed-meta">
+							<span class="embed-title">
+								Embed this dashboard (don't translate)
+							</span>
+							<span class="embed-summary">
+								Iframe the original HA Lovelace inline. Perfect
+								fidelity for card-mod / mushroom / HACS-heavy
+								dashboards the translator can't reproduce cleanly.
+							</span>
+						</div>
+						<span class="dash-arrow" aria-hidden="true">›</span>
+					</button>
+					<p class="tabbed-hint">
+						<em>Or</em> translate the view below.
+					</p>
+				</div>
+				<OutLine label="Or translate the view" />
 			{/if}
 			<p class="totals">
 				Across all views:
@@ -377,7 +495,7 @@
 			</p>
 			<ul class="view-list">
 				{#each translated.views as v, i (i)}
-					<li>
+					<li class="view-row-pair">
 						<button class="view-row" type="button" onclick={() => pickView(i)}>
 							<div class="view-meta">
 								<span class="view-title">
@@ -386,6 +504,17 @@
 								<span class="view-summary">{viewSummary(v)}</span>
 							</div>
 							<span class="dash-arrow" aria-hidden="true">›</span>
+						</button>
+						<!-- 0.9.4.2 per-view escape hatch — for the one
+						     view in your dashboard that's too custom-heavy
+						     to translate, embed just that one. -->
+						<button
+							class="view-embed-btn"
+							type="button"
+							onclick={() => pickEmbed(i)}
+							title="Embed this single view as an iframe instead of translating"
+						>
+							Embed instead
 						</button>
 					</li>
 				{/each}
@@ -398,7 +527,11 @@
 			<button class="mini" type="button" onclick={back}>← Back</button>
 			<span class="back-context">
 				From <strong>{pickedDashboard?.title}</strong>
-				{#if tabbedMode}
+				{#if embedMode}
+					·
+					{embedViewIdx === null ? 'embedding whole dashboard' : 'embedding view'}
+					<strong>{pickedView.title ?? 'untitled'}</strong>
+				{:else if tabbedMode}
 					· all
 					<strong>{translated?.views.length ?? '?'} views</strong> as
 					tabs
@@ -662,6 +795,78 @@
 		color: var(--fg-muted);
 		font-style: italic;
 		margin: 0;
+	}
+
+	/* 0.9.4.2 — embed escape hatch tile. Same structural shape as
+	   tabbed-recommend but a calmer visual (no accent glow). Honest:
+	   it's a fallback, not the recommended path. */
+	.embed-recommend {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-6);
+	}
+	.embed-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-4) var(--space-4);
+		background: var(--bg-card, var(--bg));
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		text-align: left;
+		width: 100%;
+		cursor: pointer;
+		transition: border-color var(--ease-quick);
+	}
+	.embed-row:hover {
+		border-color: var(--accent);
+	}
+	.embed-meta {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		min-width: 0;
+	}
+	.embed-title {
+		font-family: var(--font-display, var(--font-body));
+		font-style: italic;
+		font-size: 1.1rem;
+		color: var(--fg);
+	}
+	.embed-summary {
+		font-family: var(--font-body);
+		font-size: 0.85rem;
+		color: var(--fg-muted);
+		line-height: var(--leading-snug);
+	}
+
+	/* 0.9.4.2 — per-view "Embed instead" button next to each
+	   translated view in the picker list. */
+	.view-row-pair {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: var(--space-2);
+		align-items: stretch;
+	}
+	.view-embed-btn {
+		font-family: var(--font-mono);
+		font-size: var(--text-eyebrow);
+		letter-spacing: var(--track-eyebrow);
+		text-transform: uppercase;
+		padding: var(--space-2) var(--space-3);
+		background: var(--bg-raised);
+		color: var(--fg-muted);
+		border: 1px dashed var(--rule);
+		border-radius: var(--radius-card);
+		cursor: pointer;
+		transition: color var(--ease-quick), border-color var(--ease-quick);
+	}
+	.view-embed-btn:hover {
+		color: var(--accent);
+		border-color: var(--accent);
+		border-style: solid;
 	}
 
 	/* ── Destination meta + coverage rows ──────────────────────── */

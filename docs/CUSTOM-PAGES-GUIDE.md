@@ -237,6 +237,7 @@ hints on the ones it can't inline-edit).
 | **Row** *(0.9.4)* | Horizontal flex container — places children side-by-side, stacks on narrow viewports |
 | **Grid** *(0.9.4)* | CSS-grid container with N columns; child `colSpan` spans multiple columns. Responsive collapse. Lovelace `sections` views land here |
 | **Tabs** *(0.9.4.1)* | Chip-bar at the top + active-tab content below. URL-bound (`?tab=<id>`) so refresh + back + deep-links work. Multi-view Lovelace dashboards land here |
+| **Lovelace embed** *(0.9.4.2)* | Iframe escape hatch — wraps an HA Lovelace URL inline. Perfect fidelity to the source. Use when the translator can't reproduce a card-mod / mushroom / HACS-heavy dashboard cleanly |
 
 Plus any **plugin-contributed blocks** active on your install
 (`tmdb-tv:rows` for example, when `@broadsheet/tmdb-tv` is enabled).
@@ -356,6 +357,52 @@ to the area in HA, the panel grows automatically. Tablets / kiosks
 are filtered from the media panel by default
 ([0.9.3.1](../CHANGELOG.md#0931--kiosktablet-filter-on-media-surfaces-2026-05-17)).
 
+### Lovelace embed *(0.9.4.2)*
+
+The honest escape hatch. A thin iframe wrapping an HA Lovelace
+URL. Perfect fidelity — it IS the source rendering, with all its
+card-mod styling / mushroom widgets / custom HACS components
+intact. Zero translation gaps because no translation happens.
+
+**When to use it**: your Lovelace dashboard is built with cards
+broadsheet's translator can't reproduce cleanly — typically
+heavy use of `custom:mushroom-*`, card-mod CSS injection, or
+custom HACS components like `custom:room-presence-card`,
+`custom:button-card`, etc. The translator handles HA's native
+primitives well (markdown / entities / glance / button / light /
+tile / sections-grid / horizontal-stack); it can't reproduce the
+mushroom visual register or card-mod styling.
+
+**When NOT to use it**: simple Lovelace dashboards built with
+native primitives translate fine — use translate instead, get a
+broadsheet-native render. The embed is a fallback, not a default.
+
+**Config**:
+- `url` — full URL to the HA Lovelace dashboard. Conventionally
+  `http://<your-ha-host>:8123/<dashboard>/<view>?kiosk=true`.
+  The `?kiosk=true` suffix suppresses HA's sidebar + header.
+- `height` — iframe height in CSS pixels (iframes don't auto-
+  size). Match the embedded view's natural height.
+- `label` — optional section label rendered as an OutLine above.
+
+**Caveat**: HA defaults to `X-Frame-Options: DENY` which blocks
+iframing. If your embed shows blank, you need to configure HA to
+allow framing. See
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md#lovelace-embed-shows-blank).
+
+**On the import flow**: when picking a multi-view dashboard, you
+now see three options:
+
+1. **Import all N views as one tabbed page** (the default, when
+   the dashboard has multiple views) — translates each view, wraps
+   them in a tabs block
+2. **Embed the whole dashboard (don't translate)** — single
+   broadsheet page with one lovelace-embed block pointing at the
+   dashboard's URL. Use this when you know the dashboard is too
+   custom to translate well
+3. **Pick a single view** — translate it, OR per-view "Embed
+   instead" button for individual views that are too custom
+
 ### Tabs *(0.9.4.1)*
 
 Chip-bar at the top + the active tab's content below. Two
@@ -458,6 +505,41 @@ Got an existing Lovelace dashboard? **Settings → Pages → ⇣ Import
 from Lovelace** translates Lovelace cards into broadsheet
 primitives. See [`IMPORTER-GUIDE.md`](IMPORTER-GUIDE.md) for the
 per-card translator status.
+
+### When translation works well vs when to embed
+
+**Translation works well** for Lovelace dashboards built with
+HA's native cards: `markdown`, `entity`, `entities`, `glance`,
+`button`, `light`, `tile`, `media-control`, `iframe`, `heading`,
+`gauge`, `sensor`, `weather-forecast`, `picture`, `picture-entity`,
+`picture-glance`, `conditional`, `horizontal-stack`,
+`vertical-stack`, `grid`, and the `sections` view layout. 51
+translator tests passing; a clean translation produces a real
+broadsheet page in broadsheet's editorial register.
+
+**Translation has known gaps** for dashboards built with
+card-mod / mushroom / custom HACS components:
+
+- `custom:mushroom-template-card` translates to action-grid or
+  markdown, depending on whether tap_action is present — but the
+  visual register doesn't survive (no mushroom card chrome)
+- `custom:mushroom-chips-card`, `custom:mushroom-light-card`,
+  `custom:mushroom-entity-card`, `custom:mushroom-climate-card`
+  — similar: the data translates, the mushroom-card visual
+  language doesn't
+- `card-mod` styling is dropped entirely (broadsheet has its own
+  register; card-mod is a styling layer atop HA's chrome)
+- Custom HACS components (`custom:room-presence-card`,
+  `custom:button-card` etc.) — translated to placeholders or
+  best-effort approximations
+- `custom:layout-card` + `custom:grid-layout` — the layout-card
+  wrapper translates, the grid-template-areas config is lost
+
+**For dashboards heavy in any of the above, embed instead.** The
+Lovelace embed block iframes the original HA Lovelace at the
+source URL — perfect fidelity, zero translation gaps. The import
+flow surfaces "Embed this dashboard" as a top-level option
+alongside translate.
 
 **0.9.4 — imports respect layout.** The translator now honours
 Lovelace's layout signals:

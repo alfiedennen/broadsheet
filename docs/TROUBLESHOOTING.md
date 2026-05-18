@@ -13,6 +13,80 @@ https://github.com/alfiedennen/broadsheet/issues with:
 
 ---
 
+## Imported page is mostly markdown / dead labels
+
+**Symptom**: you imported a Lovelace dashboard, the page renders
+but looks broken — long sections of italic-amber text that look
+like labels, controls that should be tappable are dead text,
+custom widgets show as placeholders.
+
+**Cause**: your Lovelace dashboard is built with `custom:mushroom-*`
+cards, `card-mod` CSS injection, and/or custom HACS components
+(`custom:room-presence-card`, `custom:button-card`, etc.). These
+aren't card TYPES the translator can convert — they're an entire
+rendering language broadsheet doesn't speak. The translator
+preserves the DATA but can't reproduce the visual register.
+
+**Fix — embed instead of translate**: open Settings → Pages →
+⇣ Import from Lovelace, pick your dashboard, then pick **"Embed
+the whole dashboard (don't translate)"** (the second option
+below the tabbed-import default). This creates a broadsheet page
+that iframes the original HA Lovelace dashboard — perfect
+fidelity. Or pick a single view + "Embed instead" if only some
+views are too custom.
+
+**Or — re-author in broadsheet things-first**: the wall-builder
+(`Settings → Pages → + New page` then drop things from the
+browser) is the canonical way to build a wall surface in
+broadsheet's register. If you want broadsheet's editorial look
++ behaviour, this is the path. The Lovelace import is best-
+effort, not perfect translation.
+
+See [`CUSTOM-PAGES-GUIDE.md`](CUSTOM-PAGES-GUIDE.md#when-translation-works-well-vs-when-to-embed)
+for the honest "when each path works" list.
+
+## Lovelace embed shows blank
+
+**Symptom**: you added a `lovelace-embed` block (or used the
+"Embed the whole dashboard" import option), but the iframe
+shows blank / empty / a refused-connection message.
+
+**Cause**: HA defaults to `X-Frame-Options: DENY` in its HTTP
+response headers — a security default that prevents HA's UI from
+being framed by other origins. broadsheet's iframe gets the
+DENY header back from HA and the embedded content never renders.
+
+**Fix — allow framing in HA's configuration.yaml**:
+
+```yaml
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
+    - ::1
+    # add any reverse-proxy IPs you have
+```
+
+If you're running broadsheet as an add-on through HA Ingress,
+that's same-origin and should "just work" once `use_x_forwarded_for`
+is on. For cross-origin embeds (broadsheet at port 8124 → HA
+Lovelace at port 8123), you also need to allow your hostname
+as a frame ancestor. The cleanest way is HA's
+[`http.cors_allowed_origins`](https://www.home-assistant.io/integrations/http/#cors_allowed_origins)
+config, but the X-Frame-Options DENY is set elsewhere — depending
+on your HA version you may need an `add_header` rule in a
+reverse-proxy in front of HA. There's no universal recipe; the
+HA setup varies.
+
+**Workaround**: use Ingress URLs rather than port-direct URLs
+for the embed. broadsheet's addon ingress runs same-origin as
+HA's frontend, so iframing a Lovelace path under the same
+ingress chain avoids X-Frame-Options entirely.
+
+**Honest caveat**: this is one of the few things broadsheet can't
+fix entirely from its side. The framing decision is HA's; we
+just consume whatever HA serves.
+
 ## The addon shows the old version after I push a new one
 
 **Symptom**: you publish a new addon version via the CI pipeline.

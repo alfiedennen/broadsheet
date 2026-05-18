@@ -1627,6 +1627,10 @@
 				const n = block.config.tabs.length;
 				return `Tabs — ${n} tab${n === 1 ? '' : 's'}: ${block.config.tabs.map((t) => t.label).slice(0, 3).join(', ')}${n > 3 ? '…' : ''}`;
 			}
+			case 'lovelace-embed': {
+				const url = block.config.url;
+				return url ? `Lovelace embed — ${url}` : 'Lovelace embed — (no URL)';
+			}
 		}
 	}
 </script>

@@ -3432,3 +3432,126 @@ the body of each tab.
 Plan: `docs/plans/plan-9.4.1-tabs-and-multiview.md` (full
 decision-set + sequenced impl plan, locked then marked
 IMPLEMENTED with file inventory).
+
+## 2026-05-18 — 0.9.4.2 — lovelace-embed escape hatch + honest import scoping
+
+After 0.9.4.1's tabbed-multi-view import landed, dogfood against
+a real card-mod-heavy wall-tablet dashboard made the translator's
+structural ceiling clear. Tab-by-tab assessment of the imported
+result (8 views, ~130 cards): 0/8 tabs were usable as control
+surfaces. The honest verdict:
+
+> Wait a second, absolutely no to multi page creation from one
+> lovelace page import, that defeats the entire purpose. […]
+> Check all the tabs, we might need to admit defeat as really
+> it's just not usable, what do you think?
+
+After looking at every tab via Chrome MCP, the honest assessment
+landed as: yes, for THIS dashboard, defeat. The structural gap:
+
+> The wall-tablet is built in card-mod + mushroom + custom HACS
+> components. Those are not just card TYPES — they're an entire
+> rendering language broadsheet doesn't speak. card-mod is
+> CSS-injection on top of HA's Lovelace; mushroom is a tile-
+> shaped visual register with its own primary/secondary/icon/
+> colour stack; custom:room-presence-card is a stateful component
+> with its own data pipeline. A static AST translator can't
+> reproduce any of that.
+
+The dashboards the translator handles well (51 tests passing)
+are those built with HA's NATIVE primitives. Card-mod-heavy /
+mushroom-heavy / HACS-heavy dashboards are at the other end of
+the spectrum. The previously-planned 0.9.4.2 translator fixes
+(chip coalescing / grid-layout / mushroom state-pill /
+type:template) would tidy specific symptoms but not bridge that
+gap.
+
+The decision: accept the constraint, ship an escape hatch, be
+honest in docs.
+
+### What 0.9.4.2 ships
+
+**`lovelace-embed` block**. A thin iframe wrapping an HA Lovelace
+URL. Perfect fidelity to the source dashboard; zero translation
+gaps. Config is just `{ url, height?, label? }`. The renderer
+surfaces a placeholder when URL is empty + a hint after a 5s
+no-load timeout pointing at the TROUBLESHOOTING X-Frame-Options
+recipe. `color-scheme: dark light` on the iframe so HA's theme
+renders consistently inside.
+
+**Import flow gains embed options at every level**:
+
+- **"Embed the whole dashboard (don't translate)"** tile at the
+  top of the pick-view step, for both multi-view and single-view
+  dashboards. Creates one broadsheet page with a single
+  lovelace-embed block pointing at the dashboard's URL.
+- **Per-view "Embed instead" button** next to each translated
+  view in the picker list. For the one view in your dashboard
+  that's too custom-heavy to translate cleanly.
+
+`embedHaUrl(dashUrlPath, viewIdx)` composes the embed URL:
+`http://<broadsheet's host>:8123/<dashboard>/<view>?kiosk=true`.
+The `?kiosk=true` suffix suppresses HA's sidebar + header for a
+chrome-free render. User can edit per-block via the inline editor.
+
+**Things-first canvas gains a `+ Lovelace embed` footer button**
+alongside `+ Section divider` and `+ Macro`. Users can drop an
+embed into a hand-authored page (e.g. one tab is broadsheet-
+native, another embeds a complex HA Lovelace view).
+
+**Honest docs**:
+
+- `CUSTOM-PAGES-GUIDE.md` gains a "When translation works well
+  vs when to embed" section with explicit per-card-type notes for
+  the known gaps (mushroom-*, card-mod, custom HACS, layout-card
+  grid-template-areas).
+- `TROUBLESHOOTING.md` gains two new sections: "Imported page is
+  mostly markdown / dead labels" → the embed escape hatch is the
+  answer; "Lovelace embed shows blank" → the HA-side
+  X-Frame-Options DENY / `use_x_forwarded_for` config recipe.
+- The import flow's intro now scopes honestly: best-effort for
+  HA-native primitives; embed for the complex ones.
+
+### Why this is the right shape
+
+The temptation after seeing the wall-tablet dogfood was to keep
+iterating the translator — add a translateMushroomTemplate state-
+pill variant, add grid-layout parsing, add chip coalescing. Each
+fix would have been real engineering for marginal value on the
+specific dashboard that broke. Six versions of "almost" doesn't
+beat one honest "here's the escape hatch + here's when to use
+it."
+
+Translation still leads the import flow — it's the default for
+multi-view dashboards (one page with tabs, per 0.9.4.1) AND the
+first option for single-view ones. Embed is the explicit
+fallback, surfaced clearly when translation isn't the right
+answer. Users with simple Lovelace dashboards get a clean
+broadsheet-native render; users with custom-heavy ones get
+perfect fidelity via embed; nobody gets stuck with an unusable
+half-translation.
+
+### Ship-readiness
+
+- svelte-check: 0 errors, 0 warnings across 523 files.
+- vitest: 343 tests pass (+2 new — lovelace-embed in
+  `ALL_BLOCK_TYPES` + default-config defaults).
+- production build: clean.
+
+### Deferred (likely skipped)
+
+The four translator-coverage fixes flagged in 0.9.4.1's deferred
+list:
+
+- Chip-row coalescing into a single action-grid
+- `custom:layout-card` + `custom:grid-layout` → broadsheet grid
+- Mushroom-template-card without tap_action → state-pill thing
+- `type: template` Lovelace card translator
+
+Real value for the people with simpler dashboards but the dogfood
+evidence is they wouldn't have bridged the wall-tablet gap. Won't
+ship absent a specific user request.
+
+Plan: `docs/plans/plan-9.4.2-lovelace-embed-escape-hatch.md`
+(full decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).

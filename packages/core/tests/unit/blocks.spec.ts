@@ -35,7 +35,9 @@ describe('block registry coverage', () => {
 			'row',
 			'grid',
 			// 0.9.4.1 tabs primitive
-			'tabs'
+			'tabs',
+			// 0.9.4.2 lovelace-embed escape hatch
+			'lovelace-embed'
 		];
 		// Same set, order-insensitive
 		expect(ALL_BLOCK_TYPES.slice().sort()).toEqual(expected.slice().sort());
@@ -74,7 +76,9 @@ describe('defaultBlockConfig — every type returns a valid block', () => {
 		'row',
 		'grid',
 		// 0.9.4.1 tabs primitive
-		'tabs'
+		'tabs',
+		// 0.9.4.2 lovelace-embed escape hatch
+		'lovelace-embed'
 	] as const) {
 		it(`${type} returns a block with matching type discriminator`, () => {
 			const block = defaultBlockConfig(type);
@@ -222,6 +226,18 @@ describe('defaultBlockConfig — type-specific invariants', () => {
 			expect(b.config.tabs[1].blocks).toHaveLength(0);
 			expect(b.config.tabs[0].id).toBeTruthy();
 			expect(b.config.tabs[1].id).toBeTruthy();
+		}
+	});
+
+	// 0.9.4.2 — lovelace-embed escape hatch defaults to empty URL +
+	// 800px height. The renderer surfaces a "no URL" placeholder
+	// instead of an empty iframe so the user can't accidentally
+	// ship a broken embed.
+	it('lovelace-embed starter has empty URL + sensible default height', () => {
+		const b = defaultBlockConfig('lovelace-embed');
+		if (b.type === 'lovelace-embed') {
+			expect(b.config.url).toBe('');
+			expect(b.config.height).toBe(800);
 		}
 	});
 });

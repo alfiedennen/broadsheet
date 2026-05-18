@@ -4,6 +4,75 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.4.2] — lovelace-embed escape hatch + honest import scoping (2026-05-18)
+
+### Added
+- **`lovelace-embed` block** — thin iframe wrapping an HA Lovelace
+  URL. Perfect fidelity to the source dashboard; zero translation
+  gaps. The honest escape hatch for dashboards built with card-mod /
+  mushroom / custom HACS components broadsheet's translator can't
+  reproduce. Config: `{ url, height, label? }`. Renderer surfaces
+  a "no URL configured" placeholder when blank + a "if blank, see
+  X-Frame-Options docs" hint after a 5s no-load timeout.
+- **Import flow gains "Embed (don't translate)" options**:
+  - **"Embed the whole dashboard"** tile at the top of the
+    pick-view step (when dashboard has any views). Creates one
+    broadsheet page with a single lovelace-embed block pointing
+    at the dashboard's URL.
+  - **Per-view "Embed instead" button** next to each view in the
+    pick-view list. Creates one page with one lovelace-embed
+    pointing at that view's URL.
+- **"+ Lovelace embed" footer button** on the things-first canvas
+  for users who want to drop an embed into a hand-authored page
+  (e.g. one tab is broadsheet-native, another embeds a complex HA
+  Lovelace view).
+- **Inline editor for lovelace-embed** in the things-first canvas:
+  URL field + height + section label, with a link out to the
+  TROUBLESHOOTING X-Frame-Options recipe.
+
+### Changed
+- `CUSTOM-PAGES-GUIDE.md` gains a clear **"When translation works
+  well vs when to embed"** section, with explicit per-card-type
+  notes for the known gaps (mushroom-*, card-mod, custom HACS,
+  layout-card grid-template-areas).
+- `TROUBLESHOOTING.md` gains two new sections:
+  - **"Imported page is mostly markdown / dead labels"** — what
+    the symptom means + the embed escape hatch as the answer
+  - **"Lovelace embed shows blank"** — the HA-side
+    `X-Frame-Options: DENY` / `use_x_forwarded_for` config recipe
+- The import flow's intro changes from "translates Lovelace cards
+  into broadsheet primitives" to be honest about scope:
+  best-effort for HA-native primitives; embed for the complex
+  ones.
+
+### Why
+After 0.9.4.1's multi-view import shipped, a dogfood pass against
+a real card-mod-heavy wall-tablet dashboard (8 views, ~130 cards)
+made the translator's structural ceiling clear: 0/8 tabs were
+usable as control surfaces. The honest gap is that mushroom-card /
+card-mod / custom HACS components are not card TYPES that can be
+translated — they're an entire rendering language. The
+previously-planned 0.9.4.2 translator fixes (chip coalescing /
+grid-layout / mushroom state-pill / type:template) would tidy
+specific symptoms but not bridge that gap.
+
+The lovelace-embed block accepts the constraint honestly:
+broadsheet's import is best-effort for dashboards built with HA's
+native cards; for everything else, the embed preserves the
+original intact under broadsheet's nav. Six versions of "almost"
+doesn't beat one honest "here's the escape hatch + here's when to
+use it."
+
+### Deferred (likely skipped)
+- Chip-row coalescing into a single action-grid
+- `custom:layout-card` + `custom:grid-layout` → broadsheet grid
+- Mushroom-template-card without tap_action → state-pill thing
+- `type: template` Lovelace card translator
+
+Real value for the people with simpler dashboards but the dogfood
+evidence is they wouldn't have bridged the wall-tablet gap. Won't
+ship absent a specific user request.
+
 ## [0.9.4.1] — tabs primitive + multi-view Lovelace import (2026-05-17)
 
 ### Added

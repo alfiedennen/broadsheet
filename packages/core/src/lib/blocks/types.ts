@@ -386,6 +386,43 @@ export interface GridBlockConfig {
 	gap?: number;
 }
 
+/* ── 0.9.4.2 lovelace-embed escape hatch ────────────────────────── */
+
+/**
+ * 0.9.4.2 — `lovelace-embed` block: a thin iframe wrapping an HA
+ * Lovelace URL. Perfect fidelity to the source dashboard (it IS
+ * the source rendering); zero translation gaps. The escape hatch
+ * for dashboards built with card-mod / mushroom / custom HACS
+ * components broadsheet can't translate cleanly.
+ *
+ * Cross-origin caveat: HA defaults to `X-Frame-Options: DENY` which
+ * blocks iframe embedding. Users have to configure HA to allow
+ * framing from broadsheet's origin (see TROUBLESHOOTING.md). Without
+ * that config the iframe renders blank. The block is honest about
+ * being a portal back to HA Lovelace — it's not pretending to be a
+ * broadsheet-native render.
+ */
+export interface LovelaceEmbedBlockConfig {
+	/**
+	 * The full URL to embed. Conventionally an HA Lovelace path like
+	 * `http://homeassistant.local:8123/wall-tablet/home`. Append
+	 * `?kiosk=true` to suppress HA chrome (no sidebar / no header).
+	 * Empty string renders a placeholder with instructions.
+	 */
+	url: string;
+	/**
+	 * Optional inline section label rendered as an OutLine above the
+	 * embed.
+	 */
+	label?: string | null;
+	/**
+	 * Iframe height in CSS pixels. Default 800. iframes don't auto-
+	 * size to content, so this is a hard-set value. Match the
+	 * embedded view's natural height for a clean fit.
+	 */
+	height?: number;
+}
+
 /* ── 0.9.4.1 tabs primitive ──────────────────────────────────────── */
 
 /**
@@ -510,6 +547,7 @@ export type BlockDef = (
 	| { type: 'row'; config: RowBlockConfig }
 	| { type: 'grid'; config: GridBlockConfig }
 	| { type: 'tabs'; config: TabsBlockConfig }
+	| { type: 'lovelace-embed'; config: LovelaceEmbedBlockConfig }
 ) & {
 	/**
 	 * 0.9.4: how many columns this block occupies when its parent
@@ -697,6 +735,11 @@ export function defaultBlockConfig(type: BlockType): BlockDef {
 						{ id: 'tab-2', label: 'Tab 2', blocks: [] }
 					]
 				}
+			};
+		case 'lovelace-embed':
+			return {
+				type: 'lovelace-embed',
+				config: { url: '', height: 800 }
 			};
 	}
 }
