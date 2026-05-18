@@ -4,6 +4,57 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.4.6] — embed: hide HA chrome + strip /embed/ prefix (2026-05-18)
+
+### Fixed
+- **HA sidebar + header no longer show inside the embed.** 0.9.4.5
+  bypassed the OAuth login but the iframe still rendered HA's full
+  chrome (sidebar with every dashboard listed, top header, view-
+  tabs bar) because Overview was loading instead of the requested
+  dashboard (URL prefix collision — see next item) and Overview
+  doesn't have the kiosk-mode HACS plugin configured. 0.9.4.6
+  injects a `<style>` block into HA's `<head>` that hides chrome
+  host elements (`ha-sidebar`, `app-header`, etc.) unconditionally
+  — works whether or not the source dashboard opted into kiosk
+  mode.
+- **The correct dashboard now renders.** HA's frontend was reading
+  `window.location.pathname` as `/embed/wall-tablet`, trying to
+  resolve "embed" as a dashboard slug, failing, falling back to
+  Overview. 0.9.4.6 injects a synchronous `<script>` at the top of
+  `<head>` that runs `history.replaceState` to strip the `/embed/`
+  prefix from the URL BEFORE HA's frontend's router boots. HA then
+  reads the URL as `/wall-tablet?kiosk=true` and resolves the
+  right dashboard.
+
+### Added (addon-side)
+- nginx `sub_filter` on the `/embed/` location, scoped to
+  `text/html` responses, `once`, injecting both the URL-strip
+  script and the chrome-hide stylesheet into HA's `<head>`.
+- `proxy_set_header Accept-Encoding ""` on the `/embed/` proxy to
+  force HA to return uncompressed HTML (sub_filter operates on
+  plain text bodies).
+
+### Changed
+- Removed `proxy_buffering off` from the `/embed/` proxy. sub_filter
+  requires buffered responses to rewrite the body. HA's index.html
+  is small enough that the default buffer pool comfortably handles
+  it.
+- `TROUBLESHOOTING.md` updated with new "HA chrome still shows
+  inside embed" + "Embed shows broadsheet homepage after I tap a
+  view tab" sections covering the chrome-hide expectations and the
+  in-iframe-refresh limitation.
+
+### Known limit (documented)
+- **Refreshing inside the iframe after in-iframe navigation breaks**.
+  When HA frontend pushState's a new view URL via tab clicks, the
+  URL becomes `/wall-tablet/<view>` (no `/embed/` prefix because
+  HA wrote it). Refreshing the iframe then sends the browser to
+  `/wall-tablet/<view>` directly — broadsheet's nginx has no
+  `^~ /wall-tablet/` route, the catch-all SPA fallback returns
+  broadsheet's `index.html`, the iframe shows broadsheet's
+  homepage. Users navigate at the broadsheet parent-page level
+  instead of within the iframe.
+
 ## [0.9.4.5] — embed auth injection + asset fallback proxy (2026-05-18)
 
 ### Fixed

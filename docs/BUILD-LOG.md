@@ -3847,3 +3847,161 @@ URL, get a working embed, no user-side config"). The next
 embed-shaped iteration is whatever real-world dogfood surfaces
 once users start putting `lovelace-embed` blocks in their
 pages.
+
+## 2026-05-18 — 0.9.4.6 — hide HA chrome + strip /embed/ prefix in the iframe
+
+Same-day Chrome-MCP verification of 0.9.4.5 confirmed auth
+injection worked: HA's frontend rendered inside the iframe with
+no OAuth login screen, live entity state, WebSocket connected.
+But Alfie's verdict on the result:
+
+> Hmm, kind of useless though as we lose the broadsheet menu and
+> the HA sidebar loads...
+
+Two compounding root causes for "HA sidebar loads":
+
+1. The `/embed/` proxy means the iframe loads at
+   `:8124/embed/wall-tablet?kiosk=true`. HA's frontend reads
+   `window.location.pathname` on boot, sees `/embed/wall-tablet`,
+   tries to resolve "embed" as a dashboard slug, can't, falls
+   back to **Overview**. Wrong dashboard renders.
+2. `?kiosk=true` is honoured by the kiosk-mode HACS plugin, which
+   only loads on dashboards that declare `kiosk_mode:` in YAML.
+   wall-tablet has it; Overview doesn't. Even if URL resolution
+   worked, only configured dashboards would hide chrome.
+
+The "lose the broadsheet menu" complaint was a verification
+artefact — I tested via direct `/embed/<path>` URLs because there
+were no existing broadsheet pages with embed blocks. In real
+usage (broadsheet page with a lovelace-embed block), broadsheet's
+nav is on the parent page outside the iframe and is unaffected.
+Worth saying out loud; doesn't drive a fix.
+
+### What 0.9.4.6 ships
+
+Two nginx `sub_filter` injections into HA's HTML on the `/embed/`
+location. sub_filter rewrites response bodies before sending to
+the browser. We inject into the `<head>`:
+
+**1. URL-prefix strip script.** Synchronous classic `<script>` at
+the top of `<head>` running BEFORE HA's frontend boot scripts:
+
+```js
+(function(){try{
+  var p = location.pathname;
+  if (p.indexOf("/embed/") === 0) {
+    history.replaceState(
+      null, "",
+      p.replace(/^\/embed\//, "/") + location.search + location.hash
+    );
+  }
+} catch (e) {}})();
+```
+
+Strips the `/embed/` prefix via `history.replaceState`. HA's
+router then reads the stripped URL on first init and resolves
+the requested dashboard.
+
+Why classic synchronous (not async/module): we need this to run
+BEFORE HA's boot scripts. Classic scripts in document order block
+parser progression; async/module scripts defer. Top-of-head
+classic is the earliest possible execution.
+
+**2. Chrome-hide stylesheet.** `<style id="broadsheet-embed-chrome-hide">`
+in the same substitution, targeting HA's chrome host elements
+across known HA frontend versions:
+
+```css
+ha-sidebar,
+app-header-layout app-header,
+ha-app-layout app-header,
+ha-panel-lovelace app-header,
+paper-tabs.toolbar,
+.header-bar,
+mwc-top-app-bar-fixed,
+ha-top-app-bar-fixed {
+  display: none !important;
+}
+/* content fills viewport */
+ha-app-layout app-main, ha-app-layout main,
+ha-panel-lovelace > div, #view {
+  padding-top: 0 !important; margin-top: 0 !important;
+}
+ha-drawer { --mdc-drawer-width: 0 !important; }
+partial-panel-resolver, home-assistant-main {
+  margin-left: 0 !important;
+}
+```
+
+Works at the document level even though HA uses Shadow DOM
+heavily — Custom Elements have their host in the LIGHT DOM, so
+`display: none` on `<ha-sidebar>` removes the whole shadow-rooted
+tree. We don't need to pierce Shadow DOM internals.
+
+The padding/margin resets ensure dashboard content fills the
+iframe viewport (without them, content renders in the area where
+chrome USED to be, with empty space at top + left).
+
+### Infrastructure shape changes (sub_filter prerequisites)
+
+sub_filter has two operating constraints:
+
+- **Plain text bodies only.** HA serves gzipped text/html by
+  default. Added `proxy_set_header Accept-Encoding ""` to force
+  uncompressed responses sub_filter can rewrite.
+- **Buffered responses only.** We had `proxy_buffering off` on
+  `/embed/` (carried from 0.9.4.3+4). Removed for 0.9.4.6 — HA's
+  index.html is ~30 KB, fits in nginx's default 8 KB × 8 buffer
+  pool with no issue.
+
+### Why no SPA-side changes
+
+The renderer in `LovelaceEmbedBlockRenderer.svelte` is unchanged.
+All the chrome+routing logic lives in the addon's nginx because:
+- It applies to ALL HA HTML responses through the proxy, not just
+  embed iframes (future-proofs against any other component that
+  might end up iframing HA via the proxy)
+- It runs server-side at proxy time, before the iframe sees the
+  HTML — guaranteed execution order vs. trying to inject from
+  the parent renderer post-mount
+
+### Known limit: refreshing inside the iframe
+
+After HA pushState's a new URL via in-iframe nav (e.g. user taps
+a view tab), the URL becomes `/wall-tablet/<view>` without
+`/embed/`. Refreshing the iframe sends the browser to that URL
+directly; broadsheet's nginx has no `^~ /wall-tablet/` route;
+the catch-all SPA fallback returns broadsheet's index.html; the
+iframe shows broadsheet's homepage.
+
+Acceptable because the target use case is "render this dashboard
+chrome-free in an embed block; user navigates via broadsheet's
+parent-page nav, not by clicking HA's own view tabs." Mitigations
+considered + rejected:
+- Trapping pushState/replaceState to re-add `/embed/` to the
+  browser URL would mean HA frontend sees the prefixed URL,
+  defeating the whole strip.
+- Universal `^~ /<every-ha-dashboard>/` routes — broadsheet would
+  need to know every dashboard slug ahead of time; doesn't scale.
+- `<base href>` injection — HA frontend uses absolute paths in
+  many places that bypass the base.
+
+Documented in TROUBLESHOOTING.
+
+### Combined arc: 0.9.4.3 + 0.9.4.4 + 0.9.4.5 + 0.9.4.6
+
+| Ship | Adds | Outcome |
+|---|---|---|
+| 0.9.4.3 | `/embed/` proxy + URL rewrite | Wrong upstream → 403 |
+| 0.9.4.4 | Flipped upstream to `homeassistant:8123` | Iframe loaded → OAuth login |
+| 0.9.4.5 | Auth injection + asset-extension fallback | Auth passes → dashboard renders WITH HA chrome + wrong dashboard (Overview) |
+| 0.9.4.6 | sub_filter: URL-strip + chrome-hide | Right dashboard, no HA chrome |
+
+Four ships in two days for one logical user feature. The
+lovelace-embed block now hits production quality for the
+same-host-HA case: paste a path, get a chrome-free render of the
+intended dashboard, no user-side HA config.
+
+Plan: `docs/plans/plan-9.4.6-chrome-hide-and-url-strip.md`
+(full decision-set + sequenced impl plan, locked then marked
+IMPLEMENTED with file inventory).

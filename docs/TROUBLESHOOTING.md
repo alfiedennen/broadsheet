@@ -62,12 +62,14 @@ responses — a security default that blocks cross-origin framing.
 broadsheet's addon runs on a dedicated host port (default 8124),
 which is cross-origin to HA's port 8123 → blocked.
 
-**Fix (0.9.4.3+ — automatic)**: the addon's nginx now exposes a
+**Fix (0.9.4.6+ — automatic)**: the addon's nginx now exposes a
 same-origin proxy route (`/embed/<path>`) that fetches HA Core
-via the Supervisor and strips X-Frame-Options on the way back.
-The embed block's renderer auto-rewrites HA URLs to the proxy
-path; the import flow composes proxy URLs directly. No HA-side
-config needed.
+via the Supervisor, strips X-Frame-Options, hides HA's chrome
+(sidebar + header + view tabs) via injected CSS, and strips the
+`/embed/` prefix from the iframe's URL via injected JS so the
+right dashboard renders. The embed block's renderer auto-rewrites
+HA URLs to the proxy path; the import flow composes proxy URLs
+directly. No HA-side config needed.
 
 If you saved a `lovelace-embed` block with a cross-origin URL
 BEFORE 0.9.4.3 and the iframe still shows blank after the
@@ -79,6 +81,64 @@ catches both bare paths and same-host:8123 URLs.
 **Cross-host embeds** (broadsheet on host A iframing HA on
 host B) still need user-side HA framing config. The addon's
 proxy only routes to the local HA Core via the Supervisor.
+
+## HA chrome still shows inside the embed
+
+**Symptom**: the embedded dashboard renders, but HA's left sidebar
+and/or top header (with view tabs) is visible inside the iframe,
+eating space that should belong to the dashboard content.
+
+**Cause (pre-0.9.4.6)**: `?kiosk=true` only worked on dashboards
+that opted into the `kiosk-mode` HACS plugin. If the rendered
+dashboard didn't have `kiosk_mode:` in its YAML, the query param
+was ignored and HA chrome rendered.
+
+**Fix (0.9.4.6+ — automatic)**: the `/embed/` proxy now injects a
+`<style id="broadsheet-embed-chrome-hide">` block into HA's
+`<head>` that hides chrome host elements (`ha-sidebar`,
+`app-header`, `ha-panel-lovelace app-header`, etc.) unconditionally.
+Works on any dashboard, no source-side configuration needed.
+
+If you're on 0.9.4.6+ and still see chrome:
+
+1. **HA frontend version drift**. Newer HA releases occasionally
+   rename chrome elements (e.g. `app-header-layout` → `ha-app-layout`).
+   The selector list is broad but isn't future-proof against
+   renames. File an issue with the version of HA + a screenshot
+   of the chrome that's still showing; the selector gets extended.
+2. **In-content "headers" inside the dashboard**. If the source
+   dashboard has its own header cards (custom markdown, mushroom
+   chips configured as a header), those aren't HA chrome — they're
+   part of the dashboard content. Our CSS doesn't touch dashboard
+   content. To hide those, edit the source dashboard.
+
+## Embed shows broadsheet's homepage after I tap a view tab
+
+**Symptom**: you have an `lovelace-embed` block rendering a HA
+dashboard. The embed renders correctly. You tap an HA view tab
+INSIDE the iframe (e.g. a chip nav at the top of the dashboard).
+The view changes. You refresh the iframe (or pull-to-refresh on
+mobile). Instead of the dashboard, the iframe now shows
+broadsheet's own homepage.
+
+**Cause**: 0.9.4.6's `/embed/` proxy strips the `/embed/` prefix
+from the URL before HA's frontend reads it. When HA pushState's
+a new URL via view-tab clicks, the browser URL becomes
+`/wall-tablet/<view>` (no `/embed/` prefix because HA wrote it).
+A refresh sends the browser to that URL directly — broadsheet's
+nginx has no `^~ /wall-tablet/` route; the catch-all SPA fallback
+returns broadsheet's `index.html`; the iframe shows broadsheet's
+homepage.
+
+**Workaround**: navigate at the broadsheet level (use the chip
+nav on broadsheet's parent page to switch between blocks/pages)
+rather than within the iframe. The embed is for **rendering** a
+dashboard chrome-free; navigation is broadsheet's job.
+
+**To recover from the broken state**: edit the broadsheet page
+containing the embed block (Settings → Pages → your page) and
+re-save — the next iframe load gets a fresh `/embed/<url>` SRC
+and the dashboard reappears.
 
 **OAuth login bypass (0.9.4.5+ — automatic)**: broadsheet runs
 at `:8124`, HA runs at `:8123`. HA treats `:8124` as a new OAuth
