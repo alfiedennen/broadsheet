@@ -76,6 +76,13 @@ function fill(template: string, vars: Record<string, string>): string {
 /** Compose the manifest sentence. */
 export function composeManifest(input: ManifestInput): string {
 	const states = resolvePresence(input);
+	// Stable ordering for {a}/{b}/{name} placeholders + the others-list
+	// clause. Sort by HA person ID alphabetically so the manifest renders
+	// the same names in the same positions across reloads — without this,
+	// `home` and `others` would inherit whatever order presence resolution
+	// happened to produce that turn ("Alfie and Elena" might flip to
+	// "Elena and Alfie" tomorrow). Arbitrary but deterministic.
+	states.sort((x, y) => x.person.id.localeCompare(y.person.id));
 	const home = states.filter((s) => s.isHome);
 	const v = input.voice ?? {};
 
