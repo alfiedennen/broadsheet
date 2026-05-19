@@ -115,7 +115,11 @@ export function composeManifest(input: ManifestInput): string {
 
 		if (a.room && b.room && a.room === b.room) {
 			const tpl = v['manifest.bothHomeSameRoom'] || 'Both in the {room}.';
-			return fill(tpl, { room: a.room.toLowerCase() });
+			// Pass {a}/{b} too — the default tpl doesn't use them, but
+			// authors who override (e.g. "{a} and {b} are both in {room}")
+			// expect name substitution. Pre-0.9.5: only {room} was filled,
+			// leaving "{a} and {b}" literal in the output.
+			return fill(tpl, { a: aName, b: bName, room: a.room.toLowerCase() });
 		}
 		if (a.room && b.room) {
 			const tpl =

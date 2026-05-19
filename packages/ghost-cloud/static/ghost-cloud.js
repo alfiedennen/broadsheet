@@ -32,19 +32,30 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 // ─── Config ──────────────────────────────────────────────────────────────
 
 const ROOM = new URLSearchParams(location.search).get("r") || "office";
-// Ported into @broadsheet/ghost-cloud (v0.1). This file is a plugin
-// static asset served from /plugin-assets/ghost-cloud/ghost-cloud.js,
-// loaded by view.html in the same directory. The room data is bundled
-// alongside at /plugin-assets/ghost-cloud/data/<room>.json — so a
-// plain relative URL resolves correctly under HA Ingress and direct
-// serving alike, with none of harold-home's path-strategy branching.
+// Ported into @broadsheet/ghost-cloud. This file is a plugin static
+// asset served from /plugin-assets/ghost-cloud/ghost-cloud.js, loaded
+// by view.html in the same directory.
 //
-// v0.1 ships static demo data (one captured day per room); the
-// live-radar-pull path is a deferred follow-on — see the broadsheet
-// docs. REFRESH_MS still re-fetches on a timer: harmless against
-// static demo data, and already correct for when live data lands.
+// Data source resolution (in priority order):
+//  1. `dataUrl` URL query param — when set, overrides the bundled
+//     data path. LongTakePage.svelte composes this from the plugin's
+//     curation config (`plugins["ghost-cloud"].config.dataUrlPattern`),
+//     substituting {room} with the selected room slug. Lets users
+//     point at a live precompute pipeline (e.g. harold-home's
+//     `/local/exposure/data/{room}.json`) without forking the plugin.
+//  2. `./data/<room>.json` — the bundled demo capture (one day per
+//     room). Plain relative URL resolves correctly under HA Ingress
+//     and direct serving alike. This is the default — works for any
+//     install with zero hardware or HA-side setup.
+//
+// REFRESH_MS re-fetches on a timer regardless: harmless against
+// static demo data, correct for live data with 5-min precompute
+// cadence.
 const _cb = `?cb=${Math.floor(Date.now() / 30000)}`;
-const DATA_URL = `./data/${ROOM}.json${_cb}`;
+const _customDataUrl = new URLSearchParams(location.search).get("dataUrl");
+const DATA_URL = _customDataUrl
+  ? `${_customDataUrl}${_customDataUrl.includes("?") ? "&" : "?"}cb=${Math.floor(Date.now() / 30000)}`
+  : `./data/${ROOM}.json${_cb}`;
 const REFRESH_MS = 5 * 60 * 1000;
 
 const SPATIAL_SCALE = 0.001;

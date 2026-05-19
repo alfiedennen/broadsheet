@@ -26,7 +26,7 @@ import { roomsContributor } from './discovery/rooms';
 
 export const plugin: BroadsheetPlugin = {
 	id: 'ghost-cloud',
-	version: '0.1.0',
+	version: '0.2.0',
 	displayName: 'The Long Take',
 	description:
 		'24-hour radar event playback — a room’s presence rendered as a translucent water-membrane time-tube.',

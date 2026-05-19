@@ -18,7 +18,15 @@
 	 */
 	import { page } from '$app/state';
 	import { base } from '$app/paths';
-	import { PageShell, Hero, Eyebrow, OutLine, discovery, pluginAssetUrl } from '@broadsheet/core';
+	import {
+		PageShell,
+		Hero,
+		Eyebrow,
+		OutLine,
+		discovery,
+		pluginAssetUrl,
+		useCurationField
+	} from '@broadsheet/core';
 	import type { RoomManifest } from '../discovery/rooms';
 
 	const manifest = $derived(
@@ -33,13 +41,29 @@
 		selectedRoom && manifest ? (manifest.rooms[selectedRoom]?.label ?? selectedRoom) : null
 	);
 
-	// The iframe src — the view.html harness + ?r=<room>. pluginAssetUrl
-	// resolves it ingress-correct; view.html's own relative imports
-	// (./ghost-cloud.js, ./three/…, ./data/<room>.json) then resolve
-	// against /plugin-assets/ghost-cloud/.
-	const iframeSrc = $derived(
-		selectedRoom ? `${pluginAssetUrl('ghost-cloud', 'view.html')}?r=${selectedRoom}` : null
+	// Optional: live-data URL pattern. When set in curation
+	// (plugins["ghost-cloud"].config.dataUrlPattern), the plugin
+	// substitutes {room} and forwards as an iframe `dataUrl` query
+	// param. ghost-cloud.js uses it in preference to the bundled
+	// demo capture. Lets users wire harold-home's precompute pipeline
+	// (or any equivalent) without code changes. Empty/unset → bundled
+	// demo data continues to be used (the v0.1 default behaviour).
+	const dataUrlPattern = useCurationField<string>(
+		'plugins.ghost-cloud.config.dataUrlPattern'
 	);
+	const liveDataUrl = $derived(
+		dataUrlPattern.value && selectedRoom
+			? dataUrlPattern.value.replace('{room}', selectedRoom)
+			: null
+	);
+
+	// The iframe src — the view.html harness + ?r=<room> (+ optional
+	// ?dataUrl=…). pluginAssetUrl resolves the base URL ingress-correct.
+	const iframeSrc = $derived.by(() => {
+		if (!selectedRoom) return null;
+		const base = `${pluginAssetUrl('ghost-cloud', 'view.html')}?r=${selectedRoom}`;
+		return liveDataUrl ? `${base}&dataUrl=${encodeURIComponent(liveDataUrl)}` : base;
+	});
 </script>
 
 <svelte:head>
@@ -91,7 +115,18 @@
 			<dt>Window</dt>
 			<dd>24 hours</dd>
 			<dt>Data</dt>
-			<dd>bundled demo capture — live radar-pull is a deferred follow-on</dd>
+			<dd>
+				{#if liveDataUrl}
+					live capture — refreshed every 5 minutes from
+					<code>{liveDataUrl}</code>
+				{:else}
+					bundled demo capture — set
+					<code>plugins["ghost-cloud"].config.dataUrlPattern</code>
+					in curation (e.g.
+					<code>/local/exposure/data/&#123;room&#125;.json</code>)
+					to wire a live source
+				{/if}
+			</dd>
 		</dl>
 	{/if}
 </PageShell>
