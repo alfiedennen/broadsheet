@@ -4,6 +4,54 @@ All notable changes to broadsheet. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses
 [semantic versioning](https://semver.org/).
 
+## [0.9.5.1] — moment: stable {a}/{b} ordering (2026-05-19)
+
+### Fixed
+- **The Moment two-people-home placeholders now have a stable
+  position.** 0.9.5.0 made `{a}` / `{b}` substitute correctly, but
+  the order was whatever `resolvePresence` happened to return —
+  non-deterministic, so an override like
+  `"{a} and {b} are both in {room}"` could render as
+  `"Alfie and Elena…"` one render and `"Elena and Alfie…"` the next.
+  Fixed by sorting presence states alphabetically by HA person ID
+  right after resolution. Arbitrary but deterministic; no config
+  needed. Same stability extends to the others-out clause when
+  one person is home.
+
+## [0.9.5.0] — moment: variable substitution + ghost-cloud live data (2026-05-19)
+
+### Fixed
+- **The Moment manifest substitutes `{a}` and `{b}` correctly when
+  both people are home in the same room.** The default template
+  (`"Both in the {room}."`) didn't use name placeholders so the
+  gap was invisible until a user override added them; pre-0.9.5
+  only `{room}` was filled, leaving `{a}` and `{b}` literal in the
+  output. Now passes `aName` / `bName` to the fill call too. Names
+  pull from each HA `person.*` entity's `name` field (first word
+  only) — fully variable, nothing hardcoded.
+
+### Added
+- **`ghost-cloud` plugin: opt-in live-data path** via a new
+  `dataUrlPattern` curation field (`plugins["ghost-cloud"].config.dataUrlPattern`).
+  When set, the renderer substitutes `{room}` and forwards as a
+  `dataUrl` query param to the iframe; ghost-cloud.js uses it in
+  preference to the bundled demo data. Example:
+  `/local/exposure/data/{room}.json` for any user with an
+  HA-side precompute pipeline that writes there. Empty/unset →
+  bundled demo data continues as the default; fully backwards
+  compatible.
+- The `/long-take` page's "Source" fact updates to show the live
+  URL when active, with a one-line hint about how to wire it when
+  not. Plugin version bumped to v0.2.0 (additive, no breaking
+  changes).
+
+### Origin
+- Both fixes surfaced during maintainer dogfooding on a real
+  install — The Moment template gap exposed by a names-using
+  voice override; Long Take live-data gap exposed because the
+  demo data is months stale on an install that has its own active
+  radar precompute.
+
 ## [0.9.4.6] — embed: hide HA chrome + strip /embed/ prefix (2026-05-18)
 
 ### Fixed

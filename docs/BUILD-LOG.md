@@ -4005,3 +4005,122 @@ intended dashboard, no user-side HA config.
 Plan: `docs/plans/plan-9.4.6-chrome-hide-and-url-strip.md`
 (full decision-set + sequenced impl plan, locked then marked
 IMPLEMENTED with file inventory).
+
+## 2026-05-19 — 0.9.5.0 + 0.9.5.1 — moment template fix + ghost-cloud live data
+
+Two bugs surfaced during maintainer parity-dogfooding on the
+production canary (the M6 install we've been running broadsheet on
+alongside harold-home). Both were fixed in the same morning:
+
+### Bug 1 — The Moment manifest doesn't substitute names
+
+User curation included a voice override:
+
+```yaml
+voice:
+  manifest.bothHomeSameRoom: "{a} and {b} are both in {room}"
+```
+
+The Moment rendered the sentence literally: *"{a} and {b} are
+both in office"*. `{room}` substituted; `{a}` / `{b}` came through
+as literal placeholders.
+
+Root cause in `packages/core/src/lib/manifest.ts`: the
+`bothHomeSameRoom` branch only passed `{room}` to the `fill()`
+call, even though `aName` / `bName` were already defined a few
+lines above. The default template `"Both in the {room}."` doesn't
+use names so the gap was invisible until someone overrode with a
+template that does.
+
+Fix is one line — pass `{ a: aName, b: bName, room: … }` instead
+of just `{ room: … }`. Shipped in 0.9.5.0.
+
+Follow-up in 0.9.5.1: ordering was non-deterministic (depended on
+whatever order `resolvePresence` happened to return), so the
+override could render *"Alfie and Elena…"* one turn and
+*"Elena and Alfie…"* the next. Fixed by sorting presence states
+alphabetically by HA person ID right after resolution. Arbitrary
+but deterministic, no config needed, also stabilises the
+others-out clause in the one-home branch.
+
+Names pull from each HA `person.*` entity's `name` field (first
+word). Fully variable — for any other household, their own people
+would substitute naturally. Confirmed at the maintainer's install
+where `person.alfie_dennen` becomes `{a}` (alphabetically before
+`person.elena` → `{b}`).
+
+### Bug 2 — `/long-take` always reads bundled demo data
+
+ghost-cloud plugin shipped at v0.1.0 with bundled demo data per
+room. The maintainer's install has a working LD2450 precompute
+pipeline writing fresh JSON every 5 min to
+`/config/www/exposure/data/<room>.json`, but the plugin had no
+way to point at it — the "live-radar pull" path was marked
+deferred since v0.1.
+
+### What 0.9.5.0 ships for ghost-cloud
+
+A new opt-in curation field, plugin v0.2.0:
+
+```yaml
+plugins:
+  ghost-cloud:
+    config:
+      dataUrlPattern: "/local/exposure/data/{room}.json"
+```
+
+Three small changes:
+
+- `LongTakePage.svelte` reads `dataUrlPattern` from curation via
+  `useCurationField`, substitutes `{room}` with the selected room
+  slug, forwards as an iframe `&dataUrl=<encoded>` query param.
+- `ghost-cloud.js` checks for the `dataUrl` URL param at boot,
+  uses it (with cache-buster) in preference to the bundled
+  `./data/<room>.json` path.
+- The page's "Source" fact section updates: shows the live URL +
+  refresh cadence when active, hints at the curation key when not.
+
+Backwards-compatible — empty/unset means bundled demo data
+continues as the default. Any user with an HA-side precompute
+(harold-home's, or their own) can wire it without forking the
+plugin.
+
+Verified live on the canary: `/long-take` for the library room
+now reads 14,580 events from today's 24h window (vs the old
+30,106 events from "Thu 16:06" bundled-demo capture). Same for
+the office and living-room slugs. Kitchen has only ~200 bytes
+of data (no LD2450 in there yet) but the renderer handles empty
+gracefully.
+
+### Why 0.9.5.0 → 0.9.5.1 as separate releases
+
+0.9.5.0 shipped + deployed first. Maintainer noticed the
+ordering issue while testing The Moment with both people home.
+Rather than amending a deployed release, bumped to 0.9.5.1 with
+the alphabetical-sort fix. Clean changelog entries for each;
+nobody got a half-fixed install.
+
+### Side cleanup: deprecated `/local/yesterday/` path
+
+While auditing the live install, the `yesterday_precompute.py`
+pipeline came up as dead (per pre-existing notes, the SQLite
+recorder cutover broke it months ago — silently producing empty
+JSONs). The `yesterday-precompute.timer` was still active on
+LXC 102, running nightly at 01:30. Stopped + disabled the timer
++ service, archived the script to `/opt/harold-agent/scripts/_archive/`,
+moved `/config/www/yesterday/` to `/config/www/_archive/yesterday_archived_<date>/`.
+No HA automations referenced the URL — the timer + the bookmarked
+Nabu Casa URL were the only live consumers. `/local/yesterday/`
+now 404s; `/local/exposure/data/*.json` (ghost-cloud's live
+source) unaffected.
+
+### Combined arc
+
+| Ship | What |
+|---|---|
+| 0.9.5.0 | The Moment `{a}`/`{b}` substitution + ghost-cloud dataUrlPattern (live data opt-in) |
+| 0.9.5.1 | Stable alphabetical ordering for the manifest placeholders |
+
+Production canary at 0.9.5.1 within ~5 minutes of each push;
+both repos in sync with origin throughout. svelte-check clean
+across all 523 files for both commits.
